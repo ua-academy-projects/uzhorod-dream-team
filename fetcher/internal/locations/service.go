@@ -6,6 +6,7 @@ import (
 )
 
 type Service interface {
+	GetLocations(ctx context.Context) ([]Location, error)
 	GetLocationsLatest(ctx context.Context) ([]Location, error)
 	GetLocationMeasurements(ctx context.Context, locationID int, from, to string) ([]Measurement, error)
 }
@@ -18,6 +19,24 @@ func NewService(client openaq.Client) Service {
 	return &serviceImpl{
 		client: client,
 	}
+}
+
+func (s *serviceImpl) GetLocations(ctx context.Context) ([]Location, error) {
+	rawLocations, err := s.client.GetLocations(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var locations []Location
+	for _, rawLoc := range rawLocations {
+		locations = append(locations, Location{
+			ID:   rawLoc.ID,
+			Name: rawLoc.Name,
+			Lat:  rawLoc.Coordinates.Lat,
+			Lon:  rawLoc.Coordinates.Lon,
+		})
+	}
+	return locations, nil
 }
 
 func (s *serviceImpl) GetLocationsLatest(ctx context.Context) ([]Location, error) {

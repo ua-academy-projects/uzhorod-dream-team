@@ -19,8 +19,18 @@ func NewHandler(service Service) *Handler {
 }
 
 func (h *Handler) RegisterRoutes(r chi.Router) {
+	r.Get("/locations", h.GetLocations)
 	r.Get("/locations/latest", h.GetLocationsLatest)
 	r.Get("/locations/{id}/measurements", h.GetLocationMeasurements)
+}
+
+func (h *Handler) GetLocations(w http.ResponseWriter, r *http.Request) {
+	locs, err := h.service.GetLocations(r.Context())
+	if err != nil {
+		h.errorResponse(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	h.jsonResponse(w, http.StatusOK, locs)
 }
 
 func (h *Handler) GetLocationsLatest(w http.ResponseWriter, r *http.Request) {
