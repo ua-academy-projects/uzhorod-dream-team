@@ -1,0 +1,18 @@
+# General
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Environment variables
+env/
+.env
+.env.*
+!.env.example
+
+# Scratch files (like the test scripts we made)
+scratch/
+check_*.py
+test_*.py
+
+# Components will have their own specific .gitignore files
