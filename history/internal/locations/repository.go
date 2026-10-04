@@ -2,12 +2,14 @@ package locations
 
 import (
 	"context"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type Repository interface {
 	Upsert(ctx context.Context, loc Location) error
+	SetLastSyncTime(ctx context.Context, locationID int, syncedAt time.Time) error
 	GetAll(ctx context.Context) ([]Location, error)
 }
 
@@ -21,15 +23,19 @@ func NewRepository(pool *pgxpool.Pool) Repository {
 
 func (r *repoImpl) Upsert(ctx context.Context, loc Location) error {
 	query := `
-		INSERT INTO locations (id, name, lat, lon, last_sync_time) 
-		VALUES ($1, $2, $3, $4, $5)
+		INSERT INTO locations (id, name, lat, lon)
+		VALUES ($1, $2, $3, $4)
 		ON CONFLICT (id) DO UPDATE SET 
 			name = EXCLUDED.name, 
 			lat = EXCLUDED.lat, 
-			lon = EXCLUDED.lon,
-			last_sync_time = EXCLUDED.last_sync_time
+			lon = EXCLUDED.lon
 	`
-	_, err := r.pool.Exec(ctx, query, loc.ID, loc.Name, loc.Lat, loc.Lon, loc.LastSyncTime)
+	_, err := r.pool.Exec(ctx, query, loc.ID, loc.Name, loc.Lat, loc.Lon)
+	return err
+}
+
+func (r *repoImpl) SetLastSyncTime(ctx context.Context, locationID int, syncedAt time.Time) error {
+	_, err := r.pool.Exec(ctx, `UPDATE locations SET last_sync_time = $2 WHERE id = $1`, locationID, syncedAt)
 	return err
 }
 
