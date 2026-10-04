@@ -49,6 +49,7 @@ func main() {
 	go syncWorker.Start(ctx)
 
 	r := chi.NewRouter()
+	r.Use(middleware.Heartbeat("/health"))
 
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   cfg.AllowedOrigins,
@@ -56,7 +57,7 @@ func main() {
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
 		ExposedHeaders:   []string{"Link"},
 		AllowCredentials: true,
-		MaxAge:           300, 
+		MaxAge:           300,
 	}))
 
 	r.Use(middleware.RequestID)

@@ -19,16 +19,12 @@ func main() {
 	locHandler := locations.NewHandler(locService)
 
 	r := chi.NewRouter()
+	r.Use(middleware.Heartbeat("/health"))
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 
 	r.Route("/api/v1", func(r chi.Router) {
 		locHandler.RegisterRoutes(r)
-	})
-
-	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("OK"))
 	})
 
 	log.Printf("Starting Fetcher Service on port %s", cfg.Port)
