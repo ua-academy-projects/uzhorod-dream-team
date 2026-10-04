@@ -85,7 +85,7 @@ func Load() *Config {
 			allowedOrigins = append(allowedOrigins, strings.TrimSpace(p))
 		}
 	} else {
-		allowedOrigins = []string{"http://localhost:5173", "http://localhost:3000"}
+		allowedOrigins = []string{"http://localhost:5173", "http://localhost:3000", "http://localhost:80"}
 	}
 
 	return &Config{
