@@ -17,9 +17,7 @@ PGCONF
 
 {
   printf '# BEGIN KYIV-AIR MULTINODE\n'
-  for client in $CLIENT_IPS; do
-    printf 'host "%s" kyiv_air %s/32 scram-sha-256\n' "$DB_NAME" "$client"
-  done
+  printf 'host "%s" kyiv_air %s scram-sha-256\n' "$DB_NAME" "$LAN_SUBNET"
   printf '# END KYIV-AIR MULTINODE\n'
   awk '
     /^# BEGIN KYIV-AIR MULTINODE$/ { managed = 1; next }

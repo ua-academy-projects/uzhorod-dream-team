@@ -4,41 +4,42 @@ project_root = File.expand_path("../..", __dir__)
 
 settings = {
   box: "bento/ubuntu-24.04", box_version: "202508.03.0",
-  subnet: "192.168.1.0/24", host_ip: "192.168.1.130",
-  network_name: "kyiv-air-multinode", readiness_timeout: ENV.fetch("READY_TIMEOUT", "300"),
+  subnet: "192.168.1.0/24",
+  network_name: "kyiv-air-multinode", readiness_timeout: Integer(ENV.fetch("READY_TIMEOUT", "300")),
   node_major: "24", pnpm_version: "10.33.0", goose_version: "3.24.3"
 }
 
 machines = {
   "db" => {hostname: "kyiv-air-db", ip: "192.168.1.201", memory: 1024, cpus: 1,
            port: 5432, source: nil, env_files: %w[db], script: "scripts/db.sh",
-           unit: "postgresql@16-main.service", clients: %w[host history]},
+           unit: "postgresql@16-main.service"},
   "fetcher" => {hostname: "kyiv-air-fetcher", ip: "192.168.1.202", memory: 1024, cpus: 1,
                 port: 8080, source: "fetcher", env_files: %w[fetcher], script: "scripts/fetcher.sh",
-                unit: "kyiv-air-fetcher.service", clients: %w[host history]},
+                unit: "kyiv-air-fetcher.service"},
   "history" => {hostname: "kyiv-air-history", ip: "192.168.1.203", memory: 1024, cpus: 1,
                 port: 8081, source: "history", env_files: %w[history db], script: "scripts/history.sh",
-                unit: "kyiv-air-history.service", clients: %w[host ui]},
+                unit: "kyiv-air-history.service"},
   "ui" => {hostname: "kyiv-air-ui", ip: "192.168.1.204", memory: 1024, cpus: 1,
            port: 5173, source: "ui", env_files: %w[ui], script: "scripts/ui.sh",
-           unit: "kyiv-air-ui.service", clients: %w[host]}
+           unit: "kyiv-air-ui.service"}
 }
 
-def validate_settings
+def validate_settings(settings, machines)
+  raise "The LAN subnet must include an IPv4 CIDR prefix" unless settings[:subnet].match?(%r{\A[0-9.]+/[0-9]+\z})
   subnet = IPAddr.new(settings[:subnet])
-  raise "The dedicated subnet must be IPv4 /24" unless subnet.ipv4? && subnet.prefix == 24
-  raise "Use the first usable subnet address for host_ip (VirtualBox host-only default)" unless
-    IPAddr.new(settings[:host_ip]).to_i == subnet.to_i + 1
-  addresses = [settings[:host_ip], *machines.values.map { |machine| machine[:ip] }]
-  raise "Host and VM addresses must be unique and inside #{subnet}" unless
-    addresses.uniq.length == addresses.length && addresses.all? { |ip| subnet.include?(IPAddr.new(ip)) }
+  raise "The LAN subnet must be IPv4 with a prefix between /1 and /30" unless
+    subnet.ipv4? && (1..30).cover?(subnet.prefix)
+  settings[:subnet] = "#{subnet}/#{subnet.prefix}"
+  addresses = machines.values.map { |machine| IPAddr.new(machine[:ip]) }
+  raise "VM addresses must be unique IPv4 addresses inside #{settings[:subnet]}" unless
+    addresses.uniq.length == addresses.length && addresses.all? { |ip| ip.ipv4? && ip.prefix == 32 && subnet.include?(ip) }
   raise "VM IPs cannot use the network or broadcast address" if
-    machines.values.any? { |machine| [subnet.to_i, subnet.to_range.last.to_i].include?(IPAddr.new(machine[:ip]).to_i) }
+    addresses.any? { |ip| [subnet.to_i, subnet.to_range.last.to_i].include?(ip.to_i) }
   timeout = Integer(settings[:readiness_timeout])
   raise "READY_TIMEOUT must be positive" unless timeout.positive?
 end
 
-validate_settings
+validate_settings(settings, machines)
 
 Vagrant.configure("2") do |config|
   config.vm.box = settings[:box]
@@ -47,11 +48,13 @@ Vagrant.configure("2") do |config|
   config.vm.boot_timeout = settings[:readiness_timeout]
   config.vm.synced_folder ".", "/vagrant", disabled: true
 
+  host_network_device = ENV.fetch("HOST_NETWORK_DEVICE", "eth0")
+
   machines.each do |name, machine|
     config.vm.define name do |vm|
       vm.vm.hostname = machine[:hostname]
 
-      vm.vm.network "public_network", ip: machine[:ip]
+      vm.vm.network "public_network", ip: machine[:ip], dev: host_network_device
 
       memory = Integer(ENV.fetch("#{name.upcase}_MEMORY", machine[:memory].to_s))
       cpus = Integer(ENV.fetch("#{name.upcase}_CPUS", machine[:cpus].to_s))
@@ -85,12 +88,11 @@ Vagrant.configure("2") do |config|
 
       topology = {
         "ROLE" => name, "PRIVATE_IP" => machine[:ip], "SERVICE_PORT" => machine[:port].to_s,
-        "HOST_IP" => settings[:host_ip], "DB_IP" => machines["db"][:ip],
+        "LAN_SUBNET" => settings[:subnet], "DB_IP" => machines["db"][:ip],
         "DB_PORT" => machines["db"][:port].to_s,
         "FETCHER_URL" => "http://#{machines["fetcher"][:ip]}:#{machines["fetcher"][:port]}",
         "HISTORY_URL" => "http://#{machines["history"][:ip]}:#{machines["history"][:port]}",
         "UI_ORIGIN" => "http://#{machines["ui"][:ip]}:#{machines["ui"][:port]}",
-        "CLIENT_IPS" => machine[:clients].map { |client| (client == "host") ? settings[:host_ip] : machines.fetch(client)[:ip] }.join(" "),
         "READY_TIMEOUT" => settings[:readiness_timeout].to_s, "NODE_MAJOR" => settings[:node_major],
         "PNPM_VERSION" => settings[:pnpm_version], "GOOSE_VERSION" => settings[:goose_version]
       }
@@ -99,7 +101,7 @@ Vagrant.configure("2") do |config|
       vm.vm.provision "restart", type: "shell", run: "never", privileged: true,
         inline: "set -e\nsystemctl daemon-reload\nsystemctl restart #{machine[:unit]}"
 
-      vm.vm.post_up_message = "#{name}: #{machine[:ip]}:#{machine[:port]} (private subnet)"
+      vm.vm.post_up_message = "#{name}: #{machine[:ip]}:#{machine[:port]} (LAN subnet #{settings[:subnet]})"
     end
   end
 end

@@ -58,10 +58,9 @@ configure_firewall() {
   ufw --force reset
   ufw default deny incoming
   ufw default allow outgoing
+
   ufw allow 22/tcp
-  for client in $CLIENT_IPS; do
-    ufw allow from "$client" to "$PRIVATE_IP" port "$SERVICE_PORT" proto tcp
-  done
+  ufw allow from "$LAN_SUBNET" to "$PRIVATE_IP" port "$SERVICE_PORT" proto tcp
   ufw --force enable
 }
 
