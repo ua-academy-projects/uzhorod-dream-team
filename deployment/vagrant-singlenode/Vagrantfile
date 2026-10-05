@@ -1,7 +1,6 @@
 # Resolve paths relative to this file so provisioning always copies the full repository.
 project_root = File.expand_path("../..", __dir__)
 
-# Version 2 selects Vagrant's configuration API, not the application's version.
 Vagrant.configure("2") do |config|
   # This release provides amd64 images for both libvirt and VirtualBox.
   config.vm.box = "bento/ubuntu-24.04"
@@ -10,27 +9,21 @@ Vagrant.configure("2") do |config|
   config.vm.hostname = "kyiv-air"
   config.vm.boot_timeout = 600
 
-  # Both providers forward to the guest network interface; no extra private NIC is needed.
-  # Bind host listeners to loopback and fail on conflicts to keep browser URLs predictable.
   [5173, 8080, 8081, 5432].each do |port|
     config.vm.network "forwarded_port", guest: port, host: port,
       host_ip: "127.0.0.1", auto_correct: false
   end
 
-  # Provider blocks apply only to the selected provider; use identical resource defaults.
-  config.vm.provider :virtualbox do |virtualbox|
-    virtualbox.memory = Integer(ENV.fetch("VM_MEMORY", "4096"))
-    virtualbox.cpus = Integer(ENV.fetch("VM_CPUS", "2"))
+  %w[virtualbox libvirt].each do |provider_name|
+    config.vm.provider provider_name do |provider|
+      provider.memory = Integer(ENV.fetch("VM_MEMORY", "4096"))
+      provider.cpus = Integer(ENV.fetch("VM_CPUS", "2"))
+      if provider_name == "libvirt"
+        provider.driver = "kvm"
+      end
+    end
   end
 
-  config.vm.provider :libvirt do |libvirt|
-    libvirt.driver = "kvm"
-    libvirt.memory = Integer(ENV.fetch("VM_MEMORY", "4096"))
-    libvirt.cpus = Integer(ENV.fetch("VM_CPUS", "2"))
-  end
-
-  # Rsync avoids NFS/guest shared-folder dependencies and copies code into the VM.
-  # Exclude secrets, editor state, downloaded dependencies, and host build artifacts.
   config.vm.synced_folder ".", "/vagrant", disabled: true
   config.vm.synced_folder project_root, "/opt/kyiv-air/source",
     type: "rsync",
@@ -65,5 +58,5 @@ Vagrant.configure("2") do |config|
       systemctl restart kyiv-air-fetcher.service kyiv-air-history.service kyiv-air-ui.service
     SHELL
 
-  config.vm.post_up_message = "Kyiv air quality: http://localhost:5173\nFetcher: http://localhost:8080\nHistory: http://localhost:8081\nPostgreSQL: localhost:5432\nSee README.md for logs and update commands."
+  config.vm.post_up_message = "Kyiv air quality: http://localhost:5173\nFetcher: http://localhost:8080\nHistory: http://localhost:8081\nPostgreSQL: localhost:5432"
 end
