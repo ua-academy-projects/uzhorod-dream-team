@@ -4,7 +4,7 @@ project_root = File.expand_path("../..", __dir__)
 
 settings = {
   box: "bento/ubuntu-24.04", box_version: "202508.03.0",
-  subnet: "192.168.1.0/24",
+  subnet: "192.168.1.0/24", host_network_dev: ENV.fetch("HOST_NETWORK_DEV", "eth0"),
   network_name: "kyiv-air-multinode", readiness_timeout: Integer(ENV.fetch("READY_TIMEOUT", "300")),
   node_major: "24", pnpm_version: "10.33.0", goose_version: "3.24.3"
 }
@@ -48,13 +48,13 @@ Vagrant.configure("2") do |config|
   config.vm.boot_timeout = settings[:readiness_timeout]
   config.vm.synced_folder ".", "/vagrant", disabled: true
 
-  host_network_device = ENV.fetch("HOST_NETWORK_DEVICE", "eth0")
+  host_network_dev = settings[:host_network_dev]
 
   machines.each do |name, machine|
     config.vm.define name do |vm|
       vm.vm.hostname = machine[:hostname]
 
-      vm.vm.network "public_network", ip: machine[:ip], dev: host_network_device
+      vm.vm.network "public_network", ip: machine[:ip], dev: host_network_dev, bridge: host_network_dev
 
       memory = Integer(ENV.fetch("#{name.upcase}_MEMORY", machine[:memory].to_s))
       cpus = Integer(ENV.fetch("#{name.upcase}_CPUS", machine[:cpus].to_s))
