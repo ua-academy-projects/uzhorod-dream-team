@@ -12,12 +12,15 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
+	"github.com/redis/go-redis/v9"
 
 	"history/internal/config"
 	"history/internal/db"
+	"history/internal/httpmiddleware"
 	"history/internal/locations"
 	"history/internal/measurements"
 	"history/internal/parameters"
+	"history/internal/sessions"
 	"history/internal/syncer"
 )
 
@@ -44,6 +47,25 @@ func main() {
 	svc := locations.NewService(locRepo, paramRepo, measRepo)
 	handler := locations.NewHandler(svc)
 
+	redisOptions, err := redis.ParseURL(cfg.RedisURL)
+	if err != nil {
+		log.Fatal("Invalid REDIS_URL configuration")
+	}
+	redisOptions.DialTimeout = cfg.SessionRedisTimeout
+	redisOptions.ReadTimeout = cfg.SessionRedisTimeout
+	redisOptions.WriteTimeout = cfg.SessionRedisTimeout
+	redisOptions.ContextTimeoutEnabled = true
+	redisOptions.MaxRetries = -1
+
+	redisClient := redis.NewClient(redisOptions)
+	defer redisClient.Close()
+
+	sessionService := sessions.NewService(sessions.NewRepository(redisClient), cfg.SessionTTL, nil)
+	sessionHandler := sessions.NewHandler(sessionService, sessions.HandlerOptions{
+		TTL: cfg.SessionTTL, Timeout: cfg.SessionRedisTimeout,
+		Secure: cfg.SessionCookieSecure,
+	})
+
 	syncWorker := syncer.NewSyncer(cfg, locRepo, paramRepo, measRepo, fetcherClient)
 
 	go syncWorker.Start(ctx)
@@ -67,6 +89,7 @@ func main() {
 
 	r.Route("/api/v1", func(r chi.Router) {
 		handler.RegisterRoutes(r)
+		sessionHandler.RegisterRoutes(r, httpmiddleware.RequireAllowedOrigin(cfg.AllowedOrigins))
 	})
 
 	server := &http.Server{

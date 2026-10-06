@@ -1,9 +1,9 @@
-import type { Location, Parameter, MeasurementData } from '../types/api';
+import type { Location, Parameter, MeasurementData, SessionPreferences } from '../types/api';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8081/api/v1';
 
-async function fetchAPI<T>(endpoint: string): Promise<T> {
-  const res = await fetch(`${API_URL}${endpoint}`);
+async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> {
+  const res = await fetch(`${API_URL}${endpoint}`, { ...options, credentials: 'include' });
   if (!res.ok) {
     let errorMsg = res.statusText;
     try {
@@ -18,6 +18,13 @@ async function fetchAPI<T>(endpoint: string): Promise<T> {
 }
 
 export const api = {
+  getSession: () => fetchAPI<SessionPreferences>('/session', { signal: AbortSignal.timeout(3000) }),
+  saveSession: (preferences: SessionPreferences) => fetchAPI<SessionPreferences>('/session', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(preferences),
+    signal: AbortSignal.timeout(3000),
+  }),
   getLocations: () => fetchAPI<Location[]>('/locations'),
   
   getLocationParameters: (id: number) => 

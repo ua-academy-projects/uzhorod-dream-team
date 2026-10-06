@@ -1,9 +1,9 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { useLocationParameters, useLocationHistory } from '../hooks/useApi';
 import { Button } from './ui/button';
 import { Calendar } from './ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
-import { format, subDays } from 'date-fns';
+import { format } from 'date-fns';
 import { Calendar as CalendarIcon, ChevronDownIcon } from 'lucide-react';
 import { Line } from 'react-chartjs-2';
 import {
@@ -29,6 +29,8 @@ ChartJS.register(
 );
 
 import { cn } from "@/lib/utils";
+import type { ObservationPeriod } from '../types/api';
+import { observationRange } from '../lib/observationPeriod';
 
 const OBSERVATION_PERIODS = [
   { days: 1, label: '24h' },
@@ -62,35 +64,24 @@ function getParameterColor(param: string): string {
 
 interface ChartPaneProps {
   locationId: number;
+  selectedParameter: string | null;
+  period: ObservationPeriod;
+  onParameterChange: (parameter: string) => void;
+  onPeriodChange: (period: ObservationPeriod) => void;
 }
 
-export function ChartPane({ locationId }: ChartPaneProps) {
+export function ChartPane({ locationId, selectedParameter, period, onParameterChange, onPeriodChange }: ChartPaneProps) {
   const { data: parameters, isLoading: isParamsLoading } = useLocationParameters(locationId);
-  const [selectedParameter, setSelectedParameter] = useState<string | null>(null);
   const [isParamOpen, setIsParamOpen] = useState(false);
+  const [periodAnchor, setPeriodAnchor] = useState(() => new Date());
 
-  // Set default parameter when they load
-  useEffect(() => {
-    if (parameters && parameters.length > 0 && (!selectedParameter || !parameters.find(p => p.name === selectedParameter))) {
-      setSelectedParameter(parameters[0].name);
-    }
-  }, [parameters, selectedParameter]);
-
-  // Date Range State
-  const [selectedPeriod, setSelectedPeriod] = useState<number | null>(7);
-  const [dateRange, setDateRange] = useState<{ from: Date; to: Date }>({
-    from: subDays(new Date(), 7),
-    to: new Date()
-  });
-
-  const setQuickRange = (days: number) => {
-    setSelectedPeriod(days);
-    setDateRange({ from: subDays(new Date(), days), to: new Date() });
-  };
+  const selectedPeriod = period.kind === 'preset' ? period.days : null;
+  const dateRange = useMemo(() => observationRange(period, periodAnchor), [period, periodAnchor]);
+  const validParameter = parameters?.some(parameter => parameter.name === selectedParameter) ? selectedParameter : null;
 
   const { data: history, isLoading: isHistoryLoading } = useLocationHistory(
     locationId,
-    selectedParameter,
+    validParameter,
     dateRange.from.toISOString(),
     dateRange.to.toISOString()
   );
@@ -143,7 +134,7 @@ export function ChartPane({ locationId }: ChartPaneProps) {
                     variant={p.name === selectedParameter ? "secondary" : "ghost"}
                     className="justify-start font-normal px-2 py-1.5 h-auto text-sm"
                     onClick={() => {
-                      setSelectedParameter(p.name);
+                      onParameterChange(p.name);
                       setIsParamOpen(false);
                     }}
                   >
@@ -163,7 +154,10 @@ export function ChartPane({ locationId }: ChartPaneProps) {
               variant={selectedPeriod === days ? 'default' : 'outline'}
               size="sm"
               aria-pressed={selectedPeriod === days}
-              onClick={() => setQuickRange(days)}
+              onClick={() => {
+                setPeriodAnchor(new Date());
+                onPeriodChange({ kind: 'preset', days });
+              }}
             >
               {label}
             </Button>
@@ -192,8 +186,7 @@ export function ChartPane({ locationId }: ChartPaneProps) {
                 selected={{ from: dateRange.from, to: dateRange.to }}
                 onSelect={(range) => {
                   if (range?.from) {
-                    setSelectedPeriod(null);
-                    setDateRange({ from: range.from, to: range.to || new Date() });
+                    onPeriodChange({ kind: 'custom', from: range.from.toISOString(), to: (range.to || range.from).toISOString() });
                   }
                 }}
                 numberOfMonths={2}

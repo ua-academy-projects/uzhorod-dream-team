@@ -1,4 +1,4 @@
-.PHONY: build run clean test migrate-up migrate-down db-up db-down
+.PHONY: build run clean migrate-up migrate-down db-up db-down redis-up redis-down
 
 APP_NAME = history
 BIN_DIR = bin
@@ -26,10 +26,6 @@ clean:
 	@echo "Cleaning up..."
 	@rm -rf ${BIN_DIR}
 
-test:
-	@echo "Running tests..."
-	go test -v ./...
-
 migrate-up:
 	goose -dir internal/db/migrations postgres "${DATABASE_URL}" up
 
@@ -43,3 +39,11 @@ db-up:
 db-down:
 	docker stop history-service-db
 	@echo "Stopped the DB container."
+
+redis-up:
+	docker run -p 6379:6379 --name history-service-redis --rm -d redis:8
+	@echo "Started the Redis instance."
+
+redis-down:
+	docker stop history-service-redis
+	@echo "Stopped the Redis instance."

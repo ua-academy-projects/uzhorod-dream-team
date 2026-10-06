@@ -1,13 +1,14 @@
-import { useState } from 'react';
 import { useLocations } from './hooks/useApi';
+import { useSession } from './hooks/useSession';
 import { MapPane } from './components/MapPane';
 import { ChartPane } from './components/ChartPane';
 
 function App() {
   const { data: locations, isLoading, isError } = useLocations();
-  const [selectedLocationId, setSelectedLocationId] = useState<number | null>(null);
+  const session = useSession(locations);
+  const selectedLocationId = session.preferences.locationId;
 
-  if (isLoading) {
+  if (isLoading || session.isLoading) {
     return <div className="flex h-screen items-center justify-center font-semibold text-lg">Loading air quality data...</div>;
   }
 
@@ -22,7 +23,7 @@ function App() {
         <MapPane 
           locations={locations || []} 
           selectedLocationId={selectedLocationId}
-          onSelectLocation={setSelectedLocationId}
+          onSelectLocation={locationId => session.update({ locationId })}
         />
       </div>
 
@@ -32,11 +33,22 @@ function App() {
           <header className="mb-6">
             <h1 className="text-3xl font-bold tracking-tight text-primary">Kyiv Air Quality</h1>
             <p className="text-muted-foreground mt-1">Real-time and historical air quality dynamics</p>
+            {session.unavailable && (
+              <p role="status" className="mt-2 text-sm text-amber-700 dark:text-amber-400">
+                Your selections cannot currently be saved. You can keep browsing.
+              </p>
+            )}
           </header>
 
           <main className="flex-1 bg-card rounded-xl border border-border shadow-sm p-6 flex flex-col items-center justify-center min-h-0">
             {selectedLocationId ? (
-              <ChartPane locationId={selectedLocationId} />
+              <ChartPane
+                locationId={selectedLocationId}
+                selectedParameter={session.preferences.parameter}
+                period={session.preferences.period}
+                onParameterChange={parameter => session.update({ parameter })}
+                onPeriodChange={period => session.update({ period })}
+              />
             ) : (
               <div className="text-center text-muted-foreground flex flex-col items-center">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mb-4 text-muted-foreground/50" fill="none" viewBox="0 0 24 24" stroke="currentColor">

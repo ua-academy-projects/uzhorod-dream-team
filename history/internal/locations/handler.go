@@ -1,13 +1,13 @@
 package locations
 
 import (
-	"encoding/json"
 	"log"
 	"net/http"
 	"strconv"
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"history/internal/httpjson"
 	"history/internal/measurements"
 	"history/internal/parameters"
 )
@@ -30,43 +30,43 @@ func (h *Handler) GetLocations(w http.ResponseWriter, r *http.Request) {
 	locs, err := h.service.GetLocations(r.Context())
 	if err != nil {
 		log.Printf("DB error in GetLocations: %v", err)
-		h.errorResponse(w, http.StatusInternalServerError, "Internal Server Error")
+		httpjson.Error(w, http.StatusInternalServerError, "Internal Server Error")
 		return
 	}
-	h.jsonResponse(w, http.StatusOK, locs)
+	httpjson.Write(w, http.StatusOK, locs)
 }
 
 func (h *Handler) GetLocationParameters(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
-		h.errorResponse(w, http.StatusBadRequest, "invalid location ID")
+		httpjson.Error(w, http.StatusBadRequest, "invalid location ID")
 		return
 	}
 
 	params, err := h.service.GetLocationParameters(r.Context(), id)
 	if err != nil {
 		log.Printf("DB error in GetLocationParameters: %v", err)
-		h.errorResponse(w, http.StatusInternalServerError, "Internal Server Error")
+		httpjson.Error(w, http.StatusInternalServerError, "Internal Server Error")
 		return
 	}
 	if params == nil {
 		params = []parameters.Parameter{}
 	}
-	h.jsonResponse(w, http.StatusOK, params)
+	httpjson.Write(w, http.StatusOK, params)
 }
 
 func (h *Handler) GetLocationHistory(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
-		h.errorResponse(w, http.StatusBadRequest, "invalid location ID")
+		httpjson.Error(w, http.StatusBadRequest, "invalid location ID")
 		return
 	}
 
 	param := r.URL.Query().Get("parameter")
 	if param == "" {
-		h.errorResponse(w, http.StatusBadRequest, "parameter query arg is required")
+		httpjson.Error(w, http.StatusBadRequest, "parameter query arg is required")
 		return
 	}
 
@@ -78,7 +78,7 @@ func (h *Handler) GetLocationHistory(w http.ResponseWriter, r *http.Request) {
 	if toStr != "" {
 		to, err = time.Parse(time.RFC3339, toStr)
 		if err != nil {
-			h.errorResponse(w, http.StatusBadRequest, "invalid 'to' date format, expected RFC3339")
+			httpjson.Error(w, http.StatusBadRequest, "invalid 'to' date format, expected RFC3339")
 			return
 		}
 	} else {
@@ -88,7 +88,7 @@ func (h *Handler) GetLocationHistory(w http.ResponseWriter, r *http.Request) {
 	if fromStr != "" {
 		from, err = time.Parse(time.RFC3339, fromStr)
 		if err != nil {
-			h.errorResponse(w, http.StatusBadRequest, "invalid 'from' date format, expected RFC3339")
+			httpjson.Error(w, http.StatusBadRequest, "invalid 'from' date format, expected RFC3339")
 			return
 		}
 	} else {
@@ -98,7 +98,7 @@ func (h *Handler) GetLocationHistory(w http.ResponseWriter, r *http.Request) {
 	historyData, err := h.service.GetLocationHistory(r.Context(), id, param, from, to)
 	if err != nil {
 		log.Printf("DB error in GetLocationHistory: %v", err)
-		h.errorResponse(w, http.StatusInternalServerError, "Internal Server Error")
+		httpjson.Error(w, http.StatusInternalServerError, "Internal Server Error")
 		return
 	}
 
@@ -106,15 +106,5 @@ func (h *Handler) GetLocationHistory(w http.ResponseWriter, r *http.Request) {
 		historyData = []measurements.MeasurementData{}
 	}
 
-	h.jsonResponse(w, http.StatusOK, historyData)
-}
-
-func (h *Handler) jsonResponse(w http.ResponseWriter, status int, data interface{}) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(data)
-}
-
-func (h *Handler) errorResponse(w http.ResponseWriter, status int, message string) {
-	h.jsonResponse(w, status, map[string]string{"error": message})
+	httpjson.Write(w, http.StatusOK, historyData)
 }

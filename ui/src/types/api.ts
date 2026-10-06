@@ -15,3 +15,13 @@ export interface MeasurementData {
   value: number;
   timestamp: string;
 }
+
+export type ObservationPeriod =
+  | { kind: 'preset'; days: 1 | 7 | 30 }
+  | { kind: 'custom'; from: string; to: string };
+
+export interface SessionPreferences {
+  locationId: number | null;
+  parameter: string | null;
+  period: ObservationPeriod;
+}

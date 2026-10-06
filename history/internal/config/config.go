@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -18,6 +19,10 @@ type Config struct {
 	DefaultBackfillDuration time.Duration
 	FetcherTimeout          time.Duration
 	AllowedOrigins          []string
+	RedisURL                string
+	SessionTTL              time.Duration
+	SessionCookieSecure     bool
+	SessionRedisTimeout     time.Duration
 }
 
 func Load() *Config {
@@ -88,6 +93,17 @@ func Load() *Config {
 		allowedOrigins = []string{"http://localhost:5173", "http://localhost:3000", "http://localhost:80"}
 	}
 
+	redisURL := os.Getenv("REDIS_URL")
+	if redisURL == "" {
+		redisURL = "redis://localhost:6379/0"
+	}
+	sessionTTL := positiveDuration("SESSION_TTL", 720*time.Hour)
+	sessionTimeout := positiveDuration("SESSION_REDIS_TIMEOUT", time.Second)
+	sessionSecure := env != "development"
+	if value, err := strconv.ParseBool(os.Getenv("SESSION_COOKIE_SECURE")); err == nil {
+		sessionSecure = value
+	}
+
 	return &Config{
 		Environment:             env,
 		Port:                    port,
@@ -98,5 +114,16 @@ func Load() *Config {
 		DefaultBackfillDuration: defaultBackfillDuration,
 		FetcherTimeout:          fetcherTimeout,
 		AllowedOrigins:          allowedOrigins,
+		RedisURL:                redisURL,
+		SessionTTL:              sessionTTL,
+		SessionCookieSecure:     sessionSecure,
+		SessionRedisTimeout:     sessionTimeout,
 	}
+}
+
+func positiveDuration(name string, fallback time.Duration) time.Duration {
+	if value, err := time.ParseDuration(os.Getenv(name)); err == nil && value >= time.Second {
+		return value
+	}
+	return fallback
 }
