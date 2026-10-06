@@ -30,6 +30,12 @@ ChartJS.register(
 
 import { cn } from "@/lib/utils";
 
+const OBSERVATION_PERIODS = [
+  { days: 1, label: '24h' },
+  { days: 7, label: '7d' },
+  { days: 30, label: '30d' },
+] as const;
+
 function getParameterColor(param: string): string {
   if (!param) return 'rgb(170, 59, 255)';
   const colors: Record<string, string> = {
@@ -71,12 +77,14 @@ export function ChartPane({ locationId }: ChartPaneProps) {
   }, [parameters, selectedParameter]);
 
   // Date Range State
+  const [selectedPeriod, setSelectedPeriod] = useState<number | null>(7);
   const [dateRange, setDateRange] = useState<{ from: Date; to: Date }>({
     from: subDays(new Date(), 7),
     to: new Date()
   });
 
   const setQuickRange = (days: number) => {
+    setSelectedPeriod(days);
     setDateRange({ from: subDays(new Date(), days), to: new Date() });
   };
 
@@ -149,12 +157,20 @@ export function ChartPane({ locationId }: ChartPaneProps) {
 
         {/* Date Controls */}
         <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => setQuickRange(1)}>24h</Button>
-          <Button variant="outline" size="sm" onClick={() => setQuickRange(7)}>7d</Button>
-          <Button variant="outline" size="sm" onClick={() => setQuickRange(30)}>30d</Button>
+          {OBSERVATION_PERIODS.map(({ days, label }) => (
+            <Button
+              key={days}
+              variant={selectedPeriod === days ? 'default' : 'outline'}
+              size="sm"
+              aria-pressed={selectedPeriod === days}
+              onClick={() => setQuickRange(days)}
+            >
+              {label}
+            </Button>
+          ))}
           
           <Popover>
-            <PopoverTrigger render={<Button variant="outline" size="sm" className={cn("justify-start text-left font-normal", !dateRange && "text-muted-foreground")} />}>
+            <PopoverTrigger render={<Button variant={selectedPeriod === null ? 'default' : 'outline'} size="sm" className={cn("justify-start text-left font-normal", !dateRange && "text-muted-foreground")} />}>
               <CalendarIcon className="mr-2 h-4 w-4" />
               {dateRange?.from ? (
                 dateRange.to ? (
@@ -176,6 +192,7 @@ export function ChartPane({ locationId }: ChartPaneProps) {
                 selected={{ from: dateRange.from, to: dateRange.to }}
                 onSelect={(range) => {
                   if (range?.from) {
+                    setSelectedPeriod(null);
                     setDateRange({ from: range.from, to: range.to || new Date() });
                   }
                 }}
