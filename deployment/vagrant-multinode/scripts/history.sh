@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 source <(sed 's/\r$//' /tmp/kyiv-air-common.sh)
+source <(sed 's/\r$//' /tmp/kyiv-air-redis.sh)
 
 require_env history
 read_database
+read_redis
 install_go
 apt-get install -y --no-install-recommends postgresql-client-16
 if [[ ! -x /usr/local/bin/goose ]] || ! goose --version | grep -q "$GOOSE_VERSION"; then
@@ -14,6 +16,7 @@ build_backend
 copy_env history
 set_env history PORT "$SERVICE_PORT"
 set_env history DATABASE_URL "$DATABASE_URL"
+set_env history REDIS_URL "$REDIS_URL"
 set_env history FETCHER_SERVICE_URL "$FETCHER_URL"
 set_env history ALLOWED_ORIGINS "$UI_ORIGIN"
 
@@ -30,3 +33,4 @@ install_unit kyiv-air "$APP" "$APP/bin/history" "$pre_start"
 configure_firewall
 start_application
 wait_http "http://127.0.0.1:$SERVICE_PORT/api/v1/locations"
+wait_http "http://127.0.0.1:$SERVICE_PORT/api/v1/session"

@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 source <(sed 's/\r$//' /tmp/kyiv-air-common.sh)
+source <(sed 's/\r$//' /tmp/kyiv-air-redis.sh)
 
 read_database
-base_packages postgresql-16 postgresql-client-16
+read_redis
+base_packages postgresql-16 postgresql-client-16 redis-server redis-tools
 copy_env db
 PG_CLUSTER=/etc/postgresql/16/main
 PG_TEMP=$(mktemp)
@@ -53,3 +55,4 @@ SQL
 } | runuser -u postgres -- psql -p "$SERVICE_PORT" -v ON_ERROR_STOP=1 -v database="$DB_NAME"
 
 configure_firewall
+configure_redis "127.0.0.1 $PRIVATE_IP" "$REDIS_PORT" "$REDIS_PASSWORD"

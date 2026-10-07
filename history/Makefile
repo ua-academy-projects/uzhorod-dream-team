@@ -41,7 +41,7 @@ db-down:
 	@echo "Stopped the DB container."
 
 redis-up:
-	docker run -p 6379:6379 --name history-service-redis --rm -d redis:8
+	docker run -p 6379:6379 --name history-service-redis -v history_service_redis_data:/var/lib/redis --rm -d redis:8
 	@echo "Started the Redis instance."
 
 redis-down:

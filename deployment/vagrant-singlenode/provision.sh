@@ -7,6 +7,7 @@ set -Eeuo pipefail
 SOURCE=/opt/kyiv-air/source
 APP=/opt/kyiv-air
 CONFIG=/etc/kyiv-air
+source "$SOURCE/deployment/scripts/redis.sh"
 NODE_MAJOR=24
 PNPM_VERSION=10.33.0
 GOOSE_VERSION=3.24.3
@@ -16,7 +17,8 @@ export GOTOOLCHAIN=auto
 
 # Remove temporary uploads on exit, including error exits, because they contain credentials.
 cleanup() {
-  rm -f /tmp/kyiv-air-{fetcher,history,db,ui}.env "${PG_CONFIG_TEMP:-}" "${PG_HBA_TEMP:-}"
+  rm -f /tmp/kyiv-air-{fetcher,history,db,ui}.env "${PG_CONFIG_TEMP:-}" "${PG_HBA_TEMP:-}" \
+    "${REDIS_CONFIG_TEMP:-}" "${REDIS_MAIN_TEMP:-}"
 }
 
 validate_environment() {
@@ -49,7 +51,7 @@ install_packages() {
   apt-get update
   apt-get install -y --no-install-recommends \
     ca-certificates curl gnupg git build-essential golang-go rsync \
-    postgresql-16 postgresql-client-16 ufw
+    postgresql-16 postgresql-client-16 redis-server redis-tools ufw
 
   # The selected Vagrant box and the Node repository entry below both target amd64.
   if [[ $(uname -m) != "x86_64" ]]; then
@@ -127,12 +129,24 @@ prepare_database_credentials() {
   DATABASE_URL="postgres://kyiv_air:${DB_PASSWORD}@127.0.0.1:5432/${DB_NAME}?sslmode=disable"
 }
 
+prepare_redis_credentials() {
+  if [[ ! -s "$CONFIG/redis-password" ]]; then
+    (umask 077; node -e 'console.log(require("node:crypto").randomBytes(32).toString("hex"))' > "$CONFIG/redis-password")
+  fi
+  chmod 0600 "$CONFIG/redis-password"
+  REDIS_PASSWORD=$(cat "$CONFIG/redis-password")
+  validate_redis_password "$REDIS_PASSWORD"
+  REDIS_URL="redis://:${REDIS_PASSWORD}@127.0.0.1:6379/0"
+}
+
 install_environment_files() {
   for service in fetcher history db ui; do
     install -m 0600 "/tmp/kyiv-air-$service.env" "$CONFIG/$service.env"
   done
 
   printf '\nDATABASE_URL=%s\n' "$DATABASE_URL" >> "$CONFIG/history.env"
+  sed -i '/^REDIS_URL=/d' "$CONFIG/history.env"
+  printf '\nREDIS_URL=%s\n' "$REDIS_URL" >> "$CONFIG/history.env"
 }
 
 stop_applications() {
@@ -217,8 +231,8 @@ install_service_units() {
     protections=$'ProtectSystem=strict\nProtectHome=true'
 
     if [[ "$service" == "history" ]]; then
-      dependencies="$dependencies postgresql@16-main.service kyiv-air-fetcher.service"
-      required_services="postgresql@16-main.service kyiv-air-fetcher.service"
+      dependencies="$dependencies postgresql@16-main.service kyiv-air-fetcher.service redis-server.service"
+      required_services="postgresql@16-main.service kyiv-air-fetcher.service redis-server.service"
       start_check="ExecStartPre=/usr/bin/curl -fsS --retry 20 --retry-connrefused --retry-delay 1 http://127.0.0.1:8080/health"
     elif [[ "$service" == "ui" ]]; then
       description="Kyiv air quality Vite development server"
@@ -280,6 +294,7 @@ configure_firewall() {
 
 verify_startup() {
   curl -fsS --retry 20 --retry-connrefused --retry-delay 1 http://127.0.0.1:8081/api/v1/locations >/dev/null
+  curl -fsS --retry 20 --retry-connrefused --retry-delay 1 --connect-timeout 2 --max-time 3 http://127.0.0.1:8081/api/v1/session >/dev/null
   curl -fsS --retry 20 --retry-connrefused --retry-delay 1 http://127.0.0.1:5173/ >/dev/null
 
   echo "Application ready at http://localhost:5173 on the host. History is collecting OpenAQ data in the background."
@@ -295,9 +310,11 @@ main() {
   build_applications
   prepare_runtime
   prepare_database_credentials
+  prepare_redis_credentials
   install_environment_files
   stop_applications
   configure_postgresql
+  configure_redis 127.0.0.1 6379 "$REDIS_PASSWORD"
   migrate_database
   install_binaries
   install_service_units

@@ -6,13 +6,13 @@ settings = {
   box: "bento/ubuntu-24.04", box_version: "202508.03.0",
   subnet: "192.168.1.0/24", host_network_dev: ENV.fetch("HOST_NETWORK_DEV", "eth0"),
   network_name: "kyiv-air-multinode", readiness_timeout: Integer(ENV.fetch("READY_TIMEOUT", "300")),
-  node_major: "24", pnpm_version: "10.33.0", goose_version: "3.24.3"
+  node_major: "24", pnpm_version: "10.33.0", goose_version: "3.24.3", redis_port: 6379
 }
 
 machines = {
   "db" => {hostname: "kyiv-air-db", ip: "192.168.1.201", memory: 1024, cpus: 1,
            port: 5432, source: nil, env_files: %w[db], script: "scripts/db.sh",
-           unit: "postgresql@16-main.service"},
+           unit: "postgresql@16-main.service redis-server.service"},
   "fetcher" => {hostname: "kyiv-air-fetcher", ip: "192.168.1.202", memory: 1024, cpus: 1,
                 port: 8080, source: "fetcher", env_files: %w[fetcher], script: "scripts/fetcher.sh",
                 unit: "kyiv-air-fetcher.service"},
@@ -86,10 +86,17 @@ Vagrant.configure("2") do |config|
           destination: "/tmp/kyiv-air-#{script}.sh"
       end
 
+      if %w[db history].include?(name)
+        vm.vm.provision "upload-redis", type: "file",
+          source: File.join(project_root, "deployment", "scripts", "redis.sh"),
+          destination: "/tmp/kyiv-air-redis.sh"
+      end
+
       topology = {
         "ROLE" => name, "PRIVATE_IP" => machine[:ip], "SERVICE_PORT" => machine[:port].to_s,
         "LAN_SUBNET" => settings[:subnet], "DB_IP" => machines["db"][:ip],
         "DB_PORT" => machines["db"][:port].to_s,
+        "REDIS_PORT" => settings[:redis_port].to_s, "HISTORY_IP" => machines["history"][:ip],
         "FETCHER_URL" => "http://#{machines["fetcher"][:ip]}:#{machines["fetcher"][:port]}",
         "HISTORY_URL" => "http://#{machines["history"][:ip]}:#{machines["history"][:port]}",
         "UI_ORIGIN" => "http://#{machines["ui"][:ip]}:#{machines["ui"][:port]}",
@@ -102,6 +109,9 @@ Vagrant.configure("2") do |config|
         inline: "set -e\nsystemctl daemon-reload\nsystemctl restart #{machine[:unit]}"
 
       vm.vm.post_up_message = "#{name}: #{machine[:ip]}:#{machine[:port]} (LAN subnet #{settings[:subnet]})"
+      if name == "db"
+        vm.vm.post_up_message += "\nRedis: #{machine[:ip]}:#{settings[:redis_port]} (History VM access only)"
+      end
     end
   end
 end

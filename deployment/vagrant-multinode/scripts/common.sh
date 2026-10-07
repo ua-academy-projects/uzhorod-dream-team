@@ -9,7 +9,7 @@ export PATH="/usr/bin:/usr/local/bin:/usr/local/sbin:/usr/sbin:/bin:/sbin"
 export GOTOOLCHAIN=auto
 
 # Remove uploaded credentials and temporary helpers even if provisioning fails.
-trap 'rm -f /tmp/kyiv-air-{fetcher,history,db,ui}.env /tmp/kyiv-air-{common,wait-ready}.sh "${PG_TEMP:-}" "${HBA_TEMP:-}"' EXIT
+trap 'rm -f /tmp/kyiv-air-{fetcher,history,db,ui}.env /tmp/kyiv-air-{common,wait-ready,redis}.sh "${PG_TEMP:-}" "${HBA_TEMP:-}" "${REDIS_CONFIG_TEMP:-}" "${REDIS_MAIN_TEMP:-}"' EXIT
 
 fail() { echo "$*" >&2; exit 1; }
 
@@ -29,6 +29,13 @@ read_database() {
   [[ "$DB_PASSWORD" =~ ^[A-Za-z0-9_-]{16,}$ && "$DB_PASSWORD" != "change_me_before_starting" ]] ||
     fail "Set POSTGRES_PASSWORD in env/db.env: at least 16 unquoted letters, digits, underscores or hyphens."
   DATABASE_URL="postgres://kyiv_air:${DB_PASSWORD}@${DB_IP}:${DB_PORT}/${DB_NAME}?sslmode=disable"
+}
+
+read_redis() {
+  require_env db
+  REDIS_PASSWORD=$(env_value /tmp/kyiv-air-db.env REDIS_PASSWORD)
+  validate_redis_password "$REDIS_PASSWORD"
+  REDIS_URL="redis://:${REDIS_PASSWORD}@${DB_IP}:${REDIS_PORT}/0"
 }
 
 base_packages() {
@@ -61,6 +68,9 @@ configure_firewall() {
 
   ufw allow 22/tcp
   ufw allow from "$LAN_SUBNET" to "$PRIVATE_IP" port "$SERVICE_PORT" proto tcp
+  if [[ "$ROLE" == "db" ]]; then
+    ufw allow from "$HISTORY_IP" to "$PRIVATE_IP" port "$REDIS_PORT" proto tcp
+  fi
   ufw --force enable
 }
 
