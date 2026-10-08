@@ -1,0 +1,30 @@
+{
+  "name": "weather-history-demo",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Demo: periodically fetch weather from Open-Meteo, store it in PostgreSQL, show it in React",
+  "workspaces": [
+    "history",
+    "scheduler",
+    "frontend"
+  ],
+  "scripts": {
+    "db:up": "docker-compose up -d",
+    "db:down": "docker-compose down",
+    "dev:fetcher": "cd fetcher && go run ./cmd/fetcher",
+    "dev:history": "concurrently -n history,scheduler -c blue,magenta \"npm run dev -w history\" \"npm start -w scheduler\"",
+    "dev:frontend": "npm run dev -w frontend",
+    "dev": "concurrently -n fetcher,history,scheduler,frontend -c yellow,blue,magenta,green \"npm run dev:fetcher\" \"npm run dev:history\" \"npm run dev:frontend\"",
+    "build:fetcher": "cd fetcher && go build -o bin/fetcher ./cmd/fetcher",
+    "build:frontend": "npm run build -w frontend",
+    "build": "npm run build:fetcher && npm run build:frontend",
+    "start:fetcher": "cd fetcher && ./bin/fetcher",
+    "start:history": "npm start -w history",
+    "start:scheduler": "npm start -w scheduler",
+    "start:frontend": "npx serve -s frontend/dist -l 4173",
+    "test": "npm test -w history -w scheduler && cd fetcher && go test ./..."
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}

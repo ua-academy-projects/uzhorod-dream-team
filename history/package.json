@@ -1,0 +1,23 @@
+{
+  "name": "history",
+  "private": true,
+  "version": "1.0.0",
+  "description": "History service (Express + Sequelize) and Fetcher module",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "amqplib": "^2.2.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.1",
+    "pg": "^8.13.1",
+    "pg-hstore": "^2.3.4",
+    "redis": "^6.3.0",
+    "sequelize": "^6.37.5"
+  }
+}
