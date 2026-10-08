@@ -3,9 +3,10 @@ package syncer
 import (
 	"context"
 	"encoding/json"
-	"fmt"
-	"net/http"
 	"time"
+
+	"history/internal/config"
+	"history/internal/rabbitmq"
 )
 
 type FetcherLocation struct {
@@ -29,91 +30,47 @@ type FetcherClient interface {
 	GetLocationMeasurements(ctx context.Context, locationID int, from string) ([]FetcherMeasurement, error)
 }
 
-type fetcherClientImpl struct {
-	baseURL    string
-	httpClient *http.Client
+type requester interface {
+	Call(context.Context, rabbitmq.Request) (json.RawMessage, error)
 }
 
-func NewFetcherClient(baseURL string, timeout time.Duration) FetcherClient {
-	return &fetcherClientImpl{
-		baseURL: baseURL,
-		httpClient: &http.Client{
-			Timeout: timeout,
-		},
+type fetcherClientImpl struct {
+	client  requester
+	timeout time.Duration
+	close   func()
+}
+
+func NewFetcherClient(ctx context.Context, cfg config.RabbitMQ, timeout time.Duration) *fetcherClientImpl {
+	client := rabbitmq.NewClient(ctx, cfg)
+	return &fetcherClientImpl{client: client, timeout: timeout, close: client.Close}
+}
+
+func (c *fetcherClientImpl) Close() { c.close() }
+
+func (c *fetcherClientImpl) call(ctx context.Context, request rabbitmq.Request, result any) error {
+	ctx, cancel := context.WithTimeout(ctx, c.timeout)
+	defer cancel()
+	data, err := c.client.Call(ctx, request)
+	if err != nil {
+		return err
 	}
+	return json.Unmarshal(data, result)
 }
 
 func (c *fetcherClientImpl) GetLocations(ctx context.Context) ([]FetcherLocation, error) {
-	url := fmt.Sprintf("%s/api/v1/locations", c.baseURL)
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("fetcher returned status %d", resp.StatusCode)
-	}
-
-	var locs []FetcherLocation
-	if err := json.NewDecoder(resp.Body).Decode(&locs); err != nil {
-		return nil, err
-	}
-	return locs, nil
+	var result []FetcherLocation
+	err := c.call(ctx, rabbitmq.Request{Operation: rabbitmq.ListLocations}, &result)
+	return result, err
 }
 
 func (c *fetcherClientImpl) GetLocationsLatest(ctx context.Context) ([]FetcherLocation, error) {
-	url := fmt.Sprintf("%s/api/v1/locations/latest", c.baseURL)
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("fetcher returned status %d", resp.StatusCode)
-	}
-
-	var locs []FetcherLocation
-	if err := json.NewDecoder(resp.Body).Decode(&locs); err != nil {
-		return nil, err
-	}
-	return locs, nil
+	var result []FetcherLocation
+	err := c.call(ctx, rabbitmq.Request{Operation: rabbitmq.LatestLocations}, &result)
+	return result, err
 }
 
 func (c *fetcherClientImpl) GetLocationMeasurements(ctx context.Context, locationID int, from string) ([]FetcherMeasurement, error) {
-	url := fmt.Sprintf("%s/api/v1/locations/%d/measurements?from=%s", c.baseURL, locationID, from)
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("fetcher returned status %d", resp.StatusCode)
-	}
-
-	var measurements []FetcherMeasurement
-	if err := json.NewDecoder(resp.Body).Decode(&measurements); err != nil {
-		return nil, err
-	}
-	return measurements, nil
+	var result []FetcherMeasurement
+	err := c.call(ctx, rabbitmq.Request{Operation: rabbitmq.LocationMeasurements, LocationID: locationID, From: from}, &result)
+	return result, err
 }

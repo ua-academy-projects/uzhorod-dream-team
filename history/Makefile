@@ -1,4 +1,4 @@
-.PHONY: build run clean migrate-up migrate-down db-up db-down redis-up redis-down
+.PHONY: build run clean migrate-up migrate-down db-up db-down redis-up redis-down rabbitmq-up rabbitmq-down
 
 APP_NAME = history
 BIN_DIR = bin
@@ -47,3 +47,11 @@ redis-up:
 redis-down:
 	docker stop history-service-redis
 	@echo "Stopped the Redis instance."
+
+rabbitmq-up:
+	docker run -p 5672:5672 -p 15672:15672 --hostname history-service-rabbitmq --name history-service-rabbitmq -v history_service_rabbitmq_data:/var/lib/rabbitmq --rm -d rabbitmq:4-management
+	@echo "Started the RabbitMQ instance."
+
+rabbitmq-down:
+	docker stop history-service-rabbitmq
+	@echo "Stopped the RabbitMQ instance."

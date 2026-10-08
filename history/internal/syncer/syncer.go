@@ -54,6 +54,11 @@ func (s *Syncer) Start(ctx context.Context) {
 			log.Println("Syncer stopped")
 			return
 		case <-ticker.C:
+			if !s.backfillReady || len(s.pendingBackfill) > 0 {
+				if err := s.runBackfill(ctx); err != nil {
+					log.Printf("Backfill retry encountered an error: %v", err)
+				}
+			}
 			if err := s.syncLatest(ctx); err != nil {
 				log.Printf("Error during sync latest: %v", err)
 			}
@@ -145,7 +150,7 @@ func (s *Syncer) runBackfill(ctx context.Context) error {
 
 func (s *Syncer) syncLatest(ctx context.Context) error {
 	if !s.backfillReady {
-		return errors.New("initial backfill could not load locations; restart History to retry")
+		return errors.New("initial backfill could not load locations; retrying next sync cycle")
 	}
 	log.Println("Syncing latest data from Fetcher...")
 	locs, err := s.fetcher.GetLocationsLatest(ctx)
@@ -156,7 +161,7 @@ func (s *Syncer) syncLatest(ctx context.Context) error {
 	var syncErrors []error
 	for _, fl := range locs {
 		if _, pending := s.pendingBackfill[fl.ID]; pending {
-			syncErrors = append(syncErrors, fmt.Errorf("location %d has an incomplete backfill; restart History to retry", fl.ID))
+			syncErrors = append(syncErrors, fmt.Errorf("location %d has an incomplete backfill; retrying next sync cycle", fl.ID))
 			continue
 		}
 		now := time.Now()

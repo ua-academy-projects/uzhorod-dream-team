@@ -1,7 +1,4 @@
 #!/usr/bin/env bash
-# Run with Bash: brace expansions and [[ ... ]] checks are used below.
-# -E inherits ERR traps in functions/subshells; -e stops on unhandled command failures.
-# -u rejects unset variables; pipefail reports failures anywhere in a pipeline.
 set -Eeuo pipefail
 
 SOURCE=/opt/kyiv-air/source
@@ -43,17 +40,11 @@ validate_environment() {
 }
 
 install_packages() {
-  # Ubuntu supplies Go and the runtime services; Node uses the NodeSource APT repository.
-  # Refresh package metadata, then install only requested packages and their dependencies.
-  # Certificates/curl/GnuPG support HTTPS downloads and repository signatures; git and
-  # build-essential support dependency builds. rsync copies
-  # source. PostgreSQL includes the server and CLI tools; UFW manages the guest firewall.
   apt-get update
   apt-get install -y --no-install-recommends \
     ca-certificates curl gnupg git build-essential golang-go rsync \
     postgresql-16 postgresql-client-16 redis-server redis-tools ufw
 
-  # The selected Vagrant box and the Node repository entry below both target amd64.
   if [[ $(uname -m) != "x86_64" ]]; then
     echo "This deployment uses an amd64 box and requires an x86_64 guest." >&2
     exit 1
@@ -75,7 +66,7 @@ Package: nodejs
 Pin: origin deb.nodesource.com
 Pin-Priority: 600
 APT
-  
+
   apt-get update
   apt-get install -y --no-install-recommends nodejs
 

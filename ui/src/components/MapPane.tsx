@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -35,6 +35,34 @@ function RecenterAutomatically({ lat, lon }: { lat: number; lon: number }) {
   return null;
 }
 
+function LocationMarker({ location, selected, onSelect }: {
+  location: Location;
+  selected: boolean;
+  onSelect: (id: number) => void;
+}) {
+  const marker = useRef<L.Marker>(null);
+
+  useEffect(() => {
+    if (selected) {
+      marker.current?.openPopup();
+    } else {
+      marker.current?.closePopup();
+    }
+  }, [selected]);
+
+  return (
+    <Marker
+      ref={marker}
+      position={[location.lat, location.lon]}
+      eventHandlers={{ click: () => onSelect(location.id) }}
+    >
+      <Popup>
+        <div className="font-semibold text-sm">{location.name}</div>
+      </Popup>
+    </Marker>
+  );
+}
+
 export function MapPane({ locations, selectedLocationId, onSelectLocation }: MapPaneProps) {
   const selectedLoc = locations.find((l) => l.id === selectedLocationId);
 
@@ -51,17 +79,12 @@ export function MapPane({ locations, selectedLocationId, onSelectLocation }: Map
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
         {locations.map((loc) => (
-          <Marker 
-            key={loc.id} 
-            position={[loc.lat, loc.lon]}
-            eventHandlers={{
-              click: () => onSelectLocation(loc.id),
-            }}
-          >
-            <Popup>
-              <div className="font-semibold text-sm">{loc.name}</div>
-            </Popup>
-          </Marker>
+          <LocationMarker
+            key={loc.id}
+            location={loc}
+            selected={loc.id === selectedLocationId}
+            onSelect={onSelectLocation}
+          />
         ))}
         {selectedLoc && <RecenterAutomatically lat={selectedLoc.lat} lon={selectedLoc.lon} />}
       </MapContainer>

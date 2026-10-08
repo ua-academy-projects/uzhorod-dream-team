@@ -44,7 +44,11 @@ func NewClient(cfg *config.Config) Client {
 }
 
 func (c *clientImpl) doRequest(ctx context.Context, method, endpoint string, query url.Values) (*http.Response, error) {
-	<-c.rateLimiter
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-c.rateLimiter:
+	}
 
 	u, err := url.Parse(c.baseURL + endpoint)
 	if err != nil {

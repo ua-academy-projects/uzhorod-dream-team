@@ -13,7 +13,7 @@ type Config struct {
 	Environment             string
 	Port                    string
 	DatabaseURL             string
-	FetcherServiceURL       string
+	RabbitMQ                RabbitMQ
 	SyncInterval            time.Duration
 	BackfillThreshold       time.Duration
 	DefaultBackfillDuration time.Duration
@@ -45,11 +45,6 @@ func Load() *Config {
 
 	dbURL := os.Getenv("DATABASE_URL")
 
-	fetcherURL := os.Getenv("FETCHER_SERVICE_URL")
-	if fetcherURL == "" {
-		fetcherURL = "http://localhost:8080"
-	}
-
 	syncIntervalStr := os.Getenv("SYNC_INTERVAL")
 	syncInterval := 15 * time.Minute
 	if syncIntervalStr != "" {
@@ -74,12 +69,9 @@ func Load() *Config {
 		}
 	}
 
-	fetcherTimeoutStr := os.Getenv("FETCHER_TIMEOUT")
 	fetcherTimeout := time.Minute
-	if fetcherTimeoutStr != "" {
-		if t, err := time.ParseDuration(fetcherTimeoutStr); err == nil {
-			fetcherTimeout = t
-		}
+	if value, err := time.ParseDuration(os.Getenv("FETCHER_TIMEOUT")); err == nil && value > 0 {
+		fetcherTimeout = value
 	}
 
 	allowedOriginsStr := os.Getenv("ALLOWED_ORIGINS")
@@ -108,7 +100,7 @@ func Load() *Config {
 		Environment:             env,
 		Port:                    port,
 		DatabaseURL:             dbURL,
-		FetcherServiceURL:       fetcherURL,
+		RabbitMQ:                loadRabbitMQ(),
 		SyncInterval:            syncInterval,
 		BackfillThreshold:       backfillThreshold,
 		DefaultBackfillDuration: defaultBackfillDuration,

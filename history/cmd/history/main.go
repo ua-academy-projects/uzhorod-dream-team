@@ -27,7 +27,7 @@ import (
 func main() {
 	cfg := config.Load()
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
 	log.Println("Connecting to database...")
@@ -42,7 +42,8 @@ func main() {
 	paramRepo := parameters.NewRepository(pool)
 	measRepo := measurements.NewRepository(pool)
 
-	fetcherClient := syncer.NewFetcherClient(cfg.FetcherServiceURL, cfg.FetcherTimeout)
+	fetcherClient := syncer.NewFetcherClient(ctx, cfg.RabbitMQ, cfg.FetcherTimeout)
+	defer fetcherClient.Close()
 
 	svc := locations.NewService(locRepo, paramRepo, measRepo)
 	handler := locations.NewHandler(svc)
@@ -68,7 +69,11 @@ func main() {
 
 	syncWorker := syncer.NewSyncer(cfg, locRepo, paramRepo, measRepo, fetcherClient)
 
-	go syncWorker.Start(ctx)
+	syncDone := make(chan struct{})
+	go func() {
+		defer close(syncDone)
+		syncWorker.Start(ctx)
+	}()
 
 	r := chi.NewRouter()
 	r.Use(middleware.Heartbeat("/health"))
@@ -97,10 +102,10 @@ func main() {
 		Handler: r,
 	}
 
+	shutdownDone := make(chan struct{})
 	go func() {
-		sigChan := make(chan os.Signal, 1)
-		signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-		<-sigChan
+		defer close(shutdownDone)
+		<-ctx.Done()
 
 		log.Println("Shutting down gracefully...")
 		cancel()
@@ -117,4 +122,7 @@ func main() {
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("Could not listen on %s: %v\n", cfg.Port, err)
 	}
+	cancel()
+	<-syncDone
+	<-shutdownDone
 }

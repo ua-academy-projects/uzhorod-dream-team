@@ -1,4 +1,3 @@
-# Resolve paths relative to this file so provisioning always copies the full repository.
 project_root = File.expand_path("../..", __dir__)
 
 Vagrant.configure("2") do |config|
@@ -30,24 +29,20 @@ Vagrant.configure("2") do |config|
       "node_modules/", "dist/", "bin/", "env/"
     ]
 
-  # Upload this deployment's env files separately from the source tree.
   %w[fetcher history db ui].each do |service|
     config.vm.provision "file",
       source: File.join(__dir__, "env", "#{service}.env"),
       destination: "/tmp/kyiv-air-#{service}.env"
   end
 
-  # Shell provisioning runs as root; the application services run as an unprivileged user.
   config.vm.provision "shell", path: "provision.sh"
 
-  # These optional actions run only when selected with --provision-with.
   %w[fetcher history ui].each do |service|
     config.vm.provision "restart-#{service}", type: "shell", run: "never",
       privileged: true,
       inline: "set -e\nsystemctl daemon-reload\nsystemctl restart kyiv-air-#{service}.service"
   end
 
-  # systemd uses the units' dependency ordering when restarting all application services.
   config.vm.provision "restart-services", type: "shell", run: "never",
     privileged: true,
     inline: <<~SHELL

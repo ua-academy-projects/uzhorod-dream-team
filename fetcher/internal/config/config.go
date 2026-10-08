@@ -13,6 +13,7 @@ type Config struct {
 	OpenAQURL    string
 	OpenAQAPIKey string
 	HTTPTimeout  time.Duration
+	RabbitMQ     RabbitMQ
 }
 
 func Load() *Config {
@@ -52,5 +53,6 @@ func Load() *Config {
 		OpenAQURL:    openaqURL,
 		OpenAQAPIKey: os.Getenv("OPENAQ_API_KEY"),
 		HTTPTimeout:  timeout,
+		RabbitMQ:     loadRabbitMQ(),
 	}
 }
