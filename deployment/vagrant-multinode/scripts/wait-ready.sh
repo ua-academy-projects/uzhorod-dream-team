@@ -20,6 +20,13 @@ while (( SECONDS < deadline )); do
         exit 0
       fi
       ;;
+    tcp)
+      remaining=$((deadline - SECONDS))
+      (( remaining > 3 )) && remaining=3
+      if timeout "${remaining}s" bash -c 'exec 3<>"/dev/tcp/$1/$2"' bash "$target" "$port" 2>/dev/null; then
+        exit 0
+      fi
+      ;;
     *) echo "Unknown readiness probe: $kind" >&2; exit 1 ;;
   esac
   sleep 1

@@ -5,6 +5,8 @@ SOURCE=/opt/kyiv-air/source
 APP=/opt/kyiv-air
 CONFIG=/etc/kyiv-air
 source "$SOURCE/deployment/scripts/redis.sh"
+source "$SOURCE/deployment/scripts/rabbitmq.sh"
+READY_TIMEOUT=${READY_TIMEOUT:-300}
 NODE_MAJOR=24
 PNPM_VERSION=10.33.0
 GOOSE_VERSION=3.24.3
@@ -15,7 +17,7 @@ export GOTOOLCHAIN=auto
 # Remove temporary uploads on exit, including error exits, because they contain credentials.
 cleanup() {
   rm -f /tmp/kyiv-air-{fetcher,history,db,ui}.env "${PG_CONFIG_TEMP:-}" "${PG_HBA_TEMP:-}" \
-    "${REDIS_CONFIG_TEMP:-}" "${REDIS_MAIN_TEMP:-}"
+    "${REDIS_CONFIG_TEMP:-}" "${REDIS_MAIN_TEMP:-}" "${RABBITMQ_CONFIG_TEMP:-}" "${RABBITMQ_ENV_TEMP:-}" "${RABBITMQ_SOCKET_TEMP:-}"
 }
 
 validate_environment() {
@@ -130,6 +132,16 @@ prepare_redis_credentials() {
   REDIS_URL="redis://:${REDIS_PASSWORD}@127.0.0.1:6379/0"
 }
 
+prepare_rabbitmq_credentials() {
+  if [[ ! -s "$CONFIG/rabbitmq-password" ]]; then
+    (umask 077; node -e 'console.log(require("node:crypto").randomBytes(32).toString("hex"))' > "$CONFIG/rabbitmq-password")
+  fi
+  chmod 0600 "$CONFIG/rabbitmq-password"
+  RABBITMQ_PASSWORD=$(cat "$CONFIG/rabbitmq-password")
+  validate_rabbitmq_password "$RABBITMQ_PASSWORD"
+  RABBITMQ_URL="amqp://kyiv_air:${RABBITMQ_PASSWORD}@127.0.0.1:5672/kyiv-air"
+}
+
 install_environment_files() {
   for service in fetcher history db ui; do
     install -m 0600 "/tmp/kyiv-air-$service.env" "$CONFIG/$service.env"
@@ -138,6 +150,11 @@ install_environment_files() {
   printf '\nDATABASE_URL=%s\n' "$DATABASE_URL" >> "$CONFIG/history.env"
   sed -i '/^REDIS_URL=/d' "$CONFIG/history.env"
   printf '\nREDIS_URL=%s\n' "$REDIS_URL" >> "$CONFIG/history.env"
+  sed -i '/^FETCHER_SERVICE_URL=/d' "$CONFIG/history.env"
+  for service in fetcher history; do
+    sed -i '/^RABBITMQ_URL=/d' "$CONFIG/$service.env"
+    printf '\nRABBITMQ_URL=%s\n' "$RABBITMQ_URL" >> "$CONFIG/$service.env"
+  done
 }
 
 stop_applications() {
@@ -221,10 +238,15 @@ install_service_units() {
     environment=""
     protections=$'ProtectSystem=strict\nProtectHome=true'
 
+    if [[ "$service" == "fetcher" || "$service" == "history" ]]; then
+      dependencies="$dependencies rabbitmq-server.service"
+      required_services="rabbitmq-server.service"
+      start_check="ExecStartPre=$APP/bin/wait-ready.sh tcp 127.0.0.1 5672 $READY_TIMEOUT"
+    fi
+
     if [[ "$service" == "history" ]]; then
-      dependencies="$dependencies postgresql@16-main.service kyiv-air-fetcher.service redis-server.service"
-      required_services="postgresql@16-main.service kyiv-air-fetcher.service redis-server.service"
-      start_check="ExecStartPre=/usr/bin/curl -fsS --retry 20 --retry-connrefused --retry-delay 1 http://127.0.0.1:8080/health"
+      dependencies="$dependencies postgresql@16-main.service redis-server.service"
+      required_services="$required_services postgresql@16-main.service redis-server.service"
     elif [[ "$service" == "ui" ]]; then
       description="Kyiv air quality Vite development server"
       runtime_user=vagrant
@@ -252,6 +274,7 @@ $environment
 EnvironmentFile=$CONFIG/$service.env
 $start_check
 ExecStart=$command
+TimeoutStartSec=$((READY_TIMEOUT + 30))
 Restart=on-failure
 RestartSec=5
 NoNewPrivileges=true
@@ -268,8 +291,6 @@ UNIT
 start_applications() {
   systemctl daemon-reload
   systemctl enable --now kyiv-air-fetcher
-
-  curl -fsS --retry 20 --retry-connrefused --retry-delay 1 http://127.0.0.1:8080/health >/dev/null
   systemctl enable --now kyiv-air-history
   systemctl enable --now kyiv-air-ui
 }
@@ -295,6 +316,7 @@ main() {
   trap cleanup EXIT
   validate_environment
   install_packages
+  install_rabbitmq
   install_node
   install_pnpm
   install_goose
@@ -302,12 +324,15 @@ main() {
   prepare_runtime
   prepare_database_credentials
   prepare_redis_credentials
+  prepare_rabbitmq_credentials
   install_environment_files
   stop_applications
   configure_postgresql
   configure_redis 127.0.0.1 6379 "$REDIS_PASSWORD"
+  configure_rabbitmq 127.0.0.1 5672 "$RABBITMQ_PASSWORD" "$READY_TIMEOUT"
   migrate_database
   install_binaries
+  install -m 0755 "$SOURCE/deployment/vagrant-multinode/scripts/wait-ready.sh" "$APP/bin/wait-ready.sh"
   install_service_units
   start_applications
   configure_firewall

@@ -6,18 +6,18 @@ settings = {
   box: "bento/ubuntu-24.04", box_version: "202508.03.0",
   subnet: "192.168.1.0/24", host_network_dev: ENV.fetch("HOST_NETWORK_DEV", "eth0"),
   network_name: "kyiv-air-multinode", readiness_timeout: Integer(ENV.fetch("READY_TIMEOUT", "300")),
-  node_major: "24", pnpm_version: "10.33.0", goose_version: "3.24.3", redis_port: 6379
+  node_major: "24", pnpm_version: "10.33.0", goose_version: "3.24.3", redis_port: 6379, rabbitmq_port: 5672
 }
 
 machines = {
-  "db" => {hostname: "kyiv-air-db", ip: "192.168.1.201", memory: 1024, cpus: 1,
-           port: 5432, source: nil, env_files: %w[db], script: "scripts/db.sh",
-           unit: "postgresql@16-main.service redis-server.service"},
+  "db" => {hostname: "kyiv-air-db", ip: "192.168.1.201", memory: 2048, cpus: 1,
+           port: 5432, source: nil, env_files: %w[db rabbitmq], script: "scripts/db.sh",
+           unit: "postgresql@16-main.service redis-server.service rabbitmq-server.service"},
   "fetcher" => {hostname: "kyiv-air-fetcher", ip: "192.168.1.202", memory: 1024, cpus: 1,
-                port: 8080, source: "fetcher", env_files: %w[fetcher], script: "scripts/fetcher.sh",
+                port: 8080, source: "fetcher", env_files: %w[fetcher rabbitmq], script: "scripts/fetcher.sh",
                 unit: "kyiv-air-fetcher.service"},
   "history" => {hostname: "kyiv-air-history", ip: "192.168.1.203", memory: 1024, cpus: 1,
-                port: 8081, source: "history", env_files: %w[history db], script: "scripts/history.sh",
+                port: 8081, source: "history", env_files: %w[history db rabbitmq], script: "scripts/history.sh",
                 unit: "kyiv-air-history.service"},
   "ui" => {hostname: "kyiv-air-ui", ip: "192.168.1.204", memory: 1024, cpus: 1,
            port: 5173, source: "ui", env_files: %w[ui], script: "scripts/ui.sh",
@@ -92,12 +92,18 @@ Vagrant.configure("2") do |config|
           destination: "/tmp/kyiv-air-redis.sh"
       end
 
+      if %w[db fetcher history].include?(name)
+        vm.vm.provision "upload-rabbitmq-helper", type: "file",
+          source: File.join(project_root, "deployment", "scripts", "rabbitmq.sh"),
+          destination: "/tmp/kyiv-air-rabbitmq.sh"
+      end
+
       topology = {
         "ROLE" => name, "PRIVATE_IP" => machine[:ip], "SERVICE_PORT" => machine[:port].to_s,
         "LAN_SUBNET" => settings[:subnet], "DB_IP" => machines["db"][:ip],
         "DB_PORT" => machines["db"][:port].to_s,
         "REDIS_PORT" => settings[:redis_port].to_s, "HISTORY_IP" => machines["history"][:ip],
-        "FETCHER_URL" => "http://#{machines["fetcher"][:ip]}:#{machines["fetcher"][:port]}",
+        "RABBITMQ_PORT" => settings[:rabbitmq_port].to_s, "FETCHER_IP" => machines["fetcher"][:ip],
         "HISTORY_URL" => "http://#{machines["history"][:ip]}:#{machines["history"][:port]}",
         "UI_ORIGIN" => "http://#{machines["ui"][:ip]}:#{machines["ui"][:port]}",
         "READY_TIMEOUT" => settings[:readiness_timeout].to_s, "NODE_MAJOR" => settings[:node_major],
@@ -111,6 +117,7 @@ Vagrant.configure("2") do |config|
       vm.vm.post_up_message = "#{name}: #{machine[:ip]}:#{machine[:port]} (LAN subnet #{settings[:subnet]})"
       if name == "db"
         vm.vm.post_up_message += "\nRedis: #{machine[:ip]}:#{settings[:redis_port]} (History VM access only)"
+        vm.vm.post_up_message += "\nRabbitMQ: #{machine[:ip]}:#{settings[:rabbitmq_port]} (Fetcher and History VM access only)\nManagement: vagrant ssh db -- -L 15672:127.0.0.1:15672"
       end
     end
   end

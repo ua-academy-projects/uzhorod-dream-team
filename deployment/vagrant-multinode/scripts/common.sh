@@ -9,7 +9,7 @@ export PATH="/usr/bin:/usr/local/bin:/usr/local/sbin:/usr/sbin:/bin:/sbin"
 export GOTOOLCHAIN=auto
 
 # Remove uploaded credentials and temporary helpers even if provisioning fails.
-trap 'rm -f /tmp/kyiv-air-{fetcher,history,db,ui}.env /tmp/kyiv-air-{common,wait-ready,redis}.sh "${PG_TEMP:-}" "${HBA_TEMP:-}" "${REDIS_CONFIG_TEMP:-}" "${REDIS_MAIN_TEMP:-}"' EXIT
+trap 'rm -f /tmp/kyiv-air-{fetcher,history,db,ui,rabbitmq}.env /tmp/kyiv-air-{common,wait-ready,redis,rabbitmq}.sh "${PG_TEMP:-}" "${HBA_TEMP:-}" "${REDIS_CONFIG_TEMP:-}" "${REDIS_MAIN_TEMP:-}" "${RABBITMQ_CONFIG_TEMP:-}" "${RABBITMQ_ENV_TEMP:-}" "${RABBITMQ_SOCKET_TEMP:-}"' EXIT
 
 fail() { echo "$*" >&2; exit 1; }
 
@@ -36,6 +36,13 @@ read_redis() {
   REDIS_PASSWORD=$(env_value /tmp/kyiv-air-db.env REDIS_PASSWORD)
   validate_redis_password "$REDIS_PASSWORD"
   REDIS_URL="redis://:${REDIS_PASSWORD}@${DB_IP}:${REDIS_PORT}/0"
+}
+
+read_rabbitmq() {
+  require_env rabbitmq
+  RABBITMQ_PASSWORD=$(env_value /tmp/kyiv-air-rabbitmq.env RABBITMQ_PASSWORD)
+  validate_rabbitmq_password "$RABBITMQ_PASSWORD"
+  RABBITMQ_URL="amqp://kyiv_air:${RABBITMQ_PASSWORD}@${DB_IP}:${RABBITMQ_PORT}/kyiv-air"
 }
 
 base_packages() {
@@ -70,6 +77,8 @@ configure_firewall() {
   ufw allow from "$LAN_SUBNET" to "$PRIVATE_IP" port "$SERVICE_PORT" proto tcp
   if [[ "$ROLE" == "db" ]]; then
     ufw allow from "$HISTORY_IP" to "$PRIVATE_IP" port "$REDIS_PORT" proto tcp
+    ufw allow from "$FETCHER_IP" to "$PRIVATE_IP" port "$RABBITMQ_PORT" proto tcp
+    ufw allow from "$HISTORY_IP" to "$PRIVATE_IP" port "$RABBITMQ_PORT" proto tcp
   fi
   ufw --force enable
 }
@@ -144,6 +153,7 @@ UNIT
 
 wait_http() { "$APP/bin/wait-ready.sh" http "$1" 0 "$READY_TIMEOUT"; }
 wait_database() { "$APP/bin/wait-ready.sh" postgres "$DB_IP" "$DB_PORT" "$READY_TIMEOUT"; }
+wait_broker() { "$APP/bin/wait-ready.sh" tcp "$DB_IP" "$RABBITMQ_PORT" "$READY_TIMEOUT"; }
 start_application() {
   systemctl enable "kyiv-air-$ROLE.service"
   systemctl restart "kyiv-air-$ROLE.service"

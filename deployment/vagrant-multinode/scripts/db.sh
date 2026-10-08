@@ -2,11 +2,15 @@
 set -Eeuo pipefail
 source <(sed 's/\r$//' /tmp/kyiv-air-common.sh)
 source <(sed 's/\r$//' /tmp/kyiv-air-redis.sh)
+source <(sed 's/\r$//' /tmp/kyiv-air-rabbitmq.sh)
 
 read_database
 read_redis
+read_rabbitmq
 base_packages postgresql-16 postgresql-client-16 redis-server redis-tools
+install_rabbitmq
 copy_env db
+copy_env rabbitmq
 PG_CLUSTER=/etc/postgresql/16/main
 PG_TEMP=$(mktemp)
 HBA_TEMP=$(mktemp)
@@ -56,3 +60,4 @@ SQL
 
 configure_firewall
 configure_redis "127.0.0.1 $PRIVATE_IP" "$REDIS_PORT" "$REDIS_PASSWORD"
+configure_rabbitmq "127.0.0.1 $PRIVATE_IP" "$RABBITMQ_PORT" "$RABBITMQ_PASSWORD" "$READY_TIMEOUT"
