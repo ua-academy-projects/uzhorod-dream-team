@@ -1,0 +1,12 @@
+.git
+.vagrant
+.env
+**/node_modules
+bin
+logs
+ui/dist
+docs
+vagrant
+Vagrantfile
+docker-compose.yml
+dev.sh

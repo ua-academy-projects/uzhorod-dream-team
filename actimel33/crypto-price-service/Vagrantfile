@@ -1,0 +1,124 @@
+# One machine per role, each reachable on the LAN at its own address.
+# Redis shares the database node: the task asks not to spend a separate VM on
+# infrastructure services, and the two of them fit comfortably together.
+#
+#   vagrant up                     all machines
+#   vagrant up history             just one of them
+#   vagrant destroy -f && vagrant up    the honest reproducibility check
+#
+# Provider is libvirt/KVM inside WSL rather than VirtualBox on Windows:
+
+require "fileutils"
+require "securerandom"
+require "tmpdir"
+
+ENV["VAGRANT_DEFAULT_PROVIDER"] ||= "libvirt"
+
+PROJECT_DIR = File.dirname(__FILE__).freeze
+
+NET = "192.168.77".freeze
+
+MACHINES = [
+  { name: "db",      ip: "#{NET}.10", port: 5432, cpus: 2, memory: 2048 },
+  { name: "fetcher", ip: "#{NET}.11", port: 3002, cpus: 2, memory: 2048 },
+  { name: "history", ip: "#{NET}.12", port: 3001, cpus: 2, memory: 2048 },
+  { name: "ui",      ip: "#{NET}.13", port: 5173, cpus: 2, memory: 2048 },
+].freeze
+
+ADDRESS = MACHINES.to_h { |m| [m[:name], m[:ip]] }.freeze
+
+# Secrets are generated once. the machines receive the values through the
+# environment.
+SECRETS_FILE = File.join(PROJECT_DIR, ".vagrant", "secrets.env").freeze
+
+def load_secrets(path)
+  if File.exist?(path)
+    File.readlines(path).each_with_object({}) do |line, acc|
+      key, value = line.strip.split("=", 2)
+      acc[key] = value if key && value
+    end
+  else
+    generated = {
+      "POSTGRES_PASSWORD" => SecureRandom.hex(16),
+      "REDIS_PASSWORD" => SecureRandom.hex(16),
+      "SESSION_SECRET" => SecureRandom.hex(32),
+    }
+    FileUtils.mkdir_p(File.dirname(path))
+    File.write(path, generated.map { |k, v| "#{k}=#{v}" }.join("\n") + "\n")
+    File.chmod(0o600, path)
+    generated
+  end
+end
+
+SECRETS = load_secrets(SECRETS_FILE)
+
+# No synced folder: the project lives in the WSL filesystem and the code travels
+# to the machine as an archive over ssh.
+PAYLOAD = File.join(Dir.tmpdir, "crypto-price-payload.tgz").freeze
+
+PACK = [
+  "tar", "-C", %("#{PROJECT_DIR}"),
+  "--exclude=./.vagrant", "--exclude=./.env", "--exclude=./logs", "--exclude=./bin",
+  "--exclude=./ui/dist", "--exclude=./ui/node_modules",
+  "--exclude=./services/history/node_modules",
+  "-czf", %("#{PAYLOAD}"), ".",
+].join(" ").freeze
+
+# Packing happens while the config is read, not in a trigger: Vagrant checks
+# that the file provisioner's source exists before any trigger can run.
+abort("failed to pack the project: #{PACK}") unless system(PACK)
+
+# Unpacked over the existing directory
+UNPACK = <<~SHELL
+  set -eu
+  mkdir -p /home/vagrant/app
+  tar xzf /tmp/app.tgz -C /home/vagrant/app
+  chown -R vagrant:vagrant /home/vagrant/app
+SHELL
+
+ROLE_ENV = SECRETS.merge(
+  "DB_IP" => ADDRESS.fetch("db"),
+  "REDIS_IP" => ADDRESS.fetch("db"),
+  "HISTORY_IP" => ADDRESS.fetch("history"),
+).freeze
+
+Vagrant.configure("2") do |config|
+  config.vm.box = "bento/ubuntu-24.04"
+  config.vm.boot_timeout = 600
+  config.vm.synced_folder ".", "/vagrant", disabled: true
+
+  MACHINES.sort_by { |m| %w[db fetcher history ui].index(m[:name]) }.each do |spec|
+    config.vm.define spec[:name] do |machine|
+      machine.vm.hostname = spec[:name]
+      # Only a LAN address
+      machine.vm.network "private_network", ip: spec[:ip]
+
+      machine.vm.provider :libvirt do |lv|
+        lv.cpus = spec[:cpus]
+        lv.memory = spec[:memory]
+        lv.driver = "kvm"
+      end
+
+      machine.vm.provision "code", type: "file", source: PAYLOAD, destination: "/tmp/app.tgz"
+      machine.vm.provision "unpack", type: "shell", inline: UNPACK
+      machine.vm.provision "system", type: "shell",
+                           path: "vagrant/provision-system.sh",
+                           env: { "ROLE" => spec[:name] }
+      machine.vm.provision "role", type: "shell", privileged: false,
+                           path: "vagrant/provision-#{spec[:name]}.sh",
+                           env: ROLE_ENV
+    end
+  end
+
+  config.vm.post_up_message = [
+    "Each service runs on its own machine, reachable on the LAN:",
+    "",
+    *MACHINES.map { |m| "  #{m[:name].ljust(8)} http://#{m[:ip]}:#{m[:port]}" },
+    "",
+    "  redis shares the db node at #{ADDRESS.fetch("db")}:6379",
+    "",
+    "  open the app      http://#{ADDRESS.fetch("ui")}:5173",
+    "  check history     curl http://#{ADDRESS.fetch("history")}:3001/health",
+    "  check fetcher     curl http://#{ADDRESS.fetch("fetcher")}:3002/health",
+  ].join("\n")
+end
