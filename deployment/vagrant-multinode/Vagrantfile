@@ -6,22 +6,22 @@ settings = {
   box: "bento/ubuntu-24.04", box_version: "202508.03.0",
   subnet: "192.168.1.0/24", host_network_dev: ENV.fetch("HOST_NETWORK_DEV", "eth0"),
   network_name: "kyiv-air-multinode", readiness_timeout: Integer(ENV.fetch("READY_TIMEOUT", "300")),
-  node_major: "24", pnpm_version: "10.33.0", goose_version: "3.24.3", redis_port: 6379, rabbitmq_port: 5672
+  redis_port: 6379, rabbitmq_port: 5672
 }
 
 machines = {
   "db" => {hostname: "kyiv-air-db", ip: "192.168.1.201", memory: 2048, cpus: 1,
            port: 5432, source: nil, env_files: %w[db rabbitmq], script: "scripts/db.sh",
-           unit: "postgresql@16-main.service redis-server.service rabbitmq-server.service"},
+           containers: "kyiv-air-postgres kyiv-air-redis kyiv-air-rabbitmq"},
   "fetcher" => {hostname: "kyiv-air-fetcher", ip: "192.168.1.202", memory: 1024, cpus: 1,
                 port: 8080, source: "fetcher", env_files: %w[fetcher rabbitmq], script: "scripts/fetcher.sh",
-                unit: "kyiv-air-fetcher.service"},
+                containers: "kyiv-air-fetcher"},
   "history" => {hostname: "kyiv-air-history", ip: "192.168.1.203", memory: 1024, cpus: 1,
                 port: 8081, source: "history", env_files: %w[history db rabbitmq], script: "scripts/history.sh",
-                unit: "kyiv-air-history.service"},
+                containers: "kyiv-air-history"},
   "ui" => {hostname: "kyiv-air-ui", ip: "192.168.1.204", memory: 1024, cpus: 1,
            port: 5173, source: "ui", env_files: %w[ui], script: "scripts/ui.sh",
-           unit: "kyiv-air-ui.service"}
+           containers: "kyiv-air-ui"}
 }
 
 def validate_settings(settings, machines)
@@ -80,22 +80,12 @@ Vagrant.configure("2") do |config|
           destination: "/tmp/kyiv-air-#{service}.env"
       end
 
-      %w[common wait-ready].each do |script|
-        vm.vm.provision "upload-#{script}", type: "file",
-          source: File.join(__dir__, "scripts", "#{script}.sh"),
-          destination: "/tmp/kyiv-air-#{script}.sh"
-      end
-
-      if %w[db history].include?(name)
-        vm.vm.provision "upload-redis", type: "file",
-          source: File.join(project_root, "deployment", "scripts", "redis.sh"),
-          destination: "/tmp/kyiv-air-redis.sh"
-      end
-
-      if %w[db fetcher history].include?(name)
-        vm.vm.provision "upload-rabbitmq-helper", type: "file",
-          source: File.join(project_root, "deployment", "scripts", "rabbitmq.sh"),
-          destination: "/tmp/kyiv-air-rabbitmq.sh"
+      vm.vm.provision "upload-common", type: "file",
+        source: File.join(__dir__, "scripts", "common.sh"), destination: "/tmp/kyiv-air-common.sh"
+      %w[docker.sh docker-firewall.sh images.env].each do |helper|
+        vm.vm.provision "upload-helper-#{helper}", type: "file",
+          source: File.join(project_root, "deployment", "scripts", helper),
+          destination: "/tmp/kyiv-air-#{helper}"
       end
 
       topology = {
@@ -106,13 +96,12 @@ Vagrant.configure("2") do |config|
         "RABBITMQ_PORT" => settings[:rabbitmq_port].to_s, "FETCHER_IP" => machines["fetcher"][:ip],
         "HISTORY_URL" => "http://#{machines["history"][:ip]}:#{machines["history"][:port]}",
         "UI_ORIGIN" => "http://#{machines["ui"][:ip]}:#{machines["ui"][:port]}",
-        "READY_TIMEOUT" => settings[:readiness_timeout].to_s, "NODE_MAJOR" => settings[:node_major],
-        "PNPM_VERSION" => settings[:pnpm_version], "GOOSE_VERSION" => settings[:goose_version]
+        "READY_TIMEOUT" => settings[:readiness_timeout].to_s
       }
       vm.vm.provision "configure", type: "shell", path: machine[:script], env: topology
 
       vm.vm.provision "restart", type: "shell", run: "never", privileged: true,
-        inline: "set -e\nsystemctl daemon-reload\nsystemctl restart #{machine[:unit]}"
+        inline: "set -e\ndocker restart #{machine[:containers]}"
 
       vm.vm.post_up_message = "#{name}: #{machine[:ip]}:#{machine[:port]} (LAN subnet #{settings[:subnet]})"
       if name == "db"
