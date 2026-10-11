@@ -6,7 +6,7 @@ source "$HELPERS/docker.sh"
 trap cleanup_uploads EXIT
 ROLE=single
 PRIVATE_IP=127.0.0.1
-UI_ORIGIN=http://localhost:5173
+UI_ORIGIN=http://localhost
 DB_HOST=kyiv-air-postgres
 REDIS_HOST=kyiv-air-redis
 RABBITMQ_HOST=kyiv-air-rabbitmq
@@ -53,4 +53,4 @@ start_backend history "$HISTORY_IMAGE" 8081
 start_ui
 wait_http http://127.0.0.1:8081/api/v1/locations
 wait_http http://127.0.0.1:8081/api/v1/session
-echo "Application ready at http://localhost:5173."
+echo "Application ready at http://localhost."

@@ -10,7 +10,7 @@ Vagrant.configure("2") do |config|
   config.vm.hostname = "kyiv-air"
   config.vm.boot_timeout = 600
 
-  [5173, 8080, 8081, 5432].each do |port|
+  [80, 8080, 8081, 5432].each do |port|
     config.vm.network "forwarded_port", guest: port, host: port,
       host_ip: "127.0.0.1", auto_correct: false
   end
@@ -53,5 +53,5 @@ Vagrant.configure("2") do |config|
       docker restart kyiv-air-fetcher kyiv-air-history kyiv-air-ui
     SHELL
 
-  config.vm.post_up_message = "Kyiv air quality: http://localhost:5173\nFetcher: http://localhost:8080\nHistory: http://localhost:8081\nPostgreSQL: localhost:5432\nRabbitMQ: guest loopback port 5672\nManagement: vagrant ssh -- -L 15672:127.0.0.1:15672"
+  config.vm.post_up_message = "Kyiv air quality: http://localhost\nFetcher: http://localhost:8080\nHistory: http://localhost:8081\nPostgreSQL: localhost:5432\nRabbitMQ: guest loopback port 5672\nManagement: vagrant ssh -- -L 15672:127.0.0.1:15672"
 end

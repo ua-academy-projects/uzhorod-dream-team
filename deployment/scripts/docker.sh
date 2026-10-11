@@ -238,15 +238,26 @@ wait_dependencies() {
   fi
 }
 
+require_ca_bundle() {
+  [[ -s /etc/ssl/certs/ca-certificates.crt && -r /etc/ssl/certs/ca-certificates.crt ]] ||
+    fail "Missing or unreadable VM CA bundle: /etc/ssl/certs/ca-certificates.crt"
+}
+
 migrate_database() {
-  docker run --rm --name kyiv-air-migrate --network "$NETWORK" --env-file "$CONFIG/migrate.env" "$MIGRATION_IMAGE" up
+  require_ca_bundle
+  docker run --rm --name kyiv-air-migrate --network "$NETWORK" --env-file "$CONFIG/migrate.env" \
+    --mount type=bind,src=/etc/ssl/certs/ca-certificates.crt,dst=/etc/ssl/certs/ca-certificates.crt,readonly \
+    -e SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt "$MIGRATION_IMAGE" up
 }
 
 start_backend() {
   local role=$1 image=$2 port=$3
   local -a ports
+  require_ca_bundle
   if [[ "$ROLE" == single ]]; then ports=(-p "$port:$port"); else ports=(-p "$PRIVATE_IP:$port:$port" -p "127.0.0.1:$port:$port"); fi
   replace_container "kyiv-air-$role" "${ports[@]}" --env-file "$CONFIG/$role.env" \
+    --mount type=bind,src=/etc/ssl/certs/ca-certificates.crt,dst=/etc/ssl/certs/ca-certificates.crt,readonly \
+    -e SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt \
     --read-only --tmpfs /tmp:rw,noexec,nosuid,size=16m --cap-drop ALL --security-opt no-new-privileges "$image"
   wait_http "http://127.0.0.1:$port/health"
 }
@@ -255,8 +266,8 @@ start_ui() {
   local -a ports
   copy_env ui
   set_env ui HISTORY_URL "$HISTORY_URL"
-  if [[ "$ROLE" == single ]]; then ports=(-p 5173:80); else ports=(-p "$PRIVATE_IP:5173:80" -p 127.0.0.1:5173:80); fi
+  if [[ "$ROLE" == single ]]; then ports=(-p 80:8080); else ports=(-p "$PRIVATE_IP:80:8080" -p 127.0.0.1:80:8080); fi
   replace_container kyiv-air-ui "${ports[@]}" --env-file "$CONFIG/ui.env" "$UI_IMAGE"
-  wait_http http://127.0.0.1:5173/
-  wait_http http://127.0.0.1:5173/api/v1/session
+  wait_http http://127.0.0.1/
+  wait_http http://127.0.0.1/api/v1/session
 }

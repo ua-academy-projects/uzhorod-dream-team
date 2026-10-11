@@ -6,8 +6,8 @@ RUN pnpm install --frozen-lockfile
 COPY . .
 RUN VITE_API_URL=/api/v1 pnpm run build
 
-FROM nginx:stable-alpine-slim
+FROM nginxinc/nginx-unprivileged:stable-alpine-slim
 COPY --from=build /src/dist /usr/share/nginx/html
 COPY docker/default.conf.template /etc/nginx/templates/default.conf.template
 ENV HISTORY_URL=http://kyiv-air-history:8081
-EXPOSE 80
+EXPOSE 8080

@@ -35,7 +35,7 @@ allow_port() {
 
 case "$ROLE" in
   single)
-    iptables -w -A KYIV-AIR -p tcp -m multiport --dports 80,8080,8081,5432 -j RETURN
+    iptables -w -A KYIV-AIR -p tcp -m multiport --dports 8080,8081,5432 -j RETURN
     ;;
   db)
     allow_port "$LAN_SUBNET" 5432
