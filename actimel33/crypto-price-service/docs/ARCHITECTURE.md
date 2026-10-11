@@ -81,6 +81,8 @@
       ├─ Vagrantfile: MACHINES[] → db, fetcher, history, ui
       ├─ secrets → .vagrant/secrets.env (0600, git-ignored)
       │            POSTGRES_PASSWORD, REDIS_PASSWORD, SESSION_SECRET
+      ├─ .vagrant/ssh/config         `ssh <name>` from the host
+      ├─ .vagrant/logship/<name>      one ssh key per VM + authorized_keys
       ├─ tar → /tmp/…payload.tgz (~1 MB, no .env / node_modules / bin)
       └─ machines provision IN PARALLEL (vagrant-libvirt)
             │
@@ -89,11 +91,13 @@
             │     eth1 192.168.77.x   private network
             ├─ code → unpack → /home/vagrant/app
             ├─ system (root)   docker-ce + buildx only, same on every VM
-            └─ role (vagrant)  .env from .env.example → docker build → docker run
-                  db       volumes pgdata, redisdata → crypto_db, crypto_redis
-                  fetcher  wait redis → build crypto/fetcher → crypto_fetcher
-                  history  wait db, redis → build crypto/history → crypto_history
-                  ui       build crypto/ui → crypto_ui → e2e curl /api/price/latest
+            ├─ role (vagrant)  .env from .env.example → docker build → docker run
+            │     db       volumes pgdata, redisdata → crypto_db, crypto_redis
+            │     fetcher  wait redis → build crypto/fetcher → crypto_fetcher
+            │     history  wait db, redis → build crypto/history → crypto_history
+            │     ui       build crypto/ui → crypto_ui → e2e curl /api/price/latest
+            ├─ collector (db, root)  user logs, logsink, authorized_keys, logrotate
+            └─ logship (root)        key, /usr/local/bin/logship, cron */15
 ```
 
 Images are built on the VM itself — no registry. `vagrant/lib.sh` holds the
@@ -131,3 +135,43 @@ No compose on the VMs — one container per VM, `docker run` is enough.
       ├─ crypto_db       -p 5432  volume pgdata      health: pg_isready
       └─ crypto_redis    -p 6379  volume redisdata   requirepass, appendonly yes
 ```
+
+## SSH from the host
+
+```
+  ~/.ssh/config:  Include <project>/.vagrant/ssh/config      (first line)
+
+  Host db        HostName 192.168.77.10   IdentityFile .vagrant/machines/db/libvirt/private_key
+  Host fetcher   HostName 192.168.77.11   …
+  User vagrant · IdentitiesOnly · no host key check (VMs are recreated)
+```
+
+Generated from `MACHINES` on every Vagrant run; keys are the per-machine ones
+Vagrant creates on the first `up`.
+
+## Logs
+
+```
+  every VM, cron */15 (root)                              db
+  docker logs --since <prev> --until <now>   ssh logs@db
+    → /var/spool/logship/<container>.<ts>.log ──────────▶ logsink <host>
+    → deleted after the collector took it                 → /srv/logs/<host>/<container>.log
+                                                            logrotate daily × 7, gzip
+```
+
+```
+  authorized_keys of user logs, one line per VM:
+  restrict,from="192.168.77.12",command="/usr/local/bin/logsink history" ssh-ed25519 … logship@history
+
+  restrict   no shell, PTY, port / agent / X11 forwarding
+  from=      key works only from that VM's address
+  command=   any request runs logsink; host is fixed by the key,
+             the client only names the container: ^[a-z0-9_-]{1,64}$
+```
+
+- collector unreachable → batches stay in the spool, the next run sends them in order;
+- `flock` — runs never overlap; `docker ps -a` — stopped containers are read too;
+- logs on db: `0640 logs:logs`; `authorized_keys` is owned by root;
+- known limits: delivery delay up to 15 min; a dropped connection mid-batch may
+  duplicate part of it; the last ≤15 min of a container removed between runs are lost;
+  `StrictHostKeyChecking no` on senders; no disk quota for `/srv/logs`.

@@ -17,7 +17,9 @@ browser → ui (nginx) → history (Node/TS) → PostgreSQL
 | history | 192.168.77.12  | 3001 | `crypto_history`            |
 | ui      | 192.168.77.13  | 5173 | `crypto_ui`                 |
 
-Details — queue, sessions, images, provisioning: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+Container logs of all VMs are shipped to `db:/srv/logs/` every 15 minutes.
+
+Details — queue, sessions, images, provisioning, logs: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Run on VMs
 
@@ -60,11 +62,33 @@ UI on <http://localhost:5173>, logs in `logs/`.
 | PUT    | `/api/session/theme` | save theme: `light`, `dark`, `system` |
 | GET    | `/health`            | liveness (history and fetcher)        |
 
+## SSH by name
+
+`vagrant up` writes `.vagrant/ssh/config`. Add once, as the first line of `~/.ssh/config`:
+
+```
+Include /absolute/path/to/crypto-price-service/.vagrant/ssh/config
+```
+
+Then `ssh db`, `ssh history`, `scp file ui:` work without `vagrant ssh`.
+
+## Logs
+
+```bash
+ssh db sudo ls -R /srv/logs                               # <host>/<container>.log
+ssh db sudo tail -f /srv/logs/history/crypto_history.log
+for h in db fetcher history ui; do ssh $h sudo logship; done   # ship now, not in 15 min
+ssh history sudo journalctl -t logship                    # shipping errors
+```
+
+Each VM ships with its own key (`.vagrant/logship/`), limited on db to appending
+to its own directory from its own address.
+
 ## Operations
 
 ```bash
-vagrant ssh history -c 'sudo docker ps'
-vagrant ssh history -c 'sudo docker logs -f crypto_history'
+ssh history sudo docker ps
+ssh history sudo docker logs -f crypto_history
 ```
 
 ## Layout
@@ -75,6 +99,7 @@ services/history/   Node/TS API + Dockerfile
 ui/                 React app, nginx template + Dockerfile
 db/migrations/      SQL, applied by history on start
 vagrant/            provisioning scripts, lib.sh helpers
-Vagrantfile         VM list, secrets, code delivery
+logship/            log shipper (cron) and collector-side logsink
+Vagrantfile         VM list, secrets, ssh config, logship keys, code delivery
 docs/               architecture
 ```
