@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
 source /vagrant/provision/common.sh
-base_setup
 : "${HISTORY_IP:?}" "${HISTORY_PORT:?}" "${FRONTEND_PORT:?}"
-install_node
+base_setup
+install_docker
 
-sync_src frontend
-sudo -u weather bash -c "cd $APP_DIR/frontend && npm install --no-audit --no-fund && npm run build"
-
-write_env weather-frontend <<ENVF
-VITE_PROXY_TARGET=http://${HISTORY_IP}:${HISTORY_PORT}
+write_env frontend <<ENVF
+HISTORY_URL=http://${HISTORY_IP}:${HISTORY_PORT}
 ENVF
-install_unit weather-frontend "$APP_DIR/frontend" \
-  "$APP_DIR/frontend/node_modules/.bin/vite preview --host 0.0.0.0 --port $FRONTEND_PORT --strictPort" "Weather Frontend"
+
+build_image frontend
+run_container frontend \
+  -p "$FRONTEND_PORT:8080" --read-only --tmpfs /tmp \
+  --tmpfs /var/cache/nginx:uid=101,gid=101 --tmpfs /etc/nginx/conf.d:uid=101,gid=101 \
+  --cap-drop ALL --security-opt no-new-privileges --memory 32m weather/frontend

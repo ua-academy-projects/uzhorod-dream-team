@@ -13,7 +13,7 @@ React UI ◀──── GET /api/weather/* ───────────┤
 
 - [docs/architecture.md](docs/architecture.md): components, request flow, data model and HTTP API
 - [docs/weather-api.md](docs/weather-api.md): the chosen weather API and its free-tier limits
-- [docs/infrastructure.md](docs/infrastructure.md): the Vagrant VMs, provisioning scripts and useful commands
+- [docs/infrastructure.md](docs/infrastructure.md): the Vagrant VMs, their Docker containers, provisioning scripts and useful commands
 
 ## Tech stack
 
@@ -23,7 +23,7 @@ React UI ◀──── GET /api/weather/* ───────────┤
 | History service | Node.js, Express, Sequelize, pg, amqplib, redis |
 | Scheduler | Node.js, node-cron (a system crontab works too, see below) |
 | Frontend | React, Vite, Recharts |
-| Database, cache, queue | PostgreSQL 16, Redis, RabbitMQ (Docker locally; on the DB VM under Vagrant) |
+| Database, cache, queue | PostgreSQL 16, Redis, RabbitMQ (Docker locally and on the DB VM under Vagrant) |
 
 ## Project structure
 
@@ -31,6 +31,7 @@ React UI ◀──── GET /api/weather/* ───────────┤
 .
 ├── fetcher/            # Fetcher service in Go (RabbitMQ worker, no HTTP API): talks to Open-Meteo
 │   ├── cmd/fetcher/    #   main.go: entry point (queue worker, or --once)
+│   ├── Dockerfile      #   image for the Vagrant VM (each service folder has one)
 │   └── internal/       #   config, openmeteo (client + mapper), worker (queue consumer); *_test.go next to the code
 ├── history/            # History service (Express API, port 3001)
 │   ├── src/            #   routes, service, Sequelize model, catch-up logic, broker.js + fetcherClient.js (RabbitMQ client for the Fetcher)
@@ -118,12 +119,38 @@ Notes:
 - Set `AMQP_URL` in `history/.env` and `fetcher/.env` (same broker) and `HISTORY_SERVICE_URL` in `scheduler/.env` to the real addresses.
 - The Fetcher has no network API; only clients with RabbitMQ credentials can send it requests.
 
-**Startup catch-up.** When the History service starts, it checks the newest stored observation and fetches the
-hourly data missed since then from the Fetcher (at most 92 days, the Open-Meteo `past_days` limit). With an empty
-database it loads the last 30 days. This runs in the background with retries, so the History service can start
-before the Fetcher. Disable it with `CATCH_UP_ON_START=false`.
+## Run on Vagrant VMs (Docker)
 
-You can also click ** past 30 days** in the UI to backfill manually.
+Four VMs, every service in its own Docker container. Provisioning installs Docker, writes the env/config files with
+the secrets from the root `.env` into `/etc/weather/`, builds the images on the VM and starts the containers with
+`--restart unless-stopped`, so the Docker daemon starts them again after a reboot. Details, flags and image
+optimizations: [docs/infrastructure.md](docs/infrastructure.md).
+
+```bash
+cp .env.example .env   # set POSTGRES_PASSWORD, REDIS_PASSWORD, RABBITMQ_PASSWORD, BRIDGE_IF
+vagrant up             # weather-postgres-db .10, weather-fetcher .11, weather-history .12, weather-frontend .13
+```
+
+| VM | Containers |
+|---|---|
+| `weather-postgres-db` | `postgres`, `redis`, `rabbitmq` |
+| `weather-fetcher` | `fetcher` |
+| `weather-history` | `history`, `scheduler` |
+| `weather-frontend` | `frontend` (nginx: UI + `/api` proxy) |
+
+Check and open:
+
+```bash
+vagrant ssh <vm> -c "docker ps"               # every container Up; postgres, redis, rabbitmq, frontend (healthy)
+curl http://192.168.56.12:3001/api/health     # {"status":"ok","database":"up","cache":"up","broker":"up"}
+vagrant reload weather-frontend --provision   # prints "weather-frontend LAN URL: http://<ip>:4173"
+```
+
+The UI is at http://192.168.56.13:4173 from the host, or at the printed LAN URL from other devices; the RabbitMQ
+management UI at http://192.168.56.10:15672 (`weather` / `RABBITMQ_PASSWORD`).
+
+After a code or `.env` change: `vagrant provision <vm>` rebuilds the images and recreates that VM's containers.
+Data stays in the named volumes `pgdata`, `redisdata` and `rabbitmqdata`.
 
 ## Configuration
 

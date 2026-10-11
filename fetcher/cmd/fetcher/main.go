@@ -44,7 +44,7 @@ func main() {
 		}
 		return
 	}
-	// On a lost connection the process exits with an error and systemd restarts it
+	// On a lost connection the process exits with an error and Docker restarts it
 	if err := work(cfg, client); err != nil {
 		slog.Error("fetcher stopped", "error", err)
 		os.Exit(1)

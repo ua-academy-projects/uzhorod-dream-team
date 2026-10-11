@@ -27,7 +27,7 @@ const (
 )
 
 // Run consumes requests until ctx is cancelled (returns nil) or the connection to RabbitMQ
-// is lost (returns an error). It does not reconnect: the process exits and systemd restarts it.
+// is lost (returns an error). It does not reconnect: the process exits and Docker restarts it.
 func Run(ctx context.Context, url string, w Weather) error {
 	conn, err := amqp.Dial(url)
 	if err != nil {

@@ -89,8 +89,8 @@ Inside the History service, `history/src/fetcherClient.js` wraps these calls as 
 `fetchRecentHistory(location, days)`. It turns `observedAt` back into a `Date` and throws `FetcherError` if the broker
 is down, no reply arrives in time, or the Fetcher replies with an error (the History service then answers with 502).
 
-The Fetcher does not reconnect by itself: when the connection to RabbitMQ is lost it exits with an error and systemd
-restarts it. The History service reconnects in the background, with backoff.
+The Fetcher does not reconnect by itself: when the connection to RabbitMQ is lost it exits with an error and Docker
+restarts the container (`--restart unless-stopped`). The History service reconnects in the background, with backoff.
 
 To run the Fetcher without the server or database: `cd fetcher && go run ./cmd/fetcher --once` (add `--history 2` for hourly data).
 

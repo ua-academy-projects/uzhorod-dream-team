@@ -1,25 +1,29 @@
 #!/usr/bin/env bash
 source /vagrant/provision/common.sh
-base_setup
 : "${POSTGRES_PASSWORD:?}" "${REDIS_PASSWORD:?}" "${RABBITMQ_PASSWORD:?}" "${DB_IP:?}" "${HISTORY_IP:?}"
 : "${HISTORY_PORT:?}" "${POSTGRES_PORT:?}" "${REDIS_PORT:?}" "${RABBITMQ_PORT:?}"
-install_node
+base_setup
+install_docker
 
-for svc in history scheduler; do
-  sync_src "$svc"
-  sudo -u weather bash -c "cd $APP_DIR/$svc && npm install --omit=dev --no-audit --no-fund"
-done
-
-write_env weather-history <<ENVF
+write_env history <<ENVF
 PORT=${HISTORY_PORT}
 DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD}@${DB_IP}:${POSTGRES_PORT}/${POSTGRES_DB:-weather}
 AMQP_URL=amqp://weather:${RABBITMQ_PASSWORD}@${DB_IP}:${RABBITMQ_PORT}/weather
 REDIS_URL=redis://:${REDIS_PASSWORD}@${DB_IP}:${REDIS_PORT}
+TRIGGER_TOKEN=${TRIGGER_TOKEN:-}
 ENVF
-write_env weather-scheduler <<ENVF
-HISTORY_SERVICE_URL=http://${HISTORY_IP}:${HISTORY_PORT}
+write_env scheduler <<ENVF
+HISTORY_SERVICE_URL=http://history:${HISTORY_PORT}
 CRON_SCHEDULE=${CRON_SCHEDULE:-*/15 * * * *}
+TRIGGER_TOKEN=${TRIGGER_TOKEN:-}
 ENVF
 
-install_unit weather-history   "$APP_DIR/history"   "/usr/bin/node src/server.js" "Weather History"
-install_unit weather-scheduler "$APP_DIR/scheduler" "/usr/bin/node index.js"      "Weather Scheduler"
+build_image history
+build_image scheduler
+ensure_network weather
+
+run_container history --network weather \
+  -p "$HISTORY_IP:$HISTORY_PORT:$HISTORY_PORT" --init --read-only --tmpfs /tmp --cap-drop ALL \
+  --security-opt no-new-privileges --memory 256m weather/history
+run_container scheduler --network weather \
+  --init --read-only --cap-drop ALL --security-opt no-new-privileges --memory 64m weather/scheduler

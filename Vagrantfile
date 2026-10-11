@@ -16,10 +16,10 @@ setting = ->(key, default) { host_env[key].to_s.empty? ? default : host_env[key]
 NET = "192.168.56"
 
 VMS = {
-  "weather-postgres-db" => { ip: "#{NET}.10", memory: 1024, folders: [],                       script: "db.sh" },
-  "weather-fetcher"     => { ip: "#{NET}.11", memory: 1024, folders: ["fetcher"],              script: "fetcher.sh" },
-  "weather-history"     => { ip: "#{NET}.12", memory: 1024, folders: ["history", "scheduler"], script: "history.sh" },
-  "weather-frontend"    => { ip: "#{NET}.13", memory: 1024, folders: ["frontend"],             script: "frontend.sh", lan: true },
+  "weather-postgres-db" => { ip: "#{NET}.10", memory: 1536, script: "db.sh" },
+  "weather-fetcher"     => { ip: "#{NET}.11", memory: 1024, script: "fetcher.sh" },
+  "weather-history"     => { ip: "#{NET}.12", memory: 1024, script: "history.sh" },
+  "weather-frontend"    => { ip: "#{NET}.13", memory: 1024, script: "frontend.sh", lan: true },
 }
 
 PROVISION_ENV = {
@@ -57,8 +57,6 @@ Vagrant.configure("2") do |config|
         v.memory = vm[:memory]
         v.cpus   = vm.fetch(:cpus, 1)
       end
-
-      vm[:folders].each { |dir| node.vm.synced_folder "./#{dir}", "/vagrant_src/#{dir}", create: true }
 
       node.vm.provision "shell", name: "provision-#{name}", path: "provision/#{vm[:script]}", env: PROVISION_ENV
 
