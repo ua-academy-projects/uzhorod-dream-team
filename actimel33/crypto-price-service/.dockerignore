@@ -10,3 +10,4 @@ vagrant
 Vagrantfile
 docker-compose.yml
 dev.sh
+logship
