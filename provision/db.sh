@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-source /vagrant/provision/common.sh
+source /tmp/weather-common.sh
 : "${POSTGRES_PASSWORD:?}" "${REDIS_PASSWORD:?}" "${RABBITMQ_PASSWORD:?}" "${HISTORY_IP:?}"
 : "${DB_IP:?}" "${POSTGRES_PORT:?}" "${REDIS_PORT:?}" "${RABBITMQ_PORT:?}" "${RABBITMQ_UI_PORT:?}"
 base_setup

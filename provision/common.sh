@@ -7,6 +7,10 @@ ENV_DIR=/etc/weather
 base_setup() {
   apt-get update -qq
   apt-get install -y -qq ca-certificates curl
+
+  install -d -m 0700 -o vagrant -g vagrant /home/vagrant/.ssh
+  grep -qxF "${SSH_PUBKEY:?}" /home/vagrant/.ssh/authorized_keys 2>/dev/null \
+    || echo "$SSH_PUBKEY" >> /home/vagrant/.ssh/authorized_keys
 }
 
 install_docker() {
@@ -51,7 +55,7 @@ write_conf() {
 build_image() {
   local attempt
   for attempt in 1 2 3; do
-    docker build -t "weather/$1" -f "/vagrant/$1/Dockerfile" /vagrant && break
+    docker build -t "weather/$1" "/vagrant/$1" && break
     [ "$attempt" -lt 3 ] || return 1
     echo "build of weather/$1 failed (attempt $attempt/3), retrying in 10s" >&2
     sleep 10

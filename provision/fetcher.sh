@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-source /vagrant/provision/common.sh
+source /tmp/weather-common.sh
 : "${RABBITMQ_PASSWORD:?}" "${DB_IP:?}" "${RABBITMQ_PORT:?}"
 base_setup
 install_docker

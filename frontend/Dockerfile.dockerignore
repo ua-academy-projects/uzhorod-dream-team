@@ -1,8 +1,7 @@
 *
 !package.json
 !package-lock.json
-!frontend/package.json
-!frontend/index.html
-!frontend/vite.config.js
-!frontend/src
-!frontend/nginx
+!index.html
+!vite.config.js
+!src
+!nginx

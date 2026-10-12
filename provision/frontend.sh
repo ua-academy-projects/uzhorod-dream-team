@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-source /vagrant/provision/common.sh
+source /tmp/weather-common.sh
 : "${HISTORY_IP:?}" "${HISTORY_PORT:?}" "${FRONTEND_PORT:?}"
 base_setup
 install_docker

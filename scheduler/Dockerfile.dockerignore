@@ -1,6 +1,5 @@
 *
 !package.json
 !package-lock.json
-!scheduler/package.json
-!scheduler/index.js
-!scheduler/scheduler.js
+!index.js
+!scheduler.js

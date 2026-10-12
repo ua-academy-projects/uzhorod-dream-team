@@ -37,12 +37,17 @@ network `weather`, which has its own DNS.
 - **Secrets** live in the (gitignored) root `.env`, never in the Vagrantfile. It is parsed as `KEY=VALUE` lines
   (no quotes: everything after the first `=` is the value). `POSTGRES_PASSWORD`, `REDIS_PASSWORD` and
   `RABBITMQ_PASSWORD` are required; `vagrant up` aborts with "Set … in .env" if one is empty.
-- **`VMS`**: one entry per VM; add a line here to add a machine.
+- **`VMS`**: one entry per VM; add an entry here to add a machine.
   - `ip`, `memory`, `cpus` (default 1); the DB VM has 1536 MB because it runs three containers;
   - `script`: provisioning for that VM (from `provision/`);
+  - `sync`: the service directories mounted on the VM (see *Synced folders*);
+  - `env`: the `PROVISION_ENV` keys its script uses;
   - `lan: true`: also bridge the VM into the host's LAN (DHCP from the router) so other devices can reach it.
-- **`PROVISION_ENV`** is passed to every provisioning script: where each service lives (`DB_IP`, `HISTORY_IP`)
-  plus secrets and settings from the host `.env` (`POSTGRES_DB`, `TRIGGER_TOKEN`, `CRON_SCHEDULE`, …).
+- **`PROVISION_ENV`** holds everything the provisioning scripts may need: where each service lives (`DB_IP`,
+  `HISTORY_IP`) plus secrets and settings from the host `.env` (`POSTGRES_DB`, `TRIGGER_TOKEN`, `CRON_SCHEDULE`, …).
+  Each VM gets only its `env` keys plus `SSH_PUBKEY` (`PROVISION_ENV.slice`), so e.g. the frontend VM receives no
+  password at all and the fetcher VM only `RABBITMQ_PASSWORD`. A script that starts using a new variable needs it
+  added to its VM's `env` (the `: "${VAR:?}"` checks at the top of the scripts fail otherwise).
   `setting.(key, default)` takes a value from `.env` and falls back to the default if it is missing or empty.
 - **Ports** are settings too, so each is defined in one place and every script that needs it (the published port
   of the service and the URLs of its clients) gets the same value:
@@ -58,8 +63,15 @@ network `weather`, which has its own DNS.
 
   After changing a port, re-provision the VM that runs the service and the VMs of its clients, e.g. for
   `REDIS_PORT`: `vagrant provision weather-postgres-db weather-history`.
-- The project root is synced to `/vagrant` on every VM. The scripts `source /vagrant/provision/common.sh`, and
-  `/vagrant` is the build context for the images.
+- **Synced folders**: the default sync of the whole project root is disabled. Each VM gets only the directories of
+  its own services (`sync:` in `VMS`; the db VM none), mounted read-only
+  (`type: "virtualbox"`, `ro`) at `/vagrant/<dir>`. The mounts are live, so `vagrant provision` always builds the
+  current code. The VMs never see the root `.env`, `.git` or `.vagrant/` (which holds the private SSH keys of all
+  VMs) and cannot write to the host. The local `.env`, `node_modules/`, `dist/` and `bin/` inside a service
+  directory are visible on the VM but never reach an image: each `Dockerfile.dockerignore` is an allowlist.
+- **SSH key**: `id_ed25519.pub` (gitignored) is read on the host and passed as `SSH_PUBKEY`; `base_setup` adds it
+  to `~vagrant/.ssh/authorized_keys`. `vagrant up` aborts if the file is missing.
+- The root `.env` is not synced either: the Vagrantfile reads it on the host and passes the values as env vars.
 - **Bridged network** (`lan: true`): `BRIDGE_IF` from `.env` (e.g. `wlp4s0`, list with `ip -br link`); if empty,
   Vagrant asks which interface to bridge.
 - **`show-lan-ip`** provisioner (`run: "always"`): the DHCP address can change between boots, so it prints
@@ -68,7 +80,8 @@ network `weather`, which has its own DNS.
 
 ## provision/common.sh
 
-Shared helpers, sourced first by every per-VM script.
+Shared helpers, sourced first by every per-VM script. A `file` provisioner uploads it to `/tmp/weather-common.sh`
+right before the VM's own script (which Vagrant uploads itself), so no VM sees the other VMs' scripts.
 
 - `set -euo pipefail`: `-e` stops on the first error, `-u` makes an unset variable an error,
   `-o pipefail` makes a pipe fail if any command in it fails (not only the last one).
@@ -87,7 +100,7 @@ Shared helpers, sourced first by every per-VM script.
   `--env-file` takes everything after `=` literally, so values are not quoted.
 - `write_conf <path> <mode> [owner]`: the same for a config file that is mounted into a container. The owner is
   the uid of the user inside the container when the file holds a secret (redis 999, rabbitmq 100).
-- `build_image <name>`: `docker build -t weather/<name> -f /vagrant/<name>/Dockerfile /vagrant`, then
+- `build_image <name>`: `docker build -t weather/<name> /vagrant/<name>`, then
   `docker image prune -f` to drop the layers the new build replaced. A failed build is retried up to 3 times:
   the VirtualBox NAT DNS (`10.0.2.3`) sometimes fails a lookup when `apk`/`npm` resolve in parallel build stages
   ("DNS: transient error"), and the retry reuses every step that already succeeded from the cache.
@@ -166,9 +179,14 @@ stopped across reboots (that is the "unless-stopped" part) until `docker start <
 
 ## Images
 
-All four Dockerfiles use the project root as the build context, because `package-lock.json` is shared by the npm
-workspaces. Each has a `<Dockerfile>.dockerignore` next to it that allows only the files it needs (BuildKit
-picks it over the root `.dockerignore`), so the root `node_modules` and `.env` files never reach the build.
+Each image is built with its own service directory as the build context. `history/`, `scheduler/` and `frontend/`
+have their own `package-lock.json` with only their dependencies, so the root workspace `package.json` and
+`package-lock.json` (local development only) are not needed. Each `Dockerfile.dockerignore` allows only the files
+the image needs, so the local `node_modules`, `dist` and `.env` never reach the build.
+
+The service lockfiles are separate from the root one: after changing a service's dependencies, regenerate its
+lockfile outside the workspace (inside it npm uses the root lockfile), e.g.
+`d=$(mktemp -d) && cp history/package.json $d && (cd $d && npm install --package-lock-only) && cp $d/package-lock.json history/`.
 
 Common to all: multi-stage builds (compilers and npm stay in the build stage), dependency manifests copied before
 the code (the dependency layer is cached until they change), BuildKit cache mounts for npm and Go (fast rebuilds),
@@ -177,8 +195,8 @@ a non-root user, secrets only at run time.
 | Image | Build | Runtime | Size |
 |---|---|---|---|
 | `weather/fetcher` | `golang:1.22-alpine`, `CGO_ENABLED=0`, `-trimpath -ldflags="-s -w"` | `distroless/static-debian12:nonroot`: no shell or libc, but CA certificates (HTTPS to Open-Meteo) and tzdata | ~8 MB |
-| `weather/history` | `node:22-alpine3.24`, `npm ci --omit=dev --workspace=history`; `.ts`, `.map`, `.md` files removed from `node_modules`; `node` binary stripped | `alpine:3.24` + `libstdc++` + the `node` binary only (no npm, yarn, corepack). No healthcheck: check it with `curl …/api/health` | ~140 MB |
-| `weather/scheduler` | same, `--workspace=scheduler` | same | ~125 MB |
+| `weather/history` | `node:22-alpine3.24`, `npm ci --omit=dev`; `.ts`, `.map`, `.md` files removed from `node_modules`; `node` binary stripped | `alpine:3.24` + `libstdc++` + the `node` binary only (no npm, yarn, corepack). No healthcheck: check it with `curl …/api/health` | ~140 MB |
+| `weather/scheduler` | same | same | ~125 MB |
 | `weather/frontend` | `node:22-alpine3.24`, `vite build`, then `gzip -9` copies of js/css/html/svg | `nginx-unprivileged:1.27-alpine-slim` (port 8080, uid 101) | ~13 MB |
 
 The Node images are dominated by the `node` binary itself (~114 MB after `strip`); a stock `node:22-alpine` with the

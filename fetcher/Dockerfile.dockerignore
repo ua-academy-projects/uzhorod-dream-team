@@ -1,6 +1,6 @@
 *
-!fetcher/go.mod
-!fetcher/go.sum
-!fetcher/cmd
-!fetcher/internal
+!go.mod
+!go.sum
+!cmd
+!internal
 **/*_test.go

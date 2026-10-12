@@ -6,3 +6,4 @@ dist/
 *bin
 *dist
 .vagrant
+id_*

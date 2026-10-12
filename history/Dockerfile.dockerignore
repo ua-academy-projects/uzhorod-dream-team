@@ -1,5 +1,4 @@
 *
 !package.json
 !package-lock.json
-!history/package.json
-!history/src
+!src

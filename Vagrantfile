@@ -11,20 +11,37 @@ end
   abort "Set #{key} in .env (see .env.example)" if host_env[key].to_s.empty?
 end
 
+abort "Put the SSH public key into id_ed25519.pub" unless File.exist?("id_ed25519.pub")
+
 setting = ->(key, default) { host_env[key].to_s.empty? ? default : host_env[key] }
 
 NET = "192.168.56"
 
 VMS = {
-  "weather-postgres-db" => { ip: "#{NET}.10", memory: 1536, script: "db.sh" },
-  "weather-fetcher"     => { ip: "#{NET}.11", memory: 1024, script: "fetcher.sh" },
-  "weather-history"     => { ip: "#{NET}.12", memory: 1024, script: "history.sh" },
-  "weather-frontend"    => { ip: "#{NET}.13", memory: 1024, script: "frontend.sh", lan: true },
+  "weather-postgres-db" => {
+    ip: "#{NET}.10", memory: 1536, script: "db.sh", sync: [],
+    env: %w[DB_IP HISTORY_IP POSTGRES_PASSWORD POSTGRES_DB POSTGRES_PORT REDIS_PASSWORD REDIS_PORT
+            RABBITMQ_PASSWORD RABBITMQ_PORT RABBITMQ_UI_PORT],
+  },
+  "weather-fetcher" => {
+    ip: "#{NET}.11", memory: 1024, script: "fetcher.sh", sync: %w[fetcher],
+    env: %w[DB_IP RABBITMQ_PASSWORD RABBITMQ_PORT],
+  },
+  "weather-history" => {
+    ip: "#{NET}.12", memory: 1024, script: "history.sh", sync: %w[history scheduler],
+    env: %w[DB_IP HISTORY_IP HISTORY_PORT POSTGRES_PASSWORD POSTGRES_DB POSTGRES_PORT REDIS_PASSWORD REDIS_PORT
+            RABBITMQ_PASSWORD RABBITMQ_PORT TRIGGER_TOKEN CRON_SCHEDULE],
+  },
+  "weather-frontend" => {
+    ip: "#{NET}.13", memory: 1024, script: "frontend.sh", sync: %w[frontend], lan: true,
+    env: %w[HISTORY_IP HISTORY_PORT FRONTEND_PORT],
+  },
 }
 
 PROVISION_ENV = {
   "DB_IP"             => VMS["weather-postgres-db"][:ip],
   "HISTORY_IP"        => VMS["weather-history"][:ip],
+  "SSH_PUBKEY"        => File.read("id_ed25519.pub").strip,
   "POSTGRES_PASSWORD" => host_env["POSTGRES_PASSWORD"],
   "POSTGRES_DB"       => setting.("POSTGRES_DB", "weather"),
   "REDIS_PASSWORD"    => host_env["REDIS_PASSWORD"],
@@ -42,11 +59,16 @@ PROVISION_ENV = {
 Vagrant.configure("2") do |config|
   config.vm.box = "debian/bookworm64"
   config.vm.box_check_update = false
-  config.vm.synced_folder ".", "/vagrant", type: "virtualbox"
+  config.vm.synced_folder ".", "/vagrant", disabled: true
 
   VMS.each do |name, vm|
     config.vm.define name do |node|
       node.vm.hostname = name
+
+      vm[:sync].each do |dir|
+        node.vm.synced_folder dir, "/vagrant/#{dir}", type: "virtualbox", mount_options: ["ro"]
+      end
+
       node.vm.network "private_network", ip: vm[:ip]
 
       if vm[:lan]
@@ -58,7 +80,9 @@ Vagrant.configure("2") do |config|
         v.cpus   = vm.fetch(:cpus, 1)
       end
 
-      node.vm.provision "shell", name: "provision-#{name}", path: "provision/#{vm[:script]}", env: PROVISION_ENV
+      node.vm.provision "file", source: "provision/common.sh", destination: "/tmp/weather-common.sh"
+      node.vm.provision "shell", name: "provision-#{name}", path: "provision/#{vm[:script]}",
+        env: PROVISION_ENV.slice("SSH_PUBKEY", *vm[:env])
 
       if vm[:lan]
         node.vm.provision "shell", name: "show-lan-ip", run: "always",

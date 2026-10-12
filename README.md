@@ -109,7 +109,7 @@ What to copy where:
 | Service | Files | Setup on the server |
 |---|---|---|
 | Fetcher | `fetcher/bin/fetcher`, `fetcher/.env` | nothing (no Go needed) |
-| History + scheduler | `history/`, `scheduler/`, root `package.json` and `package-lock.json`, and their `.env` files | `npm ci --omit=dev -w history -w scheduler` |
+| History + scheduler | `history/`, `scheduler/` (each with its own `package-lock.json`) and their `.env` files | `npm ci --omit=dev` in each folder |
 | Frontend | `frontend/dist/` | any static web server |
 
 Notes:
@@ -128,6 +128,7 @@ optimizations: [docs/infrastructure.md](docs/infrastructure.md).
 
 ```bash
 cp .env.example .env   # set POSTGRES_PASSWORD, REDIS_PASSWORD, RABBITMQ_PASSWORD, BRIDGE_IF
+cp ~/.ssh/id_ed25519.pub .   # your SSH public key, added to authorized_keys on every VM
 vagrant up             # weather-postgres-db .10, weather-fetcher .11, weather-history .12, weather-frontend .13
 ```
 
@@ -149,7 +150,8 @@ vagrant reload weather-frontend --provision   # prints "weather-frontend LAN URL
 The UI is at http://192.168.56.13:4173 from the host, or at the printed LAN URL from other devices; the RabbitMQ
 management UI at http://192.168.56.10:15672 (`weather` / `RABBITMQ_PASSWORD`).
 
-After a code or `.env` change: `vagrant provision <vm>` rebuilds the images and recreates that VM's containers.
+After a code or `.env` change: `vagrant provision <vm>` rebuilds the images and recreates that VM's containers
+(each VM mounts only its own service folders, read-only).
 Data stays in the named volumes `pgdata`, `redisdata` and `rabbitmqdata`.
 
 ## Configuration
