@@ -12,6 +12,8 @@ type Config struct {
 	Host              string
 	Port              int
 	CoinGeckoBaseURL  string
+	QueueDriver       string
+	QueueDatabaseURL  string
 	RedisURL          string
 	RedisPassword     string
 	TimerIntervalHrs  float64
@@ -22,9 +24,21 @@ type Config struct {
 }
 
 func LoadConfig() (*Config, error) {
+	// Each driver needs only its own connection settings.
+	driver := envStr("QUEUE_DRIVER", "redis")
 	redisPassword := os.Getenv("REDIS_PASSWORD")
-	if redisPassword == "" {
-		return nil, fmt.Errorf("missing required env: REDIS_PASSWORD")
+	queueURL := os.Getenv("QUEUE_DATABASE_URL")
+	switch driver {
+	case "redis":
+		if redisPassword == "" {
+			return nil, fmt.Errorf("missing required env: REDIS_PASSWORD")
+		}
+	case "postgres":
+		if queueURL == "" {
+			return nil, fmt.Errorf("missing required env: QUEUE_DATABASE_URL")
+		}
+	default:
+		return nil, fmt.Errorf("env QUEUE_DRIVER must be redis or postgres, got %q", driver)
 	}
 
 	port, err := envInt("FETCHER_PORT", 3002)
@@ -50,6 +64,8 @@ func LoadConfig() (*Config, error) {
 		Host:              envStr("FETCHER_HOST", "127.0.0.1"),
 		Port:              port,
 		CoinGeckoBaseURL:  envStr("COINGECKO_BASE_URL", "https://api.coingecko.com/api/v3"),
+		QueueDriver:       driver,
+		QueueDatabaseURL:  queueURL,
 		RedisURL:          envStr("REDIS_URL", "redis://localhost:6379"),
 		RedisPassword:     redisPassword,
 		TimerIntervalHrs:  interval,

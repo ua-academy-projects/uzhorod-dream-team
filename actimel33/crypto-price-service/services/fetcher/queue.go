@@ -2,26 +2,32 @@ package main
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"os"
 	"time"
-
-	"github.com/redis/go-redis/v9"
 )
 
-// Streams carrying the conversation between history and fetcher.
-// Requests travel one way, results the other; neither service knows the other's
-// address any more — both only know Redis.
+// Topics carrying the conversation between history and fetcher, the same for
+// both drivers: Redis stream names or the topic column of queue_messages.
 const (
-	StreamRequests = "price:requests"
-	StreamResults  = "price:results"
-	GroupFetchers  = "fetchers"
-	maxStreamLen   = 1000
-	readBlock      = 5 * time.Second
+	TopicRequests = "price:requests"
+	TopicResults  = "price:results"
+	// Unacknowledged messages older than this are taken over and retried.
+	retryAfter = 30 * time.Second
 )
 
-// Unique per instance, so several fetchers can share the group.
+// Queue hides the transport; worker and timer talk only to it.
+type Queue interface {
+	// ConsumeRequests runs handle for every request in the background until ctx ends.
+	ConsumeRequests(ctx context.Context, handle RequestHandler) error
+	PublishResult(ctx context.Context, result PriceResult) error
+	Close()
+}
+
+// RequestHandler reports whether the message is done (processed, or retrying
+// cannot help) and may be acknowledged; false leaves it for a retry.
+type RequestHandler func(ctx context.Context, req PriceRequest) (ack bool)
+
+// Unique per instance, so several fetchers can share the work.
 var consumerName = func() string {
 	if h, err := os.Hostname(); err == nil {
 		return h
@@ -47,39 +53,6 @@ type PriceResult struct {
 type resultItem struct {
 	Price      float64 `json:"price"`
 	ObservedAt string  `json:"observedAt"`
-}
-
-func newRedis(url, password string) (*redis.Client, error) {
-	opts, err := redis.ParseURL(url)
-	if err != nil {
-		return nil, fmt.Errorf("parsing REDIS_URL: %w", err)
-	}
-	if password != "" {
-		opts.Password = password
-	}
-	return redis.NewClient(opts), nil
-}
-
-// ensureGroup creates the consumer group, tolerating the one that already exists.
-func ensureGroup(ctx context.Context, rdb *redis.Client, stream, group string) error {
-	err := rdb.XGroupCreateMkStream(ctx, stream, group, "0").Err()
-	if err != nil && err.Error() != "BUSYGROUP Consumer Group name already exists" {
-		return fmt.Errorf("creating group %s on %s: %w", group, stream, err)
-	}
-	return nil
-}
-
-func publishResult(ctx context.Context, rdb *redis.Client, result PriceResult) error {
-	payload, err := json.Marshal(result)
-	if err != nil {
-		return fmt.Errorf("encoding result: %w", err)
-	}
-	return rdb.XAdd(ctx, &redis.XAddArgs{
-		Stream: StreamResults,
-		MaxLen: maxStreamLen,
-		Approx: true,
-		Values: map[string]any{"payload": string(payload)},
-	}).Err()
 }
 
 func toItems(points []PricePoint) []resultItem {

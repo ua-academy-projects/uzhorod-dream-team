@@ -34,26 +34,21 @@ func run() error {
 	client := newRetryClient(time.Duration(cfg.HTTPTimeoutMillis)*time.Millisecond, cfg.RetryAttempts)
 	source := newCoinGecko(cfg.CoinGeckoBaseURL, client)
 
-	rdb, err := newRedis(cfg.RedisURL, cfg.RedisPassword)
-	if err != nil {
-		return err
-	}
-	defer rdb.Close()
-
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	if err := rdb.Ping(ctx).Err(); err != nil {
-		return fmt.Errorf("connecting to redis at %s: %w", cfg.RedisURL, err)
-	}
-	log.Printf("[fetcher] redis: %s", cfg.RedisURL)
-
-	if err := startWorker(ctx, rdb, source); err != nil {
+	q, err := openQueue(ctx, cfg)
+	if err != nil {
 		return err
 	}
-	startTimer(ctx, cfg, source, rdb)
+	defer q.Close()
 
-	srv := &server{source: source}
+	if err := startWorker(ctx, q, source); err != nil {
+		return err
+	}
+	startTimer(ctx, cfg, source, q)
+
+	srv := &server{source: source, queue: cfg.QueueDriver}
 	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
 	httpServer := &http.Server{
 		Addr:              addr,
@@ -81,4 +76,18 @@ func run() error {
 	log.Print("[fetcher] stopped")
 	_ = os.Stdout.Sync()
 	return nil
+}
+
+// openQueue picks the driver by QUEUE_DRIVER; the rest of the service does not know which.
+func openQueue(ctx context.Context, cfg *Config) (Queue, error) {
+	if cfg.QueueDriver == "postgres" {
+		log.Print("[fetcher] queue: postgres")
+		return newPgQueue(ctx, cfg.QueueDatabaseURL)
+	}
+	q, err := newRedisQueue(ctx, cfg.RedisURL, cfg.RedisPassword)
+	if err != nil {
+		return nil, err
+	}
+	log.Printf("[fetcher] queue: redis %s", cfg.RedisURL)
+	return q, nil
 }
