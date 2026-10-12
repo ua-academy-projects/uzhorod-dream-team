@@ -1,21 +1,14 @@
 import { hostname } from 'node:os';
 import { GROUP_HISTORY, STREAM_RESULTS, ensureGroup, redis } from './client.ts';
-import * as repo from '../db/price-repo.ts';
+import { storeResult } from './store-result.ts';
 import { errorMessage } from '../core/errors.ts';
-import type { Origin, PricePoint } from '../core/types.ts';
+import type { ResultPayload } from './types.ts';
 
 // Unique per instance, so several history services can share the group.
 const CONSUMER = hostname();
 // Unacked results older than this are taken over and retried.
 const RECLAIM_IDLE_MS = 30_000;
 const BLOCK_MS = 5000;
-
-type ResultPayload = {
-  coin: string;
-  vs: string;
-  origin: Origin;
-  points: { price: number; observedAt: string }[];
-};
 
 /**
  * Consumes results the fetcher published and stores them. A message is
@@ -86,11 +79,6 @@ async function handle(id: string, raw: string | undefined): Promise<void> {
     return;
   }
 
-  const points: PricePoint[] = payload.points
-    .map((p) => ({ price: p.price, observedAt: new Date(p.observedAt) }))
-    .filter((p) => Number.isFinite(p.price) && !Number.isNaN(p.observedAt.getTime()));
-
-  const inserted = await repo.insertMany(payload.coin, payload.vs, points, payload.origin);
+  await storeResult(payload);
   await connection.xAck(STREAM_RESULTS, GROUP_HISTORY, id);
-  console.log(`[history] stored ${inserted}/${points.length} ${payload.coin}/${payload.vs} (${payload.origin})`);
 }

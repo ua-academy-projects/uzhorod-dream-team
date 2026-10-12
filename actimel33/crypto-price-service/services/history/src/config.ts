@@ -14,12 +14,24 @@ const num = (name: string, fallback: number): number => {
   return parsed;
 };
 
+const QUEUE_DRIVERS = ['redis', 'postgres'] as const;
+export type QueueDriver = (typeof QUEUE_DRIVERS)[number];
+
+const queueDriver = (): QueueDriver => {
+  const raw = process.env.QUEUE_DRIVER || 'redis';
+  if (!(QUEUE_DRIVERS as readonly string[]).includes(raw)) {
+    throw new Error(`Env QUEUE_DRIVER must be one of ${QUEUE_DRIVERS.join(', ')}, got "${raw}"`);
+  }
+  return raw as QueueDriver;
+};
+
 export const config = {
   port: num('HISTORY_PORT', 3001),
   // Loopback by default. On a dedicated VM the peers live elsewhere,
   // so the address is configurable rather than hard-coded.
   host: process.env.HISTORY_HOST ?? '127.0.0.1',
   databaseUrl: required('DATABASE_URL'),
+  queueDriver: queueDriver(),
   redisUrl: process.env.REDIS_URL ?? 'redis://localhost:6379',
   redisPassword: required('REDIS_PASSWORD'),
   sessionSecret: required('SESSION_SECRET'),

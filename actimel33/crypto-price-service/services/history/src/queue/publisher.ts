@@ -1,11 +1,5 @@
 import { MAX_STREAM_LEN, STREAM_REQUESTS, redis } from './client.ts';
-
-export type PriceRequest = {
-  coin: string;
-  vs: string;
-  /** Days of history instead of a single quote. */
-  days?: number;
-};
+import type { PriceRequest } from './types.ts';
 
 /** One quote request per pair in flight at a time. */
 const DEDUP_TTL_S = 30;

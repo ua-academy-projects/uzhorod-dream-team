@@ -1,6 +1,6 @@
 import { config } from '../config.ts';
 import * as repo from '../db/price-repo.ts';
-import { requestPrice } from '../queue/publisher.ts';
+import { queue } from '../queue/index.ts';
 import { NoDataError, errorMessage } from './errors.ts';
 import type { LatestResult, PricePoint } from './types.ts';
 
@@ -36,7 +36,7 @@ export async function getLatest(coin: string, vs: string): Promise<LatestResult>
 
 /** Queues a refresh regardless of the TTL. Returns once the request is queued. */
 export async function refresh(coin: string, vs: string): Promise<string | null> {
-  return requestPrice({ coin, vs });
+  return queue.requestPrice({ coin, vs });
 }
 
 export const getHistory = (
@@ -52,7 +52,7 @@ export async function bootstrap(): Promise<void> {
       console.log(`[history] bootstrap skipped: ${existing} points already stored`);
       return;
     }
-    await requestPrice({ coin, vs, days });
+    await queue.requestPrice({ coin, vs, days });
     console.log(`[history] bootstrap: requested ${days}d of history`);
   } catch (err) {
     console.error(`[history] bootstrap failed (starting anyway): ${errorMessage(err)}`);
@@ -62,7 +62,7 @@ export async function bootstrap(): Promise<void> {
 /** A queue failure must not break a read that the database can already answer. */
 async function queueQuietly(request: { coin: string; vs: string }): Promise<void> {
   try {
-    await requestPrice(request);
+    await queue.requestPrice(request);
   } catch (err) {
     console.error(`[history] could not queue a request: ${errorMessage(err)}`);
   }
