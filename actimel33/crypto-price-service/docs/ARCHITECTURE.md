@@ -90,7 +90,7 @@
             │     eth0 192.168.121.x  management, internet
             │     eth1 192.168.77.x   private network
             ├─ code → unpack → /home/vagrant/app
-            ├─ system (root)   docker-ce + buildx only, same on every VM
+            ├─ system (root)   docker-ce + buildx, json-file logs capped 3 × 10 MB
             ├─ role (vagrant)  .env from .env.example → docker build → docker run
             │     db       volumes pgdata, redisdata → crypto_db, crypto_redis
             │     fetcher  wait redis → build crypto/fetcher → crypto_fetcher
@@ -172,6 +172,8 @@ Vagrant creates on the first `up`.
 - collector unreachable → batches stay in the spool, the next run sends them in order;
 - `flock` — runs never overlap; `docker ps -a` — stopped containers are read too;
 - logs on db: `0640 logs:logs`; `authorized_keys` is owned by root;
+- retention: db keeps today + 7 rotated days (logrotate); on each VM Docker keeps
+  up to 3 × 10 MB per container (`/etc/docker/daemon.json`);
 - known limits: delivery delay up to 15 min; a dropped connection mid-batch may
   duplicate part of it; the last ≤15 min of a container removed between runs are lost;
   `StrictHostKeyChecking no` on senders; no disk quota for `/srv/logs`.

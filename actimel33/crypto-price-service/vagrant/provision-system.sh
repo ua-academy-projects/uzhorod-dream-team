@@ -15,5 +15,13 @@ https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_C
   apt-get update -qq
   apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-buildx-plugin >/dev/null
 fi
+
+# Cap local container logs; the central copy lives on db.
+DAEMON_JSON='{"log-driver":"json-file","log-opts":{"max-size":"10m","max-file":"3"}}'
+if [ "$(cat /etc/docker/daemon.json 2>/dev/null)" != "$DAEMON_JSON" ]; then
+  mkdir -p /etc/docker
+  echo "$DAEMON_JSON" > /etc/docker/daemon.json
+  systemctl restart docker
+fi
 systemctl enable --now docker
 docker --version
