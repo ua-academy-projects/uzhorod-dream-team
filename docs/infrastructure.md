@@ -71,6 +71,10 @@ network `weather`, which has its own DNS.
   directory are visible on the VM but never reach an image: each `Dockerfile.dockerignore` is an allowlist.
 - **SSH key**: `id_ed25519.pub` (gitignored) is read on the host and passed as `SSH_PUBKEY`; `base_setup` adds it
   to `~vagrant/.ssh/authorized_keys`. `vagrant up` aborts if the file is missing.
+- **Log pull key**: on the first run the Vagrantfile creates `.vagrant/logpull_ed25519` with `ssh-keygen`. The
+  public half goes to every VM as `LOGPULL_PUBKEY`; the private half only to the History VM, base64-encoded into
+  one line as `LOGPULL_KEY_B64`. `LOG_SOURCES` (`name=ip` of every VM except History) and `LOG_RETENTION_DAYS`
+  (default 7) are built there too. See [Logs](#logs).
 - The root `.env` is not synced either: the Vagrantfile reads it on the host and passes the values as env vars.
 - **Bridged network** (`lan: true`): `BRIDGE_IF` from `.env` (e.g. `wlp4s0`, list with `ip -br link`); if empty,
   Vagrant asks which interface to bridge.
@@ -90,9 +94,12 @@ right before the VM's own script (which Vagrant uploads itself), so no VM sees t
 - `install_docker`: Docker CE and the buildx plugin from Docker's apt repository (bookworm's `docker.io` is old
   and has no buildx, which the Dockerfiles need for BuildKit cache mounts). Skipped if `docker` is installed.
   It also:
-  - writes `/etc/docker/daemon.json`: the `local` log driver with rotation (10 MB × 3 per container, so logs
-    cannot fill the disk) and `live-restore` (containers keep running while the daemon restarts). Docker is
-    restarted only if the file changed;
+  - writes `/etc/docker/daemon.json`: the `journald` log driver (container output goes to the VM's journal with
+    `CONTAINER_NAME` and the container name as `SYSLOG_IDENTIFIER`, `docker logs` still works; see [Logs](#logs))
+    and `live-restore` (containers keep running while the daemon restarts). Docker is restarted only if the file
+    changed, and all containers are removed first: provisioning recreates them anyway, and a container that
+    `live-restore` brings back in the middle of a restart (e.g. a Fetcher in its restart loop) can get stuck so
+    that `docker rm -f` fails with "did not receive an exit event";
   - adds `vagrant` to the `docker` group, so `docker` works without `sudo` after `vagrant ssh`;
   - creates `ENV_DIR=/etc/weather` (`root:docker`, 0750).
 - `write_env <name>`: reads `KEY=VALUE` lines from stdin into `$ENV_DIR/<name>.env` (mode 0640, group `docker`),
@@ -108,6 +115,7 @@ right before the VM's own script (which Vagrant uploads itself), so no VM sees t
   `--restart unless-stopped` and `--env-file /etc/weather/<name>.env`. Re-provisioning therefore always applies the
   current image and env file; data lives in named volumes and survives.
 - `ensure_network <name>`: creates a Docker network if it does not exist yet.
+- `setup_journald`, `setup_log_export`, `setup_log_pull`, `install_timer`: log collection, see [Logs](#logs).
 
 ## provision/db.sh (weather-postgres-db)
 
@@ -219,6 +227,55 @@ is missing (`ensureDatabase()`), so a reused volume works too.
 `rabbitmq:4.1-management-alpine`. `vm_memory_high_watermark.absolute` keeps it under its 384 MB limit (the default
 is a fraction of the VM's RAM, not of the container's). `+S 1:1 +sbwt none +sbwtdcpu none +sbwtdio none` runs one
 Erlang scheduler and turns off scheduler busy-waiting, so an idle broker on a 1-CPU VM uses almost no CPU.
+
+## Logs
+
+Logs of all VMs are collected on `weather-history`. History **pulls** them; the other VMs never connect to it.
+
+```
+db / fetcher / frontend                                    weather-history
+journald (system + containers, 7 days)                     weather-log-pull.timer (:05, :20, :35, :50)
+  │ weather-log-export.timer (:00, :15, :30, :45)            rsync over SSH as logpull  ◀── pull
+  ▼ journalctl --cursor-file -o export | zstd                → /var/log/weather-remote/<vm>/*.export.zst
+/var/log/weather-export/<host>-<UTC time>.export.zst         zstdcat | systemd-journal-remote
+                                                             → /var/log/journal/remote/<vm>-<YYYYMMDD>.journal
+```
+
+- **journald** (`setup_journald`, all VMs): `/etc/systemd/journald.conf.d/50-weather.conf` with
+  `Storage=persistent`, `MaxRetentionSec=<LOG_RETENTION_DAYS>day`, `SystemMaxUse=200M`. Containers log into it
+  through the Docker `journald` driver.
+- **Export** (`setup_log_export`, every VM except History): every 15 minutes `weather-log-export` writes the
+  entries since the last run (`--cursor-file`, so nothing is exported twice or skipped) in journal export format,
+  compressed with zstd. The file is written under `/var/lib/weather-logs` and moved into
+  `/var/log/weather-export` only when it is complete, so a pull never sees a half-written file. Runs with no new
+  entries produce no file.
+- **Access**: the system user `logpull` accepts only the pull key, and `authorized_keys` restricts it:
+  `restrict` (no pty or forwarding), `from="<HISTORY_IP>"` (only the History VM) and
+  `command="/usr/local/sbin/weather-log-serve"`. That forced command runs instead of whatever the client asks for:
+  it accepts only the command an rsync download sends (`rsync --server --sender -<short flags> . .`), refuses
+  anything else (a shell command, a write, a long option such as `--remove-source-files`, another path) and runs
+  `rsync --server --sender` on `/var/log/weather-export` itself. In `--sender` mode rsync only reads, so the key
+  cannot change anything on the VM. (This replaces `rrsync -ro`, which is a Python script and would need `python3`.)
+- **Pull** (`setup_log_pull`, History): 5 minutes after each export `weather-log-pull` fetches the new archives
+  from every VM in `/etc/weather/log-sources` (`rsync --ignore-existing`) and imports each one once (list in
+  `/var/lib/weather-logs/imported`) into a journal file per VM and day. On import `_HOSTNAME` is set to the VM
+  name: entries from a VM's first boot would otherwise carry the box's hostname `bookworm` (Vagrant renames the
+  VM only after it has started). A VM that is down is logged and skipped;
+  its archives are fetched on the next run. The `systemd-journal-remote` package is used only for its binary, its
+  network socket (port 19532) is disabled. Host keys are trusted on first use and forgotten on every
+  `vagrant provision weather-history` (after re-creating a source VM, re-provision History).
+- **Retention**: `LOG_RETENTION_DAYS` (default 7) everywhere: journald on each VM, and `systemd-tmpfiles`
+  (`e` lines in `/etc/tmpfiles.d/weather-log-*.conf`, run daily by `systemd-tmpfiles-clean.timer`) for
+  `/var/log/weather-export` on the sources and `/var/log/weather-remote` and `/var/log/journal/remote` on History.
+
+```bash
+vagrant ssh weather-history
+sudo journalctl -D /var/log/journal/remote _HOSTNAME=weather-fetcher --since -1h   # one VM
+sudo journalctl -D /var/log/journal/remote CONTAINER_NAME=postgres -f -n 20       # one container
+sudo journalctl -m -p warning --since today                                       # all VMs incl. History
+sudo systemctl start weather-log-pull && journalctl -u weather-log-pull -n 20     # pull now
+systemctl list-timers 'weather-log-*'
+```
 
 ## Useful commands
 

@@ -2,8 +2,11 @@
 source /tmp/weather-common.sh
 : "${POSTGRES_PASSWORD:?}" "${REDIS_PASSWORD:?}" "${RABBITMQ_PASSWORD:?}" "${DB_IP:?}" "${HISTORY_IP:?}"
 : "${HISTORY_PORT:?}" "${POSTGRES_PORT:?}" "${REDIS_PORT:?}" "${RABBITMQ_PORT:?}"
+: "${LOGPULL_KEY_B64:?}" "${LOG_SOURCES:?}" "${LOG_RETENTION_DAYS:?}"
 base_setup
 install_docker
+setup_journald
+setup_log_pull
 
 write_env history <<ENVF
 PORT=${HISTORY_PORT}

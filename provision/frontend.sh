@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 source /tmp/weather-common.sh
 : "${HISTORY_IP:?}" "${HISTORY_PORT:?}" "${FRONTEND_PORT:?}"
+: "${LOGPULL_PUBKEY:?}" "${LOG_RETENTION_DAYS:?}"
 base_setup
 install_docker
+setup_journald
+setup_log_export
 
 write_env frontend <<ENVF
 HISTORY_URL=http://${HISTORY_IP}:${HISTORY_PORT}

@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 source /tmp/weather-common.sh
 : "${RABBITMQ_PASSWORD:?}" "${DB_IP:?}" "${RABBITMQ_PORT:?}"
+: "${LOGPULL_PUBKEY:?}" "${HISTORY_IP:?}" "${LOG_RETENTION_DAYS:?}"
 base_setup
 install_docker
+setup_journald
+setup_log_export
 
 write_env fetcher <<ENVF
 AMQP_URL=amqp://weather:${RABBITMQ_PASSWORD}@${DB_IP}:${RABBITMQ_PORT}/weather

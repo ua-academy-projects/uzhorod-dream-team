@@ -1,3 +1,5 @@
+require "fileutils"
+
 ENV['VAGRANT_DEFAULT_PROVIDER'] = 'virtualbox'
 
 host_env = {}
@@ -12,6 +14,13 @@ end
 end
 
 abort "Put the SSH public key into id_ed25519.pub" unless File.exist?("id_ed25519.pub")
+
+LOGPULL_KEY = ".vagrant/logpull_ed25519"
+unless File.exist?(LOGPULL_KEY)
+  FileUtils.mkdir_p(File.dirname(LOGPULL_KEY))
+  system("ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-C", "weather-logpull", "-f", LOGPULL_KEY) \
+    or abort "ssh-keygen failed to create #{LOGPULL_KEY}"
+end
 
 setting = ->(key, default) { host_env[key].to_s.empty? ? default : host_env[key] }
 
@@ -30,7 +39,7 @@ VMS = {
   "weather-history" => {
     ip: "#{NET}.12", memory: 1024, script: "history.sh", sync: %w[history scheduler],
     env: %w[DB_IP HISTORY_IP HISTORY_PORT POSTGRES_PASSWORD POSTGRES_DB POSTGRES_PORT REDIS_PASSWORD REDIS_PORT
-            RABBITMQ_PASSWORD RABBITMQ_PORT TRIGGER_TOKEN CRON_SCHEDULE],
+            RABBITMQ_PASSWORD RABBITMQ_PORT TRIGGER_TOKEN CRON_SCHEDULE LOGPULL_KEY_B64 LOG_SOURCES],
   },
   "weather-frontend" => {
     ip: "#{NET}.13", memory: 1024, script: "frontend.sh", sync: %w[frontend], lan: true,
@@ -39,21 +48,25 @@ VMS = {
 }
 
 PROVISION_ENV = {
-  "DB_IP"             => VMS["weather-postgres-db"][:ip],
-  "HISTORY_IP"        => VMS["weather-history"][:ip],
-  "SSH_PUBKEY"        => File.read("id_ed25519.pub").strip,
-  "POSTGRES_PASSWORD" => host_env["POSTGRES_PASSWORD"],
-  "POSTGRES_DB"       => setting.("POSTGRES_DB", "weather"),
-  "REDIS_PASSWORD"    => host_env["REDIS_PASSWORD"],
-  "RABBITMQ_PASSWORD" => host_env["RABBITMQ_PASSWORD"],
-  "TRIGGER_TOKEN"     => host_env.fetch("TRIGGER_TOKEN", ""),
-  "CRON_SCHEDULE"     => setting.("CRON_SCHEDULE", "*/15 * * * *"),
-  "HISTORY_PORT"      => setting.("HISTORY_PORT", "3001"),
-  "FRONTEND_PORT"     => setting.("FRONTEND_PORT", "4173"),
-  "POSTGRES_PORT"     => setting.("POSTGRES_PORT", "5432"),
-  "REDIS_PORT"        => setting.("REDIS_PORT", "6379"),
-  "RABBITMQ_PORT"     => setting.("RABBITMQ_PORT", "5672"),
-  "RABBITMQ_UI_PORT"  => setting.("RABBITMQ_UI_PORT", "15672"),
+  "DB_IP"              => VMS["weather-postgres-db"][:ip],
+  "HISTORY_IP"         => VMS["weather-history"][:ip],
+  "SSH_PUBKEY"         => File.read("id_ed25519.pub").strip,
+  "LOGPULL_PUBKEY"     => File.read("#{LOGPULL_KEY}.pub").strip,
+  "LOGPULL_KEY_B64"    => [File.read(LOGPULL_KEY)].pack("m0"),
+  "LOG_SOURCES"        => VMS.reject { |name, _| name == "weather-history" }.map { |name, vm| "#{name}=#{vm[:ip]}" }.join(" "),
+  "LOG_RETENTION_DAYS" => setting.("LOG_RETENTION_DAYS", "7"),
+  "POSTGRES_PASSWORD"  => host_env["POSTGRES_PASSWORD"],
+  "POSTGRES_DB"        => setting.("POSTGRES_DB", "weather"),
+  "REDIS_PASSWORD"     => host_env["REDIS_PASSWORD"],
+  "RABBITMQ_PASSWORD"  => host_env["RABBITMQ_PASSWORD"],
+  "TRIGGER_TOKEN"      => host_env.fetch("TRIGGER_TOKEN", ""),
+  "CRON_SCHEDULE"      => setting.("CRON_SCHEDULE", "*/15 * * * *"),
+  "HISTORY_PORT"       => setting.("HISTORY_PORT", "3001"),
+  "FRONTEND_PORT"      => setting.("FRONTEND_PORT", "4173"),
+  "POSTGRES_PORT"      => setting.("POSTGRES_PORT", "5432"),
+  "REDIS_PORT"         => setting.("REDIS_PORT", "6379"),
+  "RABBITMQ_PORT"      => setting.("RABBITMQ_PORT", "5672"),
+  "RABBITMQ_UI_PORT"   => setting.("RABBITMQ_UI_PORT", "15672"),
 }
 
 Vagrant.configure("2") do |config|
@@ -82,7 +95,7 @@ Vagrant.configure("2") do |config|
 
       node.vm.provision "file", source: "provision/common.sh", destination: "/tmp/weather-common.sh"
       node.vm.provision "shell", name: "provision-#{name}", path: "provision/#{vm[:script]}",
-        env: PROVISION_ENV.slice("SSH_PUBKEY", *vm[:env])
+        env: PROVISION_ENV.slice("SSH_PUBKEY", "LOGPULL_PUBKEY", "HISTORY_IP", "LOG_RETENTION_DAYS", *vm[:env])
 
       if vm[:lan]
         node.vm.provision "shell", name: "show-lan-ip", run: "always",

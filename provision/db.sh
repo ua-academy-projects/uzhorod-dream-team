@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 source /tmp/weather-common.sh
 : "${POSTGRES_PASSWORD:?}" "${REDIS_PASSWORD:?}" "${RABBITMQ_PASSWORD:?}" "${HISTORY_IP:?}"
+: "${LOGPULL_PUBKEY:?}" "${LOG_RETENTION_DAYS:?}"
 : "${DB_IP:?}" "${POSTGRES_PORT:?}" "${REDIS_PORT:?}" "${RABBITMQ_PORT:?}" "${RABBITMQ_UI_PORT:?}"
 base_setup
 install_docker
+setup_journald
+setup_log_export
 
 write_env postgres <<ENVF
 POSTGRES_PASSWORD=${POSTGRES_PASSWORD}

@@ -154,6 +154,10 @@ After a code or `.env` change: `vagrant provision <vm>` rebuilds the images and 
 (each VM mounts only its own service folders, read-only).
 Data stays in the named volumes `pgdata`, `redisdata` and `rabbitmqdata`.
 
+Logs of all VMs (system and containers) are pulled every 15 minutes onto `weather-history` as zstd archives and
+kept for 7 days (`LOG_RETENTION_DAYS`): `sudo journalctl -D /var/log/journal/remote` there, details in
+[docs/infrastructure.md#logs](docs/infrastructure.md#logs).
+
 ## Configuration
 
 Each part reads its own `.env` file (see the `.env.example` files):
