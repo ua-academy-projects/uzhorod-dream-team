@@ -6,7 +6,7 @@ settings = {
   box: "bento/ubuntu-24.04", box_version: "202508.03.0",
   private_subnet: "192.168.56.0/24", public_subnet: "192.168.1.0/24",
   public_ip: "192.168.1.204", host_network_dev: ENV.fetch("HOST_NETWORK_DEV", "eth0"),
-  network_name: "kyiv-air-multinode", readiness_timeout: Integer(ENV.fetch("READY_TIMEOUT", "300")),
+  network_name: "kyiv-air-services-internal", readiness_timeout: Integer(ENV.fetch("READY_TIMEOUT", "300")),
   redis_port: 6379, rabbitmq_port: 5672
 }
 
@@ -69,7 +69,9 @@ Vagrant.configure("2") do |config|
       vm.vm.hostname = machine[:hostname]
 
       vm.vm.network "private_network", ip: machine[:ip], netmask: IPAddr.new(settings[:private_subnet]).netmask.to_s,
-        libvirt__network_name: settings[:network_name], libvirt__forward_mode: "none"
+        virtualbox__intnet: settings[:network_name],
+        libvirt__network_name: settings[:network_name], libvirt__forward_mode: "veryisolated",
+        libvirt__dhcp_enabled: false
       if name == "bastion"
         vm.vm.network "public_network", ip: settings[:public_ip],
           netmask: IPAddr.new(settings[:public_subnet]).netmask.to_s,
