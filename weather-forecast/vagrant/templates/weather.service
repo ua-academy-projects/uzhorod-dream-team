@@ -1,0 +1,16 @@
+[Unit]
+Description=Weather @SERVICE@
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+User=weather
+WorkingDirectory=@WORKDIR@
+EnvironmentFile=@CONFIG_DIR@/@SERVICE@.env
+ExecStart=@EXEC_START@
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=20
+
+[Install]
+WantedBy=multi-user.target

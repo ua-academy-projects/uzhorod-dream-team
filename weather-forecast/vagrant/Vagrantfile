@@ -1,0 +1,178 @@
+require "tempfile"
+
+project_root = File.expand_path("..", __dir__)
+deploy_input = File.join(project_root, "weather-deploy-input")
+
+secret_source = File.join(deploy_input, "secrets.env")
+secret_temp_files = []
+ssh_port_line = File.foreach(secret_source).find { |line| line.start_with?("WEATHER_SSH_PORT=") }
+ssh_port = ssh_port_line&.split("=", 2)&.last&.strip
+unless ssh_port&.match?(/\A[0-9]+\z/) && (1024..65535).cover?(ssh_port.to_i)
+  raise "Set WEATHER_SSH_PORT=1024..65535 in weather-deploy-input/secrets.env"
+end
+ssh_port = ssh_port.to_i.to_s
+bootstrap_ssh = ENV["WEATHER_SSH_BOOTSTRAP"] == "1"
+
+def filtered_secrets(source, keys, temp_files)
+  input = File.readlines(source)
+  allowed = input.select do |line|
+    key = line[/\A([A-Z0-9_]+)=/, 1]
+    key && keys.include?(key)
+  end
+
+  file = Tempfile.new(["weather-secrets-", ".env"])
+  file.write(allowed.join)
+  file.close
+  File.chmod(0600, file.path)
+
+  temp_files << file
+  file.path
+end
+
+at_exit do
+  secret_temp_files.each(&:unlink)
+end
+
+machines = {
+  "db" => {
+    ip: "192.168.56.11",
+    memory: 1024,
+    cpus: 1,
+    folder: "migrations",
+    exclude: [],
+    secret_keys: [
+        "WEATHER_DB_PASSWORD",
+        "RABBITMQ_URL",
+        "REDIS_PASSWORD"
+    ]
+},
+  "fetcher" => {
+    ip: "192.168.56.12",
+    memory: 1024,
+    cpus: 1,
+    folder: "fetcher",
+    exclude: [".env", ".venv*/", "__pycache__/", "*.pyc"],
+    secret_keys: [
+        "RABBITMQ_URL"
+    ]
+  },
+  "history" => {
+    ip: "192.168.56.13",
+    memory: 1024,
+    cpus: 1,
+    folder: "history",
+    exclude: ["bin/", ".env", "*.test"],
+    secret_keys: [
+        "WEATHER_DB_PASSWORD",
+        "RABBITMQ_URL",
+        "REDIS_PASSWORD"
+    ]
+  },
+  "ui" => {
+    ip: "192.168.56.14",
+    memory: 1024,
+    cpus: 1,
+    folder: "ui",
+    exclude: [".env", "node_modules/"],
+    secret_keys: []
+  }
+}
+
+Vagrant.configure("2") do |config|
+  config.vm.box = "bento/ubuntu-24.04"
+  config.vm.synced_folder ".", "/vagrant", disabled: true
+  provision_environment = { "DEBIAN_FRONTEND" => "noninteractive", "WEATHER_SSH_PORT" => ssh_port }
+
+  config.vm.provider :libvirt do |libvirt|
+    libvirt.management_network_name = "default"
+    libvirt.management_network_address = "192.168.122.0/24"
+    libvirt.management_network_keep = true
+  end
+
+  config.vm.provision "shell", name: "weather-common", privileged: true,
+    env: provision_environment, inline: <<~'SHELL'
+    set -euo pipefail
+    umask 022
+    source /etc/os-release
+    [[ "$ID" == ubuntu && "$VERSION_ID" == 24.04 ]] || { echo 'Ubuntu 24.04 is required'; exit 1; }
+    echo 'Preparing common packages and directories'
+    apt-get update
+    apt-get install -y ca-certificates curl rsync
+    install -d -m 755 /opt/weather-forecast /etc/weather-forecast
+    install -d -m 755 -o vagrant -g vagrant /home/vagrant/weather-staging
+    install -d -m 755 -o vagrant -g vagrant /home/vagrant/weather-staging/templates
+  SHELL
+
+  config.vm.provision "file",
+    source: File.join(__dir__, "common.sh"),
+    destination: "/home/vagrant/weather-staging/common.sh"
+
+  config.vm.provision "file",
+    source: File.expand_path("~/.ssh/weather_vm.pub"),
+    destination: "/home/vagrant/weather-staging/arch-key.pub"
+
+  # Upload templates on every provision, including existing VMs.
+  %w[weather.service nginx.conf rabbitmq.conf redis-network.conf sshd_config ssh.socket.conf].each do |filename|
+    config.vm.provision "file",
+      source: File.join(__dir__, "templates", filename),
+      destination: "/home/vagrant/weather-staging/templates/#{filename}"
+  end
+
+
+  machines.each do |name, settings|
+    config.vm.define name do |vm|
+      vm.vm.hostname = "weather-#{name}"
+      vm.vm.network "private_network", ip: settings[:ip]
+      # A new stock box starts on 22; after provisioning Vagrant uses our configured port.
+      vm.ssh.port = bootstrap_ssh ? 22 : ssh_port.to_i
+      vm.ssh.guest_port = vm.ssh.port
+
+      if name == "ui"
+        vm.vm.network "forwarded_port",
+            guest: 80,
+            host: 8080,
+            host_ip: "0.0.0.0",
+            gateway_ports: true
+      end
+
+      vm.vm.provider :libvirt do |libvirt|
+        libvirt.memory = settings[:memory]
+        libvirt.cpus = settings[:cpus]
+      end
+
+      vm.vm.synced_folder File.join(project_root, settings[:folder]),
+        "/home/vagrant/weather-staging/#{settings[:folder]}",
+        type: "rsync", rsync__exclude: settings[:exclude]
+
+      unless settings[:secret_keys].empty?
+      filtered_file = filtered_secrets(
+          secret_source,
+          settings[:secret_keys],
+          secret_temp_files
+      )
+
+      vm.vm.provision "file",
+          source: filtered_file,
+          destination: "/home/vagrant/weather-staging/secrets.env"
+      end
+
+
+      case name
+      when "db"
+        arguments = [settings[:ip], machines["history"][:ip]]
+        arguments << "import-db" if ENV["WEATHER_IMPORT_DB"] == "1"
+      when "history"
+        arguments = [machines["db"][:ip]]
+      when "ui"
+        arguments = [machines["history"][:ip]]
+      else
+        arguments = []
+      end
+
+      vm.vm.provision "shell", name: "weather-#{name}",
+        privileged: true,
+        env: provision_environment,
+        path: File.join(__dir__, "provision-#{name}.sh"), args: arguments
+    end
+  end
+end
