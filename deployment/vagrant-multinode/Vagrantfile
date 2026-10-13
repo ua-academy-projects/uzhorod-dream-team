@@ -4,37 +4,51 @@ project_root = File.expand_path("../..", __dir__)
 
 settings = {
   box: "bento/ubuntu-24.04", box_version: "202508.03.0",
-  subnet: "192.168.1.0/24", host_network_dev: ENV.fetch("HOST_NETWORK_DEV", "eth0"),
+  private_subnet: "192.168.56.0/24", public_subnet: "192.168.1.0/24",
+  public_ip: "192.168.1.204", host_network_dev: ENV.fetch("HOST_NETWORK_DEV", "eth0"),
   network_name: "kyiv-air-multinode", readiness_timeout: Integer(ENV.fetch("READY_TIMEOUT", "300")),
   redis_port: 6379, rabbitmq_port: 5672
 }
 
 machines = {
-  "db" => {hostname: "kyiv-air-db", ip: "192.168.1.201", memory: 2048, cpus: 1,
+  "db" => {hostname: "kyiv-air-db", ip: "192.168.56.201", memory: 2048, cpus: 1,
            port: 5432, source: nil, env_files: %w[db rabbitmq], script: "scripts/db.sh",
            containers: "kyiv-air-postgres kyiv-air-redis kyiv-air-rabbitmq"},
-  "fetcher" => {hostname: "kyiv-air-fetcher", ip: "192.168.1.202", memory: 1024, cpus: 1,
+  "fetcher" => {hostname: "kyiv-air-fetcher", ip: "192.168.56.202", memory: 1024, cpus: 1,
                 port: 8080, source: "fetcher", env_files: %w[fetcher rabbitmq], script: "scripts/fetcher.sh",
                 containers: "kyiv-air-fetcher"},
-  "history" => {hostname: "kyiv-air-history", ip: "192.168.1.203", memory: 1024, cpus: 1,
+  "history" => {hostname: "kyiv-air-history", ip: "192.168.56.203", memory: 1024, cpus: 1,
                 port: 8081, source: "history", env_files: %w[history db rabbitmq], script: "scripts/history.sh",
                 containers: "kyiv-air-history"},
-  "ui" => {hostname: "kyiv-air-ui", ip: "192.168.1.204", memory: 1024, cpus: 1,
+  "ui" => {hostname: "kyiv-air-ui", ip: "192.168.56.204", memory: 1024, cpus: 1,
            port: 80, source: "ui", env_files: %w[ui], script: "scripts/ui.sh",
-           containers: "kyiv-air-ui"}
+           containers: "kyiv-air-ui"},
+  "bastion" => {hostname: "kyiv-air-bastion", ip: "192.168.56.200", memory: 512, cpus: 1,
+                port: 80, source: nil, env_files: [], script: "scripts/bastion.sh",
+                containers: "kyiv-air-bastion"}
 }
 
 def validate_settings(settings, machines)
-  raise "The LAN subnet must include an IPv4 CIDR prefix" unless settings[:subnet].match?(%r{\A[0-9.]+/[0-9]+\z})
-  subnet = IPAddr.new(settings[:subnet])
-  raise "The LAN subnet must be IPv4 with a prefix between /1 and /30" unless
-    subnet.ipv4? && (1..30).cover?(subnet.prefix)
-  settings[:subnet] = "#{subnet}/#{subnet.prefix}"
+  subnets = %i[private_subnet public_subnet].map do |key|
+    raise "#{key} must include an IPv4 CIDR prefix" unless settings[key].match?(%r{\A[0-9.]+/[0-9]+\z})
+    subnet = IPAddr.new(settings[key])
+    raise "#{key} must be IPv4 with a prefix between /1 and /30" unless
+      subnet.ipv4? && (1..30).cover?(subnet.prefix)
+    settings[key] = "#{subnet}/#{subnet.prefix}"
+    subnet
+  end
+  private_subnet, public_subnet = subnets
+  raise "Private and public subnets must not overlap" if
+    private_subnet.include?(public_subnet) || public_subnet.include?(private_subnet)
   addresses = machines.values.map { |machine| IPAddr.new(machine[:ip]) }
-  raise "VM addresses must be unique IPv4 addresses inside #{settings[:subnet]}" unless
-    addresses.uniq.length == addresses.length && addresses.all? { |ip| ip.ipv4? && ip.prefix == 32 && subnet.include?(ip) }
+  raise "VM addresses must be unique IPv4 addresses inside #{settings[:private_subnet]}" unless
+    addresses.uniq.length == addresses.length && addresses.all? { |ip| ip.ipv4? && ip.prefix == 32 && private_subnet.include?(ip) }
   raise "VM IPs cannot use the network or broadcast address" if
-    addresses.any? { |ip| [subnet.to_i, subnet.to_range.last.to_i].include?(ip.to_i) }
+    addresses.any? { |ip| [private_subnet.to_i, private_subnet.to_range.last.to_i].include?(ip.to_i) }
+  public_ip = IPAddr.new(settings[:public_ip])
+  raise "Bastion public IP must be a usable IPv4 address inside #{settings[:public_subnet]}" unless
+    public_ip.ipv4? && public_ip.prefix == 32 && public_subnet.include?(public_ip) &&
+      ![public_subnet.to_i, public_subnet.to_range.last.to_i].include?(public_ip.to_i)
   timeout = Integer(settings[:readiness_timeout])
   raise "READY_TIMEOUT must be positive" unless timeout.positive?
 end
@@ -54,7 +68,16 @@ Vagrant.configure("2") do |config|
     config.vm.define name do |vm|
       vm.vm.hostname = machine[:hostname]
 
-      vm.vm.network "public_network", ip: machine[:ip], dev: host_network_dev, bridge: host_network_dev
+      vm.vm.network "private_network", ip: machine[:ip], netmask: IPAddr.new(settings[:private_subnet]).netmask.to_s,
+        libvirt__network_name: settings[:network_name], libvirt__forward_mode: "none"
+      if name == "bastion"
+        vm.vm.network "public_network", ip: settings[:public_ip],
+          netmask: IPAddr.new(settings[:public_subnet]).netmask.to_s,
+          dev: host_network_dev, bridge: host_network_dev
+        vm.vm.provision "upload-bastion-nginx", type: "file",
+          source: File.join(__dir__, "nginx", "bastion.conf.template"),
+          destination: "/tmp/kyiv-air-bastion.conf.template"
+      end
 
       vm.vm.provision "upload-host-ssh-key", type: "file",
         source: File.join(__dir__, "ssh", "public-keys", "#{name}.pub"),
@@ -97,12 +120,13 @@ Vagrant.configure("2") do |config|
 
       topology = {
         "ROLE" => name, "PRIVATE_IP" => machine[:ip], "SERVICE_PORT" => machine[:port].to_s,
-        "LAN_SUBNET" => settings[:subnet], "DB_IP" => machines["db"][:ip],
+        "PRIVATE_SUBNET" => settings[:private_subnet], "PUBLIC_IP" => settings[:public_ip],
+        "BASTION_IP" => machines["bastion"][:ip], "UI_IP" => machines["ui"][:ip], "DB_IP" => machines["db"][:ip],
         "DB_PORT" => machines["db"][:port].to_s,
         "REDIS_PORT" => settings[:redis_port].to_s, "HISTORY_IP" => machines["history"][:ip],
         "RABBITMQ_PORT" => settings[:rabbitmq_port].to_s, "FETCHER_IP" => machines["fetcher"][:ip],
         "HISTORY_URL" => "http://#{machines["history"][:ip]}:#{machines["history"][:port]}",
-        "UI_ORIGIN" => "http://#{machines["ui"][:ip]}",
+        "UI_ORIGIN" => "http://#{settings[:public_ip]}",
         "READY_TIMEOUT" => settings[:readiness_timeout].to_s
       }
       vm.vm.provision "configure", type: "shell", path: machine[:script], env: topology
@@ -123,7 +147,10 @@ Vagrant.configure("2") do |config|
       vm.vm.provision "restart", type: "shell", run: "never", privileged: true,
         inline: "set -e\ndocker restart #{machine[:containers]}"
 
-      vm.vm.post_up_message = "#{name}: #{machine[:ip]}:#{machine[:port]} (LAN subnet #{settings[:subnet]})"
+      vm.vm.post_up_message = "#{name}: #{machine[:ip]}:#{machine[:port]} (private subnet #{settings[:private_subnet]})"
+      if name == "bastion"
+        vm.vm.post_up_message += "\nPublic UI: http://#{settings[:public_ip]}\nSSH: vagrant@#{settings[:public_ip]} (ProxyJump to private VMs)"
+      end
       if name == "db"
         vm.vm.post_up_message += "\nRedis: #{machine[:ip]}:#{settings[:redis_port]} (History VM access only)"
         vm.vm.post_up_message += "\nRabbitMQ: #{machine[:ip]}:#{settings[:rabbitmq_port]} (Fetcher and History VM access only)\nManagement: vagrant ssh db -- -L 15672:127.0.0.1:15672"

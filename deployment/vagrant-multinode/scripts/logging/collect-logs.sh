@@ -54,7 +54,7 @@ collect() {
 }
 
 while read -r vm ip container; do
-  [[ "$vm" =~ ^(db|fetcher|history|ui)$ && "$ip" =~ ^[0-9.]+$ && "$container" =~ ^kyiv-air-(postgres|redis|rabbitmq|fetcher|history|ui)$ ]] || { failed=1; continue; }
+  [[ "$vm" =~ ^(db|fetcher|history|ui|bastion)$ && "$ip" =~ ^[0-9.]+$ && "$container" =~ ^kyiv-air-(postgres|redis|rabbitmq|fetcher|history|ui|bastion)$ ]] || { failed=1; continue; }
   if ! collect "$vm" "$ip" "$container"; then
     echo "$(date -u +%FT%TZ) failed $vm/$container; checkpoint retained" >&2
     rm -f "$ARCHIVE/$vm/$container/"*.tmp "$STATE/$vm-$container.timestamp.tmp"

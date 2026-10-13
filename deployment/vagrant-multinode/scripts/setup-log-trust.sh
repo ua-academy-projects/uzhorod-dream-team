@@ -29,7 +29,7 @@ SH_REMOTE
 
 while read -r vm ip container; do
   [[ "$vm" != db ]] || continue
-  [[ "$vm" =~ ^(fetcher|history|ui)$ && "$ip" =~ ^[0-9.]+$ && "$container" =~ ^kyiv-air-(fetcher|history|ui)$ ]] || exit 1
+  [[ "$vm" =~ ^(fetcher|history|ui|bastion)$ && "$ip" =~ ^[0-9.]+$ && "$container" =~ ^kyiv-air-(fetcher|history|ui|bastion)$ ]] || exit 1
   timeout "$VAGRANT_TIMEOUT_SECONDS" vagrant upload "$work/collector.pub" /tmp/kyiv-air-log-collector.pub "$vm"
   remote "$vm" "$install_key_command"
   remote "$vm" 'sudo cat /etc/ssh/ssh_host_ed25519_key.pub' > "$work/host.pub"

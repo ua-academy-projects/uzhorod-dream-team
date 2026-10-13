@@ -12,7 +12,7 @@ env_value() { sed -n "s/^$2=//p" "$1" | tr -d '\r'; }
 require_env() { [[ -s "/tmp/kyiv-air-$1.env" ]] || fail "Missing env/$1.env. Run full provisioning."; }
 
 cleanup_uploads() {
-  rm -f /tmp/kyiv-air-{fetcher,history,db,ui,rabbitmq}.env /tmp/kyiv-air-{common,docker-firewall}.sh /tmp/kyiv-air-images.env
+  rm -f /tmp/kyiv-air-{fetcher,history,db,ui,rabbitmq}.env /tmp/kyiv-air-{common,docker-firewall}.sh /tmp/kyiv-air-images.env /tmp/kyiv-air-bastion.conf.template
 }
 
 copy_env() {
@@ -73,7 +73,7 @@ install_docker() {
 configure_firewall() {
   local key
   {
-    for key in ROLE PRIVATE_IP LAN_SUBNET HISTORY_IP FETCHER_IP SERVICE_PORT; do
+    for key in ROLE PRIVATE_IP PRIVATE_SUBNET PUBLIC_IP BASTION_IP HISTORY_IP FETCHER_IP SERVICE_PORT; do
       printf '%s=%q\n' "$key" "${!key:-}"
     done
   } > "$CONFIG/firewall.env"

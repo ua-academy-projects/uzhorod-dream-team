@@ -35,13 +35,19 @@ allow_port() {
 
 case "$ROLE" in
   db)
-    allow_port "$LAN_SUBNET" 5432
+    allow_port "$PRIVATE_SUBNET" 5432
     allow_port "$HISTORY_IP" 6379
     allow_port "$FETCHER_IP" 5672
     allow_port "$HISTORY_IP" 5672
     ;;
-  fetcher|history|ui)
-    allow_port "$LAN_SUBNET" "$SERVICE_PORT"
+  fetcher|history)
+    allow_port "$PRIVATE_SUBNET" "$SERVICE_PORT"
+    ;;
+  ui)
+    allow_port "$BASTION_IP" "$SERVICE_PORT"
+    ;;
+  bastion)
+    iptables -w -A KYIV-AIR -p tcp -m conntrack --ctorigdst "$PUBLIC_IP" --ctorigdstport "$SERVICE_PORT" -j RETURN
     ;;
   *) echo "Unknown firewall role: $ROLE" >&2; exit 1 ;;
 esac

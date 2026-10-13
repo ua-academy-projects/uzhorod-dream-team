@@ -1,0 +1,27 @@
+Host kyiv-air-bastion
+    HostName 192.168.1.204
+    IdentityFile ~/.ssh/kyiv-air-ui
+
+Host kyiv-air-db
+    HostName kyiv-air-db
+    IdentityFile ~/.ssh/kyiv-air-db
+
+Host kyiv-air-fetcher
+    HostName kyiv-air-fetcher
+    IdentityFile ~/.ssh/kyiv-air-fetcher
+
+Host kyiv-air-history
+    HostName kyiv-air-history
+    IdentityFile ~/.ssh/kyiv-air-history
+
+Host kyiv-air-ui
+    HostName kyiv-air-ui
+    IdentityFile ~/.ssh/kyiv-air-ui
+
+Host kyiv-air-db kyiv-air-fetcher kyiv-air-history kyiv-air-ui
+    ProxyJump kyiv-air-bastion
+
+Host kyiv-air-*
+    User vagrant
+    IdentitiesOnly yes
+    ForwardAgent no
