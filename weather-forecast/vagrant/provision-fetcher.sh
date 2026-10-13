@@ -2,26 +2,32 @@
 source /home/vagrant/weather-staging/common.sh || exit 1
 
 configure_ssh
-require_templates weather.service
 
 load_secrets
+candidate=''
+trap '[[ -z ${candidate:-} ]] || rm -f -- "$candidate"; rm -f -- "$stage/secrets.env"' EXIT
+
 check_rabbitmq_url
 
-apt-get install -y python3 python3-venv
-prepare_app_user
-copy_app_sources fetcher "__pycache__/"
-sudo -u weather python3 -m venv "$app/.venv"
-sudo -u weather "$app/.venv/bin/python" -m pip install -r "$app/fetcher/requirements.txt"
-if [[ ! -f "$config/fetcher.env" ]]; then
-  cat > "$config/fetcher.env" <<EOF
-FETCHER_HOST=0.0.0.0
-FETCHER_PORT=8001
-CITY_NAME=Uzhhorod
-CITY_LATITUDE=48.6167
-CITY_LONGITUDE=22.3
-OPEN_METEO_TIMEOUT_SECONDS=10
-PYTHONUNBUFFERED=1
-EOF
+candidate=$(mktemp "$config/fetcher.env.XXXXXX")
+printf 'RABBITMQ_URL=%s\n' "$RABBITMQ_URL" > "$candidate"
+chmod 600 "$candidate"
+mv -f "$candidate" "$config/fetcher.env"
+candidate=''
+
+docker build -f "$stage/fetcher/Dockerfile" -t weather-fetcher:dev "$stage/fetcher"
+
+if [[ -f /etc/systemd/system/weather-fetcher.service ]]; then
+  systemctl disable --now weather-fetcher.service
+  rm -f /etc/systemd/system/weather-fetcher.service
+  systemctl daemon-reload
 fi
-add_setting "$config/fetcher.env" RABBITMQ_URL "$RABBITMQ_URL"
-install_app_service fetcher "$app" "$app/.venv/bin/python -m fetcher"
+
+remove_container weather-fetcher
+
+docker run --detach \
+  --name weather-fetcher \
+  --restart unless-stopped \
+  --log-driver local --log-opt max-size=10m --log-opt max-file=3 \
+  --env-file "$config/fetcher.env" \
+  weather-fetcher:dev
