@@ -18,23 +18,22 @@ export type PriceState = {
   retry: () => void;
 };
 
+const message = (err: unknown, fallback: string): string =>
+  err instanceof Error ? err.message : fallback;
+
 export function usePrice(): PriceState {
   const [status, setStatus] = useState<Status>('loading');
   const [latest, setLatest] = useState<Latest | null>(null);
   const [points, setPoints] = useState<HistoryPoint[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-
-  // Whether the component is still mounted and the response is not stale:
-  // StrictMode mounts effects twice in development.
-  const alive = useRef(true);
   const inFlight = useRef(false);
 
-  useEffect(() => {
-    alive.current = true;
-    return () => {
-      alive.current = false;
-    };
+  /** Reads the price and the chart together; the screen state is the caller's business. */
+  const read = useCallback(async () => {
+    const [current, history] = await Promise.all([getLatest(), getHistory()]);
+    setLatest(current);
+    setPoints(history.points);
   }, []);
 
   const load = useCallback(async () => {
@@ -43,25 +42,22 @@ export function usePrice(): PriceState {
     setStatus('loading');
     setError(null);
     try {
-      const [current, history] = await Promise.all([getLatest(), getHistory()]);
-      if (!alive.current) return;
-      setLatest(current);
-      setPoints(history.points);
+      await read();
       setStatus('ready');
     } catch (err) {
-      if (!alive.current) return;
-      // 503 means the database is empty and the source is unreachable:
-      // that is "nothing yet", not a failure.
+      // 503 is "nothing yet" (a request is queued) or "database down":
+      // not a broken page, and the server's text says which.
       if (err instanceof ApiError && err.status === 503) {
+        setError(err.message);
         setStatus('empty');
         return;
       }
-      setError(err instanceof Error ? err.message : 'Unknown error');
+      setError(message(err, 'Unknown error'));
       setStatus('error');
     } finally {
       inFlight.current = false;
     }
-  }, []);
+  }, [read]);
 
   useEffect(() => {
     void load();
@@ -71,40 +67,28 @@ export function usePrice(): PriceState {
     if (inFlight.current) return;
     inFlight.current = true;
     setRefreshing(true);
+    setError(null);
     try {
       // The request only gets queued; the fetcher answers through the queue,
       // so the new price appears on a later read rather than in this response.
       await refreshPrice();
       await new Promise((resolve) => setTimeout(resolve, REFRESH_SETTLE_MS));
-      if (!alive.current) return;
-
-      const [current, history] = await Promise.all([getLatest(), getHistory()]);
-      if (!alive.current) return;
-      setLatest(current);
-      setPoints(history.points);
-      setStatus('ready');
+      await read();
     } catch (err) {
-      if (!alive.current) return;
-      setError(err instanceof Error ? err.message : 'Refresh failed');
-      setStatus('error');
+      // The price already on screen stays; only the failure is reported.
+      setError(message(err, 'Refresh failed'));
     } finally {
       inFlight.current = false;
-      if (alive.current) setRefreshing(false);
+      setRefreshing(false);
     }
-  }, []);
+  }, [read]);
 
   /** Re-reads without flipping the screen back to the loading state. */
   const recheck = useCallback(() => {
-    Promise.all([getLatest(), getHistory()])
-      .then(([current, history]) => {
-        if (!alive.current) return;
-        setLatest(current);
-        setPoints(history.points);
-      })
-      .catch(() => {
-        /* the data already on screen stays */
-      });
-  }, []);
+    read().catch(() => {
+      /* the data already on screen stays */
+    });
+  }, [read]);
 
   useStaleWatch(latest?.stale, recheck);
 

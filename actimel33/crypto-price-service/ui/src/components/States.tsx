@@ -12,14 +12,11 @@ export function Loading() {
   );
 }
 
-export function Empty({ onRetry }: { onRetry: () => void }) {
+export function Empty({ message, onRetry }: FailureProps) {
   return (
-    <div className="state">
+    <div className="state" role="status">
       <h2>No data yet</h2>
-      <p>
-        History is empty and the price source is unreachable, so there is no first price
-        to show. Check that the Fetcher service is running, then try again.
-      </p>
+      <p>{message}</p>
       <button type="button" className="button" onClick={onRetry}>
         Try again
       </button>

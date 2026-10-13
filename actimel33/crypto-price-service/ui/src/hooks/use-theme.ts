@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { getTheme, saveTheme } from '../api/client.ts';
 import type { Theme } from '../api/client.ts';
 
@@ -9,12 +9,14 @@ import type { Theme } from '../api/client.ts';
  */
 export function useTheme(): { theme: Theme; setTheme: (next: Theme) => void } {
   const [theme, setLocalTheme] = useState<Theme>('system');
+  // A click before the stored theme arrives wins over that late answer.
+  const chosen = useRef(false);
 
   useEffect(() => {
     let ignore = false;
     getTheme()
       .then(({ theme: stored }) => {
-        if (!ignore) setLocalTheme(stored);
+        if (!ignore && !chosen.current) setLocalTheme(stored);
       })
       .catch(() => {
         /* no session yet — the system theme stays */
@@ -31,6 +33,7 @@ export function useTheme(): { theme: Theme; setTheme: (next: Theme) => void } {
   }, [theme]);
 
   const setTheme = useCallback((next: Theme) => {
+    chosen.current = true;
     setLocalTheme(next); // apply at once, persist in the background
     saveTheme(next).catch(() => {
       /* the visual choice stands even if the session could not be saved */

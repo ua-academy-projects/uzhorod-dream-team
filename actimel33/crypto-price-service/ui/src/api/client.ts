@@ -3,7 +3,6 @@ export type Latest = {
   vs: string;
   price: number;
   observedAt: string;
-  source: 'cache' | 'live';
   stale: boolean;
   staleReason?: string;
 };
