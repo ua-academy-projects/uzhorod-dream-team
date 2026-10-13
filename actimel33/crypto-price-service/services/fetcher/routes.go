@@ -9,13 +9,12 @@ import (
 // Only a health check: prices travel through the queue, so the fetcher offers
 // no HTTP path to CoinGecko that would bypass deduplication.
 type server struct {
-	source PriceSource
-	queue  string
+	backend string
 }
 
 func (s *server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	body := map[string]string{"status": "ok", "source": s.source.Name(), "queue": s.queue}
+	body := map[string]string{"status": "ok", "backend": s.backend}
 	if err := json.NewEncoder(w).Encode(body); err != nil {
 		log.Printf("[fetcher] writing response: %v", err)
 	}

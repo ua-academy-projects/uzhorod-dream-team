@@ -11,7 +11,6 @@ type PricePoint struct {
 // PriceSource is the data source contract. Swapping CoinGecko for another API
 // means a new implementation of this interface; the rest of the code stays put.
 type PriceSource interface {
-	Name() string
 	Quote(coin, vs string) (PricePoint, error)
 	Chart(coin, vs string, days int) ([]PricePoint, error)
 }

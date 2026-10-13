@@ -6,17 +6,11 @@ import (
 	"time"
 )
 
-const minInterval = time.Second
-
 // startTimer samples the price on a schedule. The first tick fires after the
 // interval rather than at startup: History has already filled the database with
 // its bootstrap by then, and an extra call would only burn the CoinGecko quota.
 func startTimer(ctx context.Context, cfg *Config, source PriceSource, q Queue) {
 	interval := time.Duration(cfg.TimerIntervalHrs * float64(time.Hour))
-	if interval < minInterval {
-		interval = minInterval
-	}
-
 	ticker := time.NewTicker(interval)
 	log.Printf("[timer] started: every %gh (%s)", cfg.TimerIntervalHrs, interval)
 
@@ -40,13 +34,7 @@ func tick(ctx context.Context, cfg *Config, source PriceSource, q Queue) {
 		log.Printf("[timer] tick failed: %v", err)
 		return
 	}
-	result := PriceResult{
-		Coin:   cfg.DefaultCoin,
-		Vs:     cfg.DefaultVs,
-		Origin: "timer",
-		Points: toItems([]PricePoint{point}),
-	}
-	if err := q.PublishResult(ctx, result); err != nil {
+	if err := publish(ctx, q, cfg.DefaultCoin, cfg.DefaultVs, "timer", []PricePoint{point}); err != nil {
 		log.Printf("[timer] publish failed: %v", err)
 		return
 	}

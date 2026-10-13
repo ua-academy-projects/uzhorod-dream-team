@@ -16,8 +16,6 @@ func newCoinGecko(baseURL string, client *retryClient) PriceSource {
 	return &coinGecko{baseURL: baseURL, http: client}
 }
 
-func (c *coinGecko) Name() string { return "coingecko" }
-
 // Mind the time units — they are easy to mix up:
 //
 //	/simple/price  -> last_updated_at is in SECONDS

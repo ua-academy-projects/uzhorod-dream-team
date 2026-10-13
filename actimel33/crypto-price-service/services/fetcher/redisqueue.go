@@ -6,17 +6,29 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/redis/go-redis/v9"
 )
 
+// Streams carrying the conversation with history: requests one way, results the other.
 const (
-	groupFetchers = "fetchers"
-	maxStreamLen  = 1000
-	readBlock     = 5 * time.Second
+	streamRequests = "price:requests"
+	streamResults  = "price:results"
+	groupFetchers  = "fetchers"
+	maxStreamLen   = 1000
+	readBlock      = 5 * time.Second
 )
+
+// The container hostname: one consumer name per fetcher instance.
+var consumerName = func() string {
+	if h, err := os.Hostname(); err == nil {
+		return h
+	}
+	return "fetcher"
+}()
 
 // redisQueue: Redis Streams with a consumer group; ack after success, XAUTOCLAIM for retries.
 type redisQueue struct {
@@ -31,12 +43,17 @@ func newRedisQueue(ctx context.Context, url, password string) (*redisQueue, erro
 	if password != "" {
 		opts.Password = password
 	}
-	rdb := redis.NewClient(opts)
-	if err := rdb.Ping(ctx).Err(); err != nil {
-		rdb.Close()
-		return nil, fmt.Errorf("connecting to redis at %s: %w", url, err)
+	q := &redisQueue{rdb: redis.NewClient(opts)}
+	if err := q.rdb.Ping(ctx).Err(); err != nil {
+		q.Close()
+		return nil, fmt.Errorf("connecting to redis at %s: %w", opts.Addr, err)
 	}
-	return &redisQueue{rdb: rdb}, nil
+	if err := q.ensureGroup(ctx); err != nil {
+		q.Close()
+		return nil, err
+	}
+	log.Printf("[fetcher] backend: redis %s, consuming %s as %s", opts.Addr, streamRequests, consumerName)
+	return q, nil
 }
 
 func (q *redisQueue) Close() { q.rdb.Close() }
@@ -47,55 +64,48 @@ func (q *redisQueue) PublishResult(ctx context.Context, result PriceResult) erro
 		return fmt.Errorf("encoding result: %w", err)
 	}
 	return q.rdb.XAdd(ctx, &redis.XAddArgs{
-		Stream: TopicResults,
+		Stream: streamResults,
 		MaxLen: maxStreamLen,
 		Approx: true,
 		Values: map[string]any{"payload": string(payload)},
 	}).Err()
 }
 
-func (q *redisQueue) ConsumeRequests(ctx context.Context, handle RequestHandler) error {
-	if err := q.ensureGroup(ctx); err != nil {
-		return err
-	}
-	log.Printf("[worker] consuming %s from redis as %s", TopicRequests, consumerName)
-
-	go func() {
-		for ctx.Err() == nil {
-			if err := q.readOnce(ctx, handle); err != nil && ctx.Err() == nil {
-				log.Printf("[worker] read failed: %v", err)
-				time.Sleep(time.Second)
-			}
-		}
-		log.Print("[worker] stopped")
-	}()
-	return nil
-}
-
 // ensureGroup creates the consumer group, tolerating the one that already exists.
 func (q *redisQueue) ensureGroup(ctx context.Context) error {
-	err := q.rdb.XGroupCreateMkStream(ctx, TopicRequests, groupFetchers, "0").Err()
-	if err != nil && err.Error() != "BUSYGROUP Consumer Group name already exists" {
-		return fmt.Errorf("creating group %s on %s: %w", groupFetchers, TopicRequests, err)
+	err := q.rdb.XGroupCreateMkStream(ctx, streamRequests, groupFetchers, "0").Err()
+	if err != nil && !strings.HasPrefix(err.Error(), "BUSYGROUP") {
+		return fmt.Errorf("creating group %s on %s: %w", groupFetchers, streamRequests, err)
 	}
 	return nil
 }
 
-func (q *redisQueue) readOnce(ctx context.Context, handle RequestHandler) error {
-	if err := q.reclaimOnce(ctx, handle); err != nil && !strings.Contains(err.Error(), "NOGROUP") {
-		return err
+func (q *redisQueue) ReadRequests(ctx context.Context, handle RequestHandler) error {
+	// ">" returns only new messages: without the reclaim a failed request would stay pending forever.
+	claimed, _, err := q.rdb.XAutoClaim(ctx, &redis.XAutoClaimArgs{
+		Stream:   streamRequests,
+		Group:    groupFetchers,
+		Consumer: consumerName,
+		MinIdle:  retryAfter,
+		Start:    "0",
+		Count:    10,
+	}).Result()
+	if err != nil && ctx.Err() == nil {
+		log.Printf("[worker] reclaim failed: %v", err)
 	}
+	q.deliver(ctx, claimed, handle)
+
 	streams, err := q.rdb.XReadGroup(ctx, &redis.XReadGroupArgs{
 		Group:    groupFetchers,
 		Consumer: consumerName,
-		Streams:  []string{TopicRequests, ">"},
+		Streams:  []string{streamRequests, ">"},
 		Count:    10,
 		Block:    readBlock,
 	}).Result()
 	if errors.Is(err, redis.Nil) {
 		return nil // nothing arrived within the block window
 	}
-	// A Redis restart without its data wipes the stream and the group with it.
+	// Losing Redis data (no AOF, a new volume) takes the stream and the group with it.
 	if err != nil && strings.Contains(err.Error(), "NOGROUP") {
 		log.Print("[worker] consumer group vanished, recreating")
 		return q.ensureGroup(ctx)
@@ -104,43 +114,35 @@ func (q *redisQueue) readOnce(ctx context.Context, handle RequestHandler) error 
 		return err
 	}
 	for _, stream := range streams {
-		for _, msg := range stream.Messages {
-			q.deliver(ctx, msg, handle)
+		q.deliver(ctx, stream.Messages, handle)
+	}
+	return nil
+}
+
+func (q *redisQueue) deliver(ctx context.Context, msgs []redis.XMessage, handle RequestHandler) {
+	for _, msg := range msgs {
+		if ctx.Err() != nil {
+			return // the rest is reclaimed by the next instance
+		}
+		raw, _ := msg.Values["payload"].(string)
+		var req PriceRequest
+		if err := json.Unmarshal([]byte(raw), &req); err != nil {
+			// Unparseable message: acknowledge it, retrying cannot help.
+			log.Printf("[worker] bad request %s: %v", msg.ID, err)
+			q.ack(ctx, msg.ID)
+			continue
+		}
+		if handle(ctx, req) {
+			q.ack(ctx, msg.ID)
 		}
 	}
-	return nil
 }
 
-// reclaimOnce retries requests left unacknowledged by a failed attempt:
-// reading with ">" returns only new messages, so without this they stay pending forever.
-func (q *redisQueue) reclaimOnce(ctx context.Context, handle RequestHandler) error {
-	msgs, _, err := q.rdb.XAutoClaim(ctx, &redis.XAutoClaimArgs{
-		Stream:   TopicRequests,
-		Group:    groupFetchers,
-		Consumer: consumerName,
-		MinIdle:  retryAfter,
-		Start:    "0",
-		Count:    10,
-	}).Result()
-	if err != nil {
-		return err
-	}
-	for _, msg := range msgs {
-		q.deliver(ctx, msg, handle)
-	}
-	return nil
-}
-
-func (q *redisQueue) deliver(ctx context.Context, msg redis.XMessage, handle RequestHandler) {
-	raw, _ := msg.Values["payload"].(string)
-	var req PriceRequest
-	if err := json.Unmarshal([]byte(raw), &req); err != nil {
-		// Unparseable message: acknowledge it, retrying cannot help.
-		log.Printf("[worker] bad request %s: %v", msg.ID, err)
-		q.rdb.XAck(ctx, TopicRequests, groupFetchers, msg.ID)
-		return
-	}
-	if handle(ctx, req) {
-		q.rdb.XAck(ctx, TopicRequests, groupFetchers, msg.ID)
+func (q *redisQueue) ack(ctx context.Context, id string) {
+	ctx, cancel := ackContext(ctx)
+	defer cancel()
+	if err := q.rdb.XAck(ctx, streamRequests, groupFetchers, id).Err(); err != nil {
+		// Not fatal: the message is reclaimed and processed once more.
+		log.Printf("[worker] ack %s failed: %v", id, err)
 	}
 }

@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"strconv"
 )
@@ -12,7 +13,7 @@ type Config struct {
 	Host              string
 	Port              int
 	CoinGeckoBaseURL  string
-	QueueDriver       string
+	Backend           string
 	QueueDatabaseURL  string
 	RedisURL          string
 	RedisPassword     string
@@ -24,11 +25,11 @@ type Config struct {
 }
 
 func LoadConfig() (*Config, error) {
-	// Each driver needs only its own connection settings.
-	driver := envStr("QUEUE_DRIVER", "redis")
+	// Where the queue lives: Redis, or Postgres for everything. Each needs only its own settings.
+	backend := envStr("BACKEND", "redis")
 	redisPassword := os.Getenv("REDIS_PASSWORD")
 	queueURL := os.Getenv("QUEUE_DATABASE_URL")
-	switch driver {
+	switch backend {
 	case "redis":
 		if redisPassword == "" {
 			return nil, fmt.Errorf("missing required env: REDIS_PASSWORD")
@@ -38,7 +39,7 @@ func LoadConfig() (*Config, error) {
 			return nil, fmt.Errorf("missing required env: QUEUE_DATABASE_URL")
 		}
 	default:
-		return nil, fmt.Errorf("env QUEUE_DRIVER must be redis or postgres, got %q", driver)
+		return nil, fmt.Errorf("env BACKEND must be redis or postgres, got %q", backend)
 	}
 
 	port, err := envInt("FETCHER_PORT", 3002)
@@ -57,6 +58,10 @@ func LoadConfig() (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Zero would mean no HTTP timeout, no fetch attempt at all or a timer firing non-stop.
+	if timeout <= 0 || attempts < 1 || !(interval > 0) || math.IsInf(interval, 0) {
+		return nil, fmt.Errorf("HTTP_TIMEOUT_MS, RETRY_ATTEMPTS and TIMER_INTERVAL_HOURS must be positive")
+	}
 
 	return &Config{
 		// Loopback by default. On a dedicated VM the peers live elsewhere,
@@ -64,7 +69,7 @@ func LoadConfig() (*Config, error) {
 		Host:              envStr("FETCHER_HOST", "127.0.0.1"),
 		Port:              port,
 		CoinGeckoBaseURL:  envStr("COINGECKO_BASE_URL", "https://api.coingecko.com/api/v3"),
-		QueueDriver:       driver,
+		Backend:           backend,
 		QueueDatabaseURL:  queueURL,
 		RedisURL:          envStr("REDIS_URL", "redis://localhost:6379"),
 		RedisPassword:     redisPassword,

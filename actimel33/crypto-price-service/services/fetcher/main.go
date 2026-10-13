@@ -13,11 +13,7 @@ import (
 
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "healthcheck" {
-		resp, err := http.Get("http://127.0.0.1:" + envStr("FETCHER_PORT", "3002") + "/health")
-		if err != nil || resp.StatusCode != http.StatusOK {
-			os.Exit(1)
-		}
-		os.Exit(0)
+		os.Exit(healthcheck())
 	}
 
 	if err := run(); err != nil {
@@ -43,12 +39,10 @@ func run() error {
 	}
 	defer q.Close()
 
-	if err := startWorker(ctx, q, source); err != nil {
-		return err
-	}
+	startWorker(ctx, q, source)
 	startTimer(ctx, cfg, source, q)
 
-	srv := &server{source: source, queue: cfg.QueueDriver}
+	srv := &server{backend: cfg.Backend}
 	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
 	httpServer := &http.Server{
 		Addr:              addr,
@@ -78,16 +72,24 @@ func run() error {
 	return nil
 }
 
-// openQueue picks the driver by QUEUE_DRIVER; the rest of the service does not know which.
+// openQueue picks the driver by BACKEND; the rest of the service does not know which.
 func openQueue(ctx context.Context, cfg *Config) (Queue, error) {
-	if cfg.QueueDriver == "postgres" {
-		log.Print("[fetcher] queue: postgres")
+	if cfg.Backend == "postgres" {
 		return newPgQueue(ctx, cfg.QueueDatabaseURL)
 	}
-	q, err := newRedisQueue(ctx, cfg.RedisURL, cfg.RedisPassword)
+	return newRedisQueue(ctx, cfg.RedisURL, cfg.RedisPassword)
+}
+
+// healthcheck is the Docker HEALTHCHECK: distroless has no curl.
+func healthcheck() int {
+	client := &http.Client{Timeout: 2 * time.Second}
+	resp, err := client.Get("http://127.0.0.1:" + envStr("FETCHER_PORT", "3002") + "/health")
 	if err != nil {
-		return nil, err
+		return 1
 	}
-	log.Printf("[fetcher] queue: redis %s", cfg.RedisURL)
-	return q, nil
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return 1
+	}
+	return 0
 }
