@@ -11,11 +11,15 @@ browser → ui (nginx) → history (Node/TS) → PostgreSQL
 
 | VM      | Address        | Port | Container                   |
 |---------|----------------|------|-----------------------------|
+| bastion | 192.168.78.5 (edge), .77.5 | 22 | — sshd only, no shell |
 | db      | 192.168.77.10  | 5432 | `crypto_db` (postgres + pgmq) |
 |         |                | 6379 | `crypto_redis` (BACKEND=redis only) |
 | fetcher | 192.168.77.11  | 3002 | `crypto_fetcher`            |
 | history | 192.168.77.12  | 3001 | `crypto_history`            |
-| ui      | 192.168.77.13  | 5173 | `crypto_ui`                 |
+| ui      | 192.168.77.13, 192.168.78.13 (edge) | 5173 | `crypto_ui` |
+
+Services live in the isolated network `192.168.77.0/24`; only the bastion and the UI
+also sit in the edge network `192.168.78.0/24`, the one reachable from outside.
 
 Container logs of all VMs are shipped to `db:/srv/logs/` every 15 minutes.
 
@@ -27,13 +31,14 @@ Requires Vagrant with the libvirt provider (KVM). The Vagrantfile selects
 libvirt by default.
 
 ```bash
-vagrant up                  # all four VMs, provisioned in parallel
+vagrant up                  # all five VMs, provisioned in parallel
 vagrant up history          # a single VM
 vagrant provision ui        # rebuild and restart one service
 vagrant destroy -f          # tear down
 ```
 
-Open <http://192.168.77.13:5173>. The `ui` provisioner ends with an end-to-end
+Open <http://192.168.78.13:5173>. From Windows or a phone on the same Wi-Fi:
+[docs/NETWORK-ACCESS.md](docs/NETWORK-ACCESS.md). The `ui` provisioner ends with an end-to-end
 check through `/api/health` (ui → nginx → history → db).
 
 Secrets (`POSTGRES_PASSWORD`, `REDIS_PASSWORD`, `SESSION_SECRET`,
@@ -79,7 +84,7 @@ Price routes take optional `coin` and `vs` (default `bitcoin`/`usd`). Only the
 default pair or one already stored can be fetched; any other answers 404, so a
 stray name never costs a CoinGecko call.
 
-## SSH by name
+## SSH through the bastion
 
 `vagrant up` writes `.vagrant/ssh/config`. Add once, as the first line of `~/.ssh/config`:
 
@@ -87,7 +92,16 @@ stray name never costs a CoinGecko call.
 Include /absolute/path/to/crypto-price-service/.vagrant/ssh/config
 ```
 
-Then `ssh db`, `ssh history`, `scp file ui:` work without `vagrant ssh`.
+Then `ssh db`, `ssh history`, `scp file ui:` go through the bastion (`ProxyJump`).
+`ssh bastion` gives no shell; the VMs accept ssh only from the bastion.
+
+```bash
+ssh -N -L 15432:127.0.0.1:5432 db     # Postgres on localhost:15432, tunnelled by db itself
+```
+
+Moving from the layout without the bastion: `vagrant destroy -f`, then remove the old
+libvirt network of `192.168.77.0/24` (`virsh net-list --all`, `net-destroy`, `net-undefine`),
+then `vagrant up`.
 
 ## Logs
 

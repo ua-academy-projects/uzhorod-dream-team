@@ -1,320 +1,163 @@
 # Architecture
 
-Three services, one Docker container per Vagrant VM, plus a database node.
-History and fetcher never call each other: they talk only through a queue,
-which lives in Redis or in Postgres depending on `BACKEND`.
+## Overview
 
-## 1. Machines, containers, traffic
+```
+  Wi-Fi: phone, other laptops
+            │ <laptop IP>:5173 (UI)                │ <laptop IP>:2222 (ssh)
+            ▼                                      ▼
+  Windows: netsh portproxy · route 192.168.78.0/24 via WSL
+            │                                      │
+ ═══════════╪══ WSL · Vagrant + libvirt/KVM ═══════╪════════════════════════════
+            │  edge 192.168.78.0/24 · DMZ          │
+            ▼                                      ▼
+  ┌───────────────────┐                  ┌───────────────────┐
+  │ ui         .78.13 │                  │ bastion     .78.5 │
+  │ nginx      :5173  │                  │ sshd only: user   │
+  │ React build       │                  │ jump forwards to  │
+  └─────────┬─────────┘                  │ :22, no shell     │
+            │ /api/*                     └─────────┬─────────┘
+  ──────────┼─ private 192.168.77.0/24 · isolated ─┴─ ssh to :22 of every VM ─
+            ▼
+  ┌───────────────────┐       queue      ┌───────────────────┐  HTTPS
+  │ history    .77.12 │◀ ─ ─ ─ ─ ─ ─ ─ ─▶│ fetcher    .77.11 │─────────▶ CoinGecko
+  │ node       :3001  │    (on db)       │ go :3002 /health  │
+  └─────────┬─────────┘                  └─────────┬─────────┘
+            │ SQL · queue · sessions               │ queue
+            ▼                                      ▼
+  ┌─────────────────────────────────────────────────────────────┐
+  │ db                                                   .77.10 │
+  │ crypto_db     postgres 17 + pgmq   :5432   always           │
+  │ crypto_redis  redis 7              :6379   BACKEND=redis    │
+  │ /srv/logs     container logs of every VM                    │
+  └─────────────────────────────────────────────────────────────┘
 
-```mermaid
-flowchart LR
-    user(["Browser / phone"])
-    cg[("CoinGecko API")]
-
-    subgraph host["WSL host: Vagrant + libvirt/KVM · network 192.168.77.0/24"]
-        subgraph vm_ui["VM ui · 192.168.77.13"]
-            ui["crypto_ui<br/>nginx-unprivileged<br/>:5173 → :8080<br/>static React build"]
-        end
-        subgraph vm_history["VM history · 192.168.77.12"]
-            history["crypto_history<br/>Node 24 · Express<br/>:3001"]
-        end
-        subgraph vm_fetcher["VM fetcher · 192.168.77.11"]
-            fetcher["crypto_fetcher<br/>Go · :3002 /health only<br/>worker + 12 h timer"]
-        end
-        subgraph vm_db["VM db · 192.168.77.10"]
-            pg[("crypto_db<br/>Postgres 17 + pgmq · :5432<br/>volume pgdata")]
-            redis[("crypto_redis · :6379<br/>volume redisdata<br/>BACKEND=redis only")]
-            logs[/"/srv/logs<br/>logs of all VMs"/]
-        end
-    end
-
-    user -->|"HTTP :5173"| ui
-    ui -->|"/api/* → /*"| history
-    history -->|"SQL: prices, migrations"| pg
-    history -.->|"BACKEND=redis<br/>queue + sessions"| redis
-    history -->|"BACKEND=postgres<br/>pgmq + session table"| pg
-    fetcher -.->|"BACKEND=redis<br/>queue"| redis
-    fetcher -->|"BACKEND=postgres<br/>pgmq as queue_worker"| pg
-    fetcher -->|"HTTPS"| cg
+  every service: one Docker container on its own VM
+  internet for apt / docker / CoinGecko: Vagrant management network 192.168.121.0/24
 ```
 
-- only history writes prices; fetcher's HTTP serves `/health` only;
-- Redis, when used, shares the db node: the task forbids separate VMs for infrastructure;
-- from Windows and the router's network the VMs are reached through a route to
-  `192.168.77.0/24` and `netsh portproxy` (`<laptop>:5173 → ui`); see the README.
+- history and fetcher never call each other — only through the queue;
+- only history writes prices; the fetcher's HTTP is `/health` only;
+- from outside only the UI and the bastion are reachable: [NETWORK-ACCESS.md](NETWORK-ACCESS.md).
 
-## 2. BACKEND: Redis or Postgres for everything
+## BACKEND
 
-Chosen at provisioning, read by both services at startup. Both implementations are
-built in; switching rebuilds nothing.
-
-| | `BACKEND=redis` (default) | `BACKEND=postgres` |
+| | `redis` (default) | `postgres` |
 |---|---|---|
-| queue | Redis Streams `price:requests`, `price:results` | pgmq queues `price_requests`, `price_results` |
-| sessions | Redis keys `session:<id>` | table `session` |
-| containers on db | `crypto_db` + `crypto_redis` | `crypto_db` only |
-| fetcher connects to | Redis | Postgres as `queue_worker` |
+| queue | Redis Streams | pgmq extension |
+| sessions | Redis | table `session` |
+| Redis container | yes | no |
 
-```text
-switch:    BACKEND=postgres vagrant provision db fetcher history
-remembered in .vagrant/backend; /health of both services shows the active one
+```
+BACKEND=postgres vagrant provision db fetcher history     # remembered in .vagrant/backend
 ```
 
-Each service has one `Queue` interface with two drivers (`history/src/queue/`,
-`fetcher/{redisqueue,pgqueue}.go`); the rest of the code does not know which one runs.
-Messages are the same JSON in both: requests `{ coin, vs, days? }`, results
-`{ coin, vs, origin, points[] }`.
+Both implementations are in the same images; the flag picks one when the container starts.
+`/health` of history and fetcher shows which one runs.
 
-## 3. Request flows
+## Data flow
 
-### Opening the page
+```
+ page load     browser ─▶ nginx ─▶ history ─▶ postgres: newest point
+                 fresh (< 15 min)  → 200
+                 stale             → 200 stale + request queued, UI rechecks every 4 s
+                 nothing stored    → 503 + request queued
 
-```mermaid
-sequenceDiagram
-    autonumber
-    participant B as Browser
-    participant N as nginx (ui)
-    participant H as history
-    participant P as Postgres
-    participant Q as queue
+ refresh       browser ─POST /api/refresh─▶ history ─request─▶ queue ─▶ fetcher ─▶ CoinGecko
+               browser ◀── 202 ──────────── history
+                                            history ◀─result── queue ◀─ fetcher
+                                            history ─INSERT─▶ postgres
+               UI re-reads after 2.5 s
 
-    B->>N: GET /api/price/latest
-    N->>H: GET /price/latest
-    H->>P: newest point for bitcoin/usd
-    alt fresh (younger than CACHE_TTL, 15 min)
-        H-->>B: 200 { price, stale: false }
-    else stale
-        H->>Q: request { coin, vs } (deduplicated)
-        H-->>B: 200 { price, stale: true }
-        loop every 4 s while stale
-            B->>N: GET /api/price/latest
-        end
-    else nothing stored yet
-        H->>Q: request { coin, vs }
-        H-->>B: 503 "a request has been queued"
-    end
-    B->>N: GET /api/price/history (7 days, for the chart)
+ bootstrap     history start, empty table → request { days: 7 } → ~169 hourly points
+ timer         fetcher every 12 h → result with origin "timer"
 ```
 
-### Refresh button
+Duplicates: `UNIQUE (coin, vs_currency, observed_at)` + `ON CONFLICT DO NOTHING`.
+Unknown `coin`/`vs` → 404, no CoinGecko call.
 
-```mermaid
-sequenceDiagram
-    autonumber
-    participant B as Browser
-    participant H as history
-    participant Q as queue
-    participant F as fetcher
-    participant C as CoinGecko
-    participant P as Postgres
+## Queue
 
-    B->>H: POST /api/refresh (through nginx)
-    H->>Q: request { bitcoin, usd }
-    H-->>B: 202 { queued: true }  (false if one already waits)
-    F->>Q: read (lease 30 s)
-    F->>C: /simple/price
-    C-->>F: price + last_updated_at
-    F->>Q: result { origin: on_demand, points }
-    F->>Q: ack the request
-    H->>Q: read result
-    H->>P: INSERT … ON CONFLICT DO NOTHING
-    H->>Q: ack the result
-    Note over B: re-reads /price/latest after 2.5 s
+```
+ sender ─send─▶ queue ─read─▶ receiver      message leased for 30 s
+                               ├─ done          → ack, removed
+                               ├─ crash / error → no ack, back after 30 s
+                               └─ malformed/4xx → ack, dropped
 ```
 
-Other paths through the same queue:
-
-| path | trigger | request | result origin |
-|---|---|---|---|
-| bootstrap | history start, empty table | `{ coin, vs, days: 7 }` → `/market_chart` | `bootstrap`, ~169 hourly points |
-| timer | fetcher, every 12 h | none, fetcher publishes on its own | `timer` |
-| on demand | stale or missing price, Refresh | `{ coin, vs }` → `/simple/price` | `on_demand` |
-
-- no duplicate points: `UNIQUE (coin, vs_currency, observed_at)` + `ON CONFLICT DO NOTHING`;
-  `observed_at` comes from CoinGecko, not from our write time;
-- only the default pair or one already stored can be fetched; any other `coin`/`vs` → 404,
-  so a stray name never costs a CoinGecko call.
-
-## 4. Queue delivery
-
-```mermaid
-sequenceDiagram
-    autonumber
-    participant S as sender
-    participant Q as queue
-    participant R as receiver
-
-    S->>Q: send message
-    R->>Q: read: message leased to R
-    Note over Q: invisible to others while leased (30 s)
-    alt work done
-        R->>Q: ack → message removed
-    else R crashed or the work failed
-        Note over Q: no ack for 30 s
-        R->>Q: next read gets it again (any instance)
-    else malformed message or upstream 4xx
-        R->>Q: ack anyway: a retry cannot help
-    end
-```
-
-| | Redis Streams | pgmq (Postgres) |
+| | Redis Streams | pgmq |
 |---|---|---|
-| read | `XREADGROUP BLOCK 5 s` | `pgmq.read_with_poll`, waits 5 s on the server |
-| lease | pending entry list | visibility timeout `vt` = 30 s |
+| read | `XREADGROUP BLOCK 5 s` | `read_with_poll`, 5 s |
 | ack | `XACK` | `pgmq.delete` |
-| retry | `XAUTOCLAIM` after 30 s idle | `vt` expires, the message is visible again |
-| dedup of quote requests | `SET pending:<coin>:<vs> NX EX 30` | unique index on waiting quotes, `23505` = already queued |
-| survives a restart | `appendonly yes` | tables in `pgdata` |
-| several readers | consumer groups `fetchers`, `history`; consumer = hostname | no groups: any reader takes the next visible message |
+| retry | `XAUTOCLAIM` after 30 s | visibility timeout 30 s |
+| dedup | `SET pending:<pair> NX EX 30` | unique index on waiting requests |
 
-- history reads results on a Redis connection of its own: commands on one connection
-  run in order, and a blocking read would stall every session lookup behind it;
-- `queue_worker` (fetcher's Postgres login, `003_pgmq.sql`): `SELECT, UPDATE, DELETE` on
-  requests, `SELECT, INSERT` on results — no prices, no sessions, cannot drop a queue.
+The fetcher logs into Postgres as `queue_worker`: requests and results only.
 
-## 5. Session (theme)
+## Session
 
-```mermaid
-sequenceDiagram
-    participant B as Browser
-    participant H as history
-    participant S as session store
-
-    B->>H: GET /session (first visit, no cookie)
-    H->>S: create session
-    H-->>B: { theme: system } + Set-Cookie connect.sid
-    B->>H: PUT /session/theme { dark } + cookie
-    H->>S: save { preferences: { theme: dark } }
-    H-->>B: { theme: dark }
-    Note over B,H: next visit or reload: GET /session → dark
+```
+ browser ──cookie connect.sid (signed id)──▶ history ──▶ redis | table "session"
+ value: { theme: light | dark | system } · 30 days
 ```
 
-| | |
-|---|---|
-| store | Redis `session:<id>` or table `session`, by `BACKEND`; 30 days |
-| cookie | `s:<id>.<HMAC>` — identifier only, signed with `SESSION_SECRET`, `HttpOnly`, `SameSite=Lax` |
-| scope | session middleware runs after the health and price routes: they create no session |
+## Provisioning
 
-## 6. Provisioning
-
-```mermaid
-flowchart TD
-    host["<b>Host</b> · the Vagrantfile, read on every vagrant command<br/>secrets · BACKEND · ROLE_ENV · logship keys · ssh config · payload"]
-    par{{"4 VMs provision in parallel"}}
-    host ==> par
-    par --> db_s & f_s & h_s & u_s
-
-    subgraph db_vm["db"]
-        db_s["code · unpack · system"] --> db_r["role<br/>build crypto/postgres:17-pgmq<br/>run crypto_db<br/>queue_worker password<br/>crypto_redis if redis"] --> db_c["collector<br/>user logs, logsink,<br/>logrotate"] --> db_l["logship"]
-    end
-    subgraph f_vm["fetcher"]
-        f_s["code · unpack · system"] --> f_w["wait for db<br/>:6379 or :5432"] --> f_r["role<br/>build + run<br/>crypto_fetcher"] --> f_l["logship"]
-    end
-    subgraph h_vm["history"]
-        h_s["code · unpack · system"] --> h_w["wait for db<br/>:5432 (+ :6379)"] --> h_r["role<br/>build + run<br/>crypto_history"] --> h_l["logship"]
-    end
-    subgraph u_vm["ui"]
-        u_s["code · unpack · system"] --> u_r["role<br/>build + run<br/>crypto_ui"] --> u_w["wait for history<br/>:3001"] --> u_e["e2e<br/>/api/health"] --> u_l["logship"]
-    end
+```
+ host: vagrant up ─▶ .vagrant/  secrets · backend · per-VM env · keys · ssh config · payload
+        │
+        │ 5 VMs in parallel
+  ┌─────┴──────┬─────────────────┬────────────────┬────────────────┐
+  bastion      db                fetcher          history          ui
+  user jump    pgmq image        wait db          wait db          build, run
+  sshd: keys   crypto_db         build, run       build, run       wait history
+  only         (+ crypto_redis)                                    e2e /api/health
+               logs collector
+               └── these four: logship cron · ssh-guard (sshd + nftables)
 ```
 
-Host side, written by the Vagrantfile into `.vagrant/` (git-ignored):
+- each container gets only its variables, from a 0600 env file — no secret on a command line;
+- images are built on each VM; no registry, no compose.
 
-| file | what |
-|---|---|
-| `secrets.env` | `POSTGRES_PASSWORD`, `REDIS_PASSWORD`, `SESSION_SECRET`, `QUEUE_WORKER_PASSWORD`; 0600, generated once |
-| `backend` | the last `BACKEND`, so a later `vagrant provision` keeps it |
-| `logship/` | one ssh key per VM + `authorized_keys` for the collector |
-| `ssh/config` | `ssh db` and friends from the host |
-| `payload.tgz` | the project, ~1 MB, shipped to every VM (no synced folder) |
+## Containers
 
-| step | runs as | does |
-|---|---|---|
-| code, unpack | root | archive → `/home/vagrant/app`, replaced, not merged |
-| system | root | Docker CE + buildx; `json-file` logs capped 3 × 10 MB |
-| role | vagrant | writes a 0600 env file with exactly the container's variables → `docker build` → `docker run --env-file` |
-| collector | root, db only | user `logs`, `/usr/local/bin/logsink`, `authorized_keys`, logrotate |
-| logship | root | key, `/usr/local/bin/logship`, cron every 15 min |
-
-`vagrant/lib.sh`: `env_file` (secrets never on a command line), `replace` (graceful stop,
-then run), `wait_healthy`, `wait_port` (up to 5 min). Waiting is required: the
-Vagrantfile order is not honoured. Images are built on each VM, no registry, no compose.
-
-**Who gets which variables**
-
-| container | variables |
-|---|---|
-| `crypto_db` | `POSTGRES_USER`, `POSTGRES_DB`, `POSTGRES_PASSWORD` |
-| `crypto_redis` | `REDIS_PASSWORD` |
-| `crypto_history` | `BACKEND`, `HISTORY_HOST`, `DATABASE_URL`, `SESSION_SECRET` (+ `REDIS_URL`, `REDIS_PASSWORD`) |
-| `crypto_fetcher` | `BACKEND`, `FETCHER_HOST`, then `REDIS_URL` + `REDIS_PASSWORD` **or** `QUEUE_DATABASE_URL` |
-| `crypto_ui` | `HISTORY_URL` — no secrets |
-
-## 7. Containers and images
-
-| container | image (build → runtime) | runs with | health |
+| container | runtime image | size | runs with |
 |---|---|---|---|
-| `crypto_ui` | node:24-alpine → nginx-unprivileged:1.29-alpine, ~82 MB | `-p 5173:8080` | `wget /` |
-| `crypto_history` | node:24-alpine → distroless/nodejs24:nonroot, ~227 MB | `--read-only --init` | `fetch /health` |
-| `crypto_fetcher` | golang:1.27-alpine → distroless/static:nonroot, ~19 MB | `--read-only` | `fetcher healthcheck` |
-| `crypto_db` | postgres:17-alpine + pgmq SQL files | volume `pgdata` | `pg_isready -h 127.0.0.1` |
-| `crypto_redis` | redis:7-alpine | volume `redisdata`, `appendonly yes` | `redis-cli ping` |
+| `crypto_ui` | nginx-unprivileged | ~82 MB | `-p 5173:8080` |
+| `crypto_history` | distroless/nodejs24 | ~227 MB | `--read-only --init` |
+| `crypto_fetcher` | distroless/static | ~19 MB | `--read-only` |
+| `crypto_db` | postgres:17-alpine + pgmq | | volume `pgdata` |
+| `crypto_redis` | redis:7-alpine | | volume `redisdata` |
 
-All: `--restart unless-stopped` (back after a reboot), non-root where the image allows,
-multi-stage builds with BuildKit cache mounts, `npm ci --omit=dev`,
-Go `CGO_ENABLED=0 -trimpath -ldflags="-s -w"`, `.dockerignore` keeps the context small.
+All: multi-stage builds, non-root, `HEALTHCHECK`, `--restart unless-stopped`.
 
-History at start: migrations (advisory lock) → results consumer → bootstrap → listen :3001.
+## SSH
 
-## 8. SSH from the host
+```
+ host: ssh db ─▶ bastion (user jump: TCP forward to :22 only) ─▶ db:22
+                 the key is checked by db; the bastion sees only encrypted traffic
 
-```text
-~/.ssh/config:  Include <project>/.vagrant/ssh/config      (first line)
-
-Host db        HostName 192.168.77.10   IdentityFile .vagrant/machines/db/libvirt/private_key
-Host fetcher   HostName 192.168.77.11   …
-User vagrant · IdentitiesOnly · no host key check (VMs are recreated)
+ bastion   ssh bastion → no shell, no terminal; LogLevel VERBOSE (who, which key)
+ every VM  :22 only from the bastion and Vagrant — sshd AllowUsers + nftables
 ```
 
-Generated from `MACHINES` on every Vagrant run; keys are the per-machine ones Vagrant
-creates on the first `up`.
+One project key `.vagrant/bastion/id_ed25519` (generated, git-ignored);
+`.vagrant/ssh/config` sets `ProxyJump bastion`, so `ssh db` just works.
 
-## 9. Logs
+## Logs
 
-```mermaid
-flowchart LR
-    subgraph vm["every VM · cron */15 · root"]
-        c["containers<br/>stdout / stderr"] --> j["Docker json-file<br/>3 × 10 MB per container"]
-        j -->|"docker logs --since prev --until now"| sp["/var/spool/logship/<br/>container.ts.log"]
-    end
-    subgraph db["db"]
-        ls["logsink host"] --> f["/srv/logs/host/container.log<br/>0640 · logrotate daily × 7"]
-    end
-    sp -->|"ssh logs@db container, batch on stdin<br/>deleted only after success"| ls
+```
+ every VM, cron */15                                    db
+ docker logs ─▶ /var/spool/logship ──ssh logs@db──▶ logsink ─▶ /srv/logs/<vm>/<container>.log
+                (deleted after success)
 ```
 
-`authorized_keys` of user `logs` on db, one line per VM:
+The `logs` key per VM: `restrict` (no shell), `from=<VM IP>`, `command=logsink <vm>` —
+it can only append to that VM's directory. Kept 7 days on db, 3 × 10 MB per container on a VM.
 
-```text
-restrict,from="192.168.77.12",command="/usr/local/bin/logsink history" ssh-ed25519 … logship@history
+## Limits
 
-restrict   no shell, PTY, port / agent / X11 forwarding
-from=      the key works only from that VM's address
-command=   any request runs logsink; the host is fixed by the key,
-           the client only names the container: ^[a-z0-9_-]{1,64}$
-```
-
-- collector unreachable → batches wait in the spool, the next run sends them;
-  if `docker` fails, the window is read again: duplicates beat gaps;
-- `flock`: runs never overlap; `docker ps -a`: stopped containers are read too;
-- one batch is capped at 50 MB; `authorized_keys` is owned by root;
-- retention: db keeps today + 7 rotated days; each VM keeps up to 30 MB per container.
-
-## 10. Known limits
-
-- delivery of logs lags up to 15 min; a dropped connection mid-batch may duplicate part of it;
-- switching `BACKEND` does not carry queued messages or sessions over (one request at most,
-  the theme resets);
-- `StrictHostKeyChecking no` for ssh between VMs and from the host: VMs are recreated;
-- no disk quota for `/srv/logs` beyond the per-batch cap;
-- one instance of each service: the container hostname is the Redis consumer name.
+- logs arrive up to 15 min late;
+- switching `BACKEND` drops waiting messages and sessions;
+- host key checks are off for ssh between machines: VMs are recreated;
+- one instance per service.
