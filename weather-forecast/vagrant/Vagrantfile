@@ -1,4 +1,5 @@
 require "tempfile"
+require "fileutils"
 
 project_root = File.expand_path("..", __dir__)
 deploy_input = File.join(project_root, "weather-deploy-input")
@@ -98,6 +99,23 @@ Vagrant.configure("2") do |config|
     echo 'Preparing common packages and directories'
     apt-get update
     apt-get install -y ca-certificates curl rsync
+    install -m 0755 -d /etc/apt/keyrings
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+      -o /etc/apt/keyrings/docker.asc
+    chmod a+r /etc/apt/keyrings/docker.asc
+
+    cat > /etc/apt/sources.list.d/docker.sources <<EOF
+Types: deb
+URIs: https://download.docker.com/linux/ubuntu
+Suites: $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}")
+Components: stable
+Architectures: $(dpkg --print-architecture)
+Signed-By: /etc/apt/keyrings/docker.asc
+EOF
+
+    apt-get update
+    apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin
+    systemctl enable --now docker
     install -d -m 755 /opt/weather-forecast /etc/weather-forecast
     install -d -m 755 -o vagrant -g vagrant /home/vagrant/weather-staging
     install -d -m 755 -o vagrant -g vagrant /home/vagrant/weather-staging/templates
@@ -112,7 +130,7 @@ Vagrant.configure("2") do |config|
     destination: "/home/vagrant/weather-staging/arch-key.pub"
 
   # Upload templates on every provision, including existing VMs.
-  %w[weather.service nginx.conf rabbitmq.conf redis-network.conf sshd_config ssh.socket.conf].each do |filename|
+  %w[nginx.conf postgres-hba.conf rabbitmq.conf sshd_config ssh.socket.conf].each do |filename|
     config.vm.provision "file",
       source: File.join(__dir__, "templates", filename),
       destination: "/home/vagrant/weather-staging/templates/#{filename}"
@@ -124,7 +142,8 @@ Vagrant.configure("2") do |config|
       vm.vm.hostname = "weather-#{name}"
       vm.vm.network "private_network", ip: settings[:ip]
       # A new stock box starts on 22; after provisioning Vagrant uses our configured port.
-      vm.ssh.port = bootstrap_ssh ? 22 : ssh_port.to_i
+      machine_id = File.join(__dir__, ".vagrant", "machines", name, "libvirt", "id")
+      vm.ssh.port = bootstrap_ssh || !File.exist?(machine_id) ? 22 : ssh_port.to_i
       vm.ssh.guest_port = vm.ssh.port
 
       if name == "ui"
@@ -144,6 +163,50 @@ Vagrant.configure("2") do |config|
         "/home/vagrant/weather-staging/#{settings[:folder]}",
         type: "rsync", rsync__exclude: settings[:exclude]
 
+      if name == "db"
+        backup_files = ["weather_history.auto.dump"]
+        if ENV["WEATHER_IMPORT_DB"] == "1"
+          backup_files.concat(%w[weather_history.dump weather_history.count])
+        end
+        backup_files.each do |filename|
+          source = File.join(deploy_input, filename)
+          next unless File.file?(source)
+
+          vm.vm.provision "file", source: source,
+            destination: "/home/vagrant/weather-staging/#{filename}"
+        end
+
+        vm.trigger.before :destroy do |trigger|
+          trigger.name = "Back up weather_history to the host"
+          trigger.ruby do |_env, machine|
+            next unless machine.id
+
+            unless machine.state.id == :running
+              machine.action(:up, provision_enabled: false, destroy_on_error: false)
+            end
+
+            remote_script = "/home/vagrant/weather-staging/backup-db.sh"
+            remote_dump = "/home/vagrant/weather-staging/weather_history.auto.dump"
+            machine.communicate.upload(File.join(__dir__, "backup-db.sh"), remote_script)
+            machine.communicate.sudo("bash #{remote_script}", error_check: true)
+            next unless machine.communicate.test("test -s #{remote_dump}")
+
+            FileUtils.mkdir_p(deploy_input, mode: 0700)
+            temporary = Tempfile.new(["weather-db-", ".dump"], deploy_input)
+            begin
+              temporary.close
+              machine.communicate.download(remote_dump, temporary.path)
+              File.chmod(0600, temporary.path)
+              File.rename(temporary.path, File.join(deploy_input, "weather_history.auto.dump"))
+            ensure
+              temporary.close!
+            end
+            machine.communicate.sudo("rm -f -- #{remote_dump}", error_check: true)
+            machine.ui.info("PostgreSQL backup saved in weather-deploy-input/weather_history.auto.dump")
+          end
+        end
+      end
+
       unless settings[:secret_keys].empty?
       filtered_file = filtered_secrets(
           secret_source,
@@ -162,7 +225,7 @@ Vagrant.configure("2") do |config|
         arguments = [settings[:ip], machines["history"][:ip]]
         arguments << "import-db" if ENV["WEATHER_IMPORT_DB"] == "1"
       when "history"
-        arguments = [machines["db"][:ip]]
+        arguments = [machines["db"][:ip], settings[:ip]]
       when "ui"
         arguments = [machines["history"][:ip]]
       else
