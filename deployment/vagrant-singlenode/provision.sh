@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 SOURCE=/opt/kyiv-air/source
-HELPERS=$SOURCE/deployment/scripts
+HELPERS=$SOURCE/deployment/vagrant-singlenode/scripts
 source "$HELPERS/docker.sh"
 trap cleanup_uploads EXIT
 ROLE=single
