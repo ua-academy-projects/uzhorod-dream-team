@@ -1,0 +1,12 @@
+Port @PORT@
+
+PermitRootLogin no
+PubkeyAuthentication yes
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+AuthenticationMethods publickey
+
+UsePAM yes
+X11Forwarding no
+AllowTcpForwarding yes
+Subsystem sftp internal-sftp
