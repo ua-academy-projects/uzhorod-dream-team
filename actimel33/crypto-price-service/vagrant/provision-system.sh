@@ -4,16 +4,17 @@ set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 
 if ! command -v docker >/dev/null 2>&1; then
-  apt-get update -qq
-  apt-get install -y -qq ca-certificates curl gnupg >/dev/null
+  # The first boot often holds the dpkg lock: wait for it instead of failing.
+  apt_get() { apt-get -o DPkg::Lock::Timeout=300 -qq "$@"; }
+  apt_get update
   install -m 0755 -d /etc/apt/keyrings
-  curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-  chmod a+r /etc/apt/keyrings/docker.gpg
-  echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
+  # Plain download, no gpg --dearmor: re-runnable after a partial first run.
+  curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+  echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] \
 https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
     > /etc/apt/sources.list.d/docker.list
-  apt-get update -qq
-  apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-buildx-plugin >/dev/null
+  apt_get update
+  apt_get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin >/dev/null
 fi
 
 # Cap local container logs; the central copy lives on db.

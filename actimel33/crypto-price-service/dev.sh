@@ -12,11 +12,6 @@ if [ ! -f .env ]; then
   exit 1
 fi
 
-# Older .env files predate redis and sessions: add the missing secrets.
-for key in REDIS_PASSWORD SESSION_SECRET; do
-  grep -q "^${key}=" .env || echo "${key}=$(openssl rand -hex 24)" >> .env
-done
-
 # Go has no --env-file like node, so the variables go into the environment.
 set -a
 # shellcheck disable=SC1091
@@ -32,8 +27,12 @@ if ! command -v go >/dev/null 2>&1; then
   exit 1
 fi
 
-echo "==> database"
-docker compose up -d --wait db redis
+echo "==> database (backend: ${BACKEND:-redis})"
+if [ "${BACKEND:-redis}" = redis ]; then
+  docker compose up -d --wait db redis
+else
+  docker compose up -d --wait db
+fi
 
 echo "==> building fetcher (Go)"
 ( cd services/fetcher && go build -buildvcs=false -o ../../bin/fetcher . )

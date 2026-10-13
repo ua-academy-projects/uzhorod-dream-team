@@ -16,4 +16,5 @@ if [[ ! $host =~ $NAME_RE || ! $name =~ $NAME_RE ]]; then
 fi
 
 mkdir -p "$LOG_ROOT/$host"
-cat >> "$LOG_ROOT/$host/$name.log"
+# One batch is 15 minutes of one container;
+head -c 52428800 >> "$LOG_ROOT/$host/$name.log"

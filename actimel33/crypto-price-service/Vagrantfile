@@ -1,6 +1,6 @@
 # One machine per role, each reachable on the LAN at its own address.
-# Redis shares the database node: the task asks not to spend a separate VM on
-# infrastructure services, and the two of them fit comfortably together.
+# Redis (BACKEND=redis) shares the database node: the task asks not to spend a
+# separate VM on infrastructure services.
 #
 #   vagrant up                     all machines
 #   vagrant up history             just one of them
@@ -10,7 +10,6 @@
 
 require "fileutils"
 require "securerandom"
-require "tmpdir"
 
 ENV["VAGRANT_DEFAULT_PROVIDER"] ||= "libvirt"
 
@@ -27,27 +26,30 @@ MACHINES = [
 
 ADDRESS = MACHINES.to_h { |m| [m[:name], m[:ip]] }.freeze
 
-# Secrets are generated once. the machines receive the values through the
-# environment.
+# Secrets are generated once, kept outside git; each machine gets only its own.
 SECRETS_FILE = File.join(PROJECT_DIR, ".vagrant", "secrets.env").freeze
 
+SECRET_GENERATORS = {
+  "POSTGRES_PASSWORD" => -> { SecureRandom.hex(16) },
+  "REDIS_PASSWORD" => -> { SecureRandom.hex(16) },
+  "SESSION_SECRET" => -> { SecureRandom.hex(32) },
+  "QUEUE_WORKER_PASSWORD" => -> { SecureRandom.hex(16) },
+}.freeze
+
+# Keeps existing values; generates only the keys that are missing.
 def load_secrets(path)
-  if File.exist?(path)
-    File.readlines(path).each_with_object({}) do |line, acc|
-      key, value = line.strip.split("=", 2)
-      acc[key] = value if key && value
-    end
-  else
-    generated = {
-      "POSTGRES_PASSWORD" => SecureRandom.hex(16),
-      "REDIS_PASSWORD" => SecureRandom.hex(16),
-      "SESSION_SECRET" => SecureRandom.hex(32),
-    }
-    FileUtils.mkdir_p(File.dirname(path))
-    File.write(path, generated.map { |k, v| "#{k}=#{v}" }.join("\n") + "\n")
-    File.chmod(0o600, path)
-    generated
-  end
+  stored = File.exist?(path) ? File.readlines(path).each_with_object({}) do |line, acc|
+    key, value = line.strip.split("=", 2)
+    acc[key] = value if key && value
+  end : {}
+  missing = SECRET_GENERATORS.reject { |key, _| stored.key?(key) }
+  return stored if missing.empty?
+
+  secrets = stored.merge(missing.transform_values(&:call))
+  FileUtils.mkdir_p(File.dirname(path))
+  File.write(path, secrets.map { |k, v| "#{k}=#{v}" }.join("\n") + "\n", perm: 0o600)
+  File.chmod(0o600, path)
+  secrets
 end
 
 SECRETS = load_secrets(SECRETS_FILE)
@@ -103,42 +105,61 @@ LOGSHIP_AUTHORIZED_KEYS = write_logship_authorized_keys
 
 # No synced folder: the project lives in the WSL filesystem and the code travels
 # to the machine as an archive over ssh.
-PAYLOAD = File.join(Dir.tmpdir, "crypto-price-payload.tgz").freeze
-
-PACK = [
-  "tar", "-C", %("#{PROJECT_DIR}"),
-  "--exclude=./.vagrant", "--exclude=./.env", "--exclude=./logs", "--exclude=./bin",
-  "--exclude=./ui/dist", "--exclude=./ui/node_modules",
-  "--exclude=./services/history/node_modules",
-  "-czf", %("#{PAYLOAD}"), ".",
-].join(" ").freeze
+PAYLOAD = File.join(PROJECT_DIR, ".vagrant", "payload.tgz").freeze
 
 # Packing happens while the config is read, not in a trigger: Vagrant checks
 # that the file provisioner's source exists before any trigger can run.
-abort("failed to pack the project: #{PACK}") unless system(PACK)
+packed = system(
+  "tar", "-C", PROJECT_DIR,
+  "--exclude=./.vagrant", "--exclude=./.env", "--exclude=./logs", "--exclude=./bin",
+  "--exclude=./ui/dist", "--exclude=./ui/node_modules", "--exclude=./services/history/node_modules",
+  "-czf", PAYLOAD, "."
+)
+abort("failed to pack the project into #{PAYLOAD}") unless packed
 
-# Unpacked over the existing directory
+# Replaces the code: files deleted from the repo must not linger on the VM.
 UNPACK = <<~SHELL
   set -eu
+  rm -rf /home/vagrant/app
   mkdir -p /home/vagrant/app
   tar xzf /tmp/app.tgz -C /home/vagrant/app
   chown -R vagrant:vagrant /home/vagrant/app
 SHELL
 
-LOG_COLLECTOR = "logs@#{ADDRESS.fetch("db")}".freeze
+LOGSHIP_COLLECTOR = "logs@#{ADDRESS.fetch("db")}".freeze
 
-ROLE_ENV = SECRETS.merge(
-  "DB_IP" => ADDRESS.fetch("db"),
-  "REDIS_IP" => ADDRESS.fetch("db"),
-  "HISTORY_IP" => ADDRESS.fetch("history"),
-).freeze
+# Where the queue and the sessions live. Remembered between runs, so a later
+# `vagrant provision history` does not quietly switch one service back:
+#   BACKEND=postgres vagrant provision db fetcher history
+BACKEND_FILE = File.join(PROJECT_DIR, ".vagrant", "backend").freeze
+BACKEND = (ENV["BACKEND"] || (File.read(BACKEND_FILE).strip if File.exist?(BACKEND_FILE)) || "redis").freeze
+abort("BACKEND must be redis or postgres, got #{BACKEND}") unless %w[redis postgres].include?(BACKEND)
+File.write(BACKEND_FILE, BACKEND)
+
+DB_IP = ADDRESS.fetch("db")
+POSTGRES = { "POSTGRES_USER" => "app", "POSTGRES_DB" => "crypto" }.freeze
+DATABASE_URL = "postgres://app:#{SECRETS.fetch("POSTGRES_PASSWORD")}@#{DB_IP}:5432/crypto".freeze
+QUEUE_DATABASE_URL = "postgres://queue_worker:#{SECRETS.fetch("QUEUE_WORKER_PASSWORD")}@#{DB_IP}:5432/crypto".freeze
+REDIS = { "REDIS_URL" => "redis://#{DB_IP}:6379", "REDIS_PASSWORD" => SECRETS.fetch("REDIS_PASSWORD") }.freeze
+
+# Each role script gets what its containers need and nothing else: the fetcher
+# never sees the app owner's password, the ui no secret at all.
+ROLE_ENV = {
+  "db" => POSTGRES.merge(SECRETS.slice("POSTGRES_PASSWORD", "REDIS_PASSWORD", "QUEUE_WORKER_PASSWORD")),
+  "fetcher" => BACKEND == "postgres" ? { "QUEUE_DATABASE_URL" => QUEUE_DATABASE_URL } : REDIS,
+  "history" => { "DATABASE_URL" => DATABASE_URL, "SESSION_SECRET" => SECRETS.fetch("SESSION_SECRET") }
+                 .merge(BACKEND == "redis" ? REDIS : {}),
+  "ui" => {},
+}.transform_values do |env|
+  env.merge("BACKEND" => BACKEND, "DB_IP" => DB_IP, "HISTORY_IP" => ADDRESS.fetch("history")).freeze
+end.freeze
 
 Vagrant.configure("2") do |config|
   config.vm.box = "bento/ubuntu-24.04"
   config.vm.boot_timeout = 600
   config.vm.synced_folder ".", "/vagrant", disabled: true
 
-  MACHINES.sort_by { |m| %w[db fetcher history ui].index(m[:name]) }.each do |spec|
+  MACHINES.each do |spec|
     config.vm.define spec[:name] do |machine|
       machine.vm.hostname = spec[:name]
       # Only a LAN address
@@ -152,13 +173,11 @@ Vagrant.configure("2") do |config|
 
       machine.vm.provision "code", type: "file", source: PAYLOAD, destination: "/tmp/app.tgz"
       machine.vm.provision "unpack", type: "shell", inline: UNPACK
-      machine.vm.provision "system", type: "shell",
-                           path: "vagrant/provision-system.sh",
-                           env: { "ROLE" => spec[:name] }
+      machine.vm.provision "system", type: "shell", path: "vagrant/provision-system.sh"
       machine.vm.provision "role", type: "shell", privileged: false,
                            path: "vagrant/provision-#{spec[:name]}.sh",
-                           env: ROLE_ENV
-                           
+                           env: ROLE_ENV.fetch(spec[:name])
+
       if spec[:name] == "db"
         machine.vm.provision "collector-keys", type: "file",
                              source: LOGSHIP_AUTHORIZED_KEYS,
@@ -172,7 +191,7 @@ Vagrant.configure("2") do |config|
                            destination: "/tmp/logship_key"
       machine.vm.provision "logship", type: "shell",
                            path: "vagrant/provision-logship.sh",
-                           env: { "LOG_COLLECTOR" => LOG_COLLECTOR }
+                           env: { "LOGSHIP_COLLECTOR" => LOGSHIP_COLLECTOR }
     end
   end
 
@@ -181,7 +200,8 @@ Vagrant.configure("2") do |config|
     "",
     *MACHINES.map { |m| "  #{m[:name].ljust(8)} http://#{m[:ip]}:#{m[:port]}" },
     "",
-    "  redis shares the db node at #{ADDRESS.fetch("db")}:6379",
+    "  backend           #{BACKEND}   (switch: BACKEND=postgres vagrant provision db fetcher history)",
+    *(BACKEND == "redis" ? ["  redis             #{DB_IP}:6379 on the db node"] : []),
     "",
     "  open the app      http://#{ADDRESS.fetch("ui")}:5173",
     "  check history     curl http://#{ADDRESS.fetch("history")}:3001/health",
