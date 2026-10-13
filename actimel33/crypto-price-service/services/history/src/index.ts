@@ -15,7 +15,11 @@ await queue.startConsumer();
 await bootstrap();
 
 const app = await createApp();
-app.listen(config.port, config.host, () => {
+app.listen(config.port, config.host, (err?: Error) => {
+  // Express 5 reports a failed bind here; without this the process would keep
+  // consuming the queue with no HTTP at all.
+  if (err) throw err;
   console.log(`[history] listening on http://${config.host}:${config.port}`);
-  console.log(`[history] queue: ${config.queueDriver}, redis: ${config.redisUrl}, cache TTL ${config.cacheTtlMs / 1000}s`);
+  const redisNote = config.backend === 'redis' ? `, redis: ${config.redisUrl}` : '';
+  console.log(`[history] backend: ${config.backend}${redisNote}, cache TTL ${config.cacheTtlMs / 1000}s`);
 });

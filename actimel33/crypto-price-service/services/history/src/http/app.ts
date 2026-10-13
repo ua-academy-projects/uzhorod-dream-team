@@ -10,26 +10,30 @@ type HttpError = Error & { status?: number };
 
 export async function createApp() {
   const app = express();
-  app.use(express.json({ limit: '1mb' }));
+  app.disable('x-powered-by');
+  // The only JSON body is {"theme": ...}.
+  app.use(express.json({ limit: '1kb' }));
 
-  // Health must answer even if sessions cannot start, so it goes first.
+  // Health and prices need no session: they answer even if the session store
+  // is down, and a price request does not leave a session behind.
   app.use(healthRoutes);
-  app.use(await sessionMiddleware());
   app.use(priceRoutes);
+  app.use(await sessionMiddleware());
   app.use(sessionRoutes);
 
   app.use((_req: Request, res: Response) => {
     res.status(404).json({ error: 'not found' });
   });
 
-  app.use((err: HttpError, _req: Request, res: Response, _next: NextFunction) => {
+  app.use((err: HttpError, _req: Request, res: Response, next: NextFunction) => {
+    if (res.headersSent) return next(err);
     const status = err.status ?? 500;
     if (status >= 500) {
       console.error(`[history] ${err.name}: ${err.message}`);
     }
-    // Only text explicitly marked as public leaves the process. The rest stays in the log.
-    const body = err instanceof AppError && !err.expose ? err.publicMessage
-      : err instanceof AppError ? err.message
+    // 4xx (ours or the JSON parser's) explain the request; 5xx text stays in the log.
+    const body = err instanceof AppError ? err.publicMessage
+      : status < 500 ? err.message
       : 'internal error';
     res.status(status).json({ error: body });
   });

@@ -1,22 +1,10 @@
 import { query } from './pool.ts';
-import type { Origin, PricePoint, StoredPoint } from '../core/types.ts';
+import type { Origin, PricePoint } from '../core/types.ts';
 
-type Row = {
-  coin: string;
-  vs_currency: string;
-  price: string;
-  observed_at: Date;
-  origin: Origin;
-};
+type Row = { price: string; observed_at: Date };
 
 // pg returns NUMERIC as a string — convert it to a number in one place.
-const toStored = (row: Row): StoredPoint => ({
-  coin: row.coin,
-  vs: row.vs_currency,
-  price: Number(row.price),
-  observedAt: row.observed_at,
-  origin: row.origin,
-});
+const toPoint = (row: Row): PricePoint => ({ price: Number(row.price), observedAt: row.observed_at });
 
 /** Writes a batch of points in one statement. Duplicates on (coin, vs, observed_at) are skipped silently. */
 export async function insertMany(
@@ -43,18 +31,19 @@ export async function insertMany(
   return result.rowCount ?? 0;
 }
 
-export async function latest(coin: string, vs: string): Promise<StoredPoint | null> {
+export async function latest(coin: string, vs: string): Promise<PricePoint | null> {
   const { rows } = await query<Row>(
-    `SELECT coin, vs_currency, price, observed_at, source AS origin
+    `SELECT price, observed_at
        FROM price_points
       WHERE coin = $1 AND vs_currency = $2
       ORDER BY observed_at DESC
       LIMIT 1`,
     [coin, vs],
   );
-  return rows.length > 0 ? toStored(rows[0]!) : null;
+  return rows[0] ? toPoint(rows[0]) : null;
 }
 
+/** The newest `limit` points of the range, oldest first. */
 export async function range(
   coin: string,
   vs: string,
@@ -63,15 +52,18 @@ export async function range(
   limit: number,
 ): Promise<PricePoint[]> {
   const { rows } = await query<Row>(
-    `SELECT coin, vs_currency, price, observed_at, source AS origin
-       FROM price_points
-      WHERE coin = $1 AND vs_currency = $2
-        AND observed_at >= $3 AND observed_at <= $4
-      ORDER BY observed_at ASC
-      LIMIT $5`,
+    `SELECT price, observed_at FROM (
+       SELECT price, observed_at
+         FROM price_points
+        WHERE coin = $1 AND vs_currency = $2
+          AND observed_at >= $3 AND observed_at <= $4
+        ORDER BY observed_at DESC
+        LIMIT $5
+     ) newest
+     ORDER BY observed_at ASC`,
     [coin, vs, from, to, limit],
   );
-  return rows.map(toStored).map(({ price, observedAt }) => ({ price, observedAt }));
+  return rows.map(toPoint);
 }
 
 export async function countFor(coin: string, vs: string): Promise<number> {

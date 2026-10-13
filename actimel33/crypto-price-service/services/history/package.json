@@ -8,6 +8,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "connect-pg-simple": "^10.0.0",
     "connect-redis": "^10.0.0",
     "express": "^5.2.1",
     "express-session": "^1.19.0",
@@ -15,6 +16,7 @@
     "redis": "^6.3.0"
   },
   "devDependencies": {
+    "@types/connect-pg-simple": "^7.0.3",
     "@types/express": "^5.0.6",
     "@types/express-session": "^1.19.0",
     "@types/node": "^26.6.3",

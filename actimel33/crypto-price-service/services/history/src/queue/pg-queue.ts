@@ -1,130 +1,70 @@
-import pg from 'pg';
-import { config } from '../config.ts';
 import { query } from '../db/pool.ts';
 import { errorMessage } from '../core/errors.ts';
-import { storeResult } from './store-result.ts';
-import type { PriceRequest, Queue, ResultPayload } from './types.ts';
+import { parseResult, storeResult } from './store-result.ts';
+import type { PriceRequest, Queue } from './types.ts';
 
-const TOPIC_REQUESTS = 'price:requests';
-const TOPIC_RESULTS = 'price:results';
-// A taken message is invisible for this long; without an ack it is retried.
+// pgmq queues, created by 003_pgmq.sql.
+const QUEUE_REQUESTS = 'price_requests';
+const QUEUE_RESULTS = 'price_results';
+// A read message is invisible for this long; without a delete it comes back.
 const LEASE_S = 30;
 const BATCH = 10;
-// Fallback for a missed notification.
-const POLL_MS = 5000;
+// read_with_poll waits this long on the server when the queue is empty.
+const POLL_S = 5;
 
-/** Postgres-backed queue: queue_messages table, SKIP LOCKED + lease, LISTEN/NOTIFY to wake up. */
+const UNIQUE_VIOLATION = '23505';
+
+/** BACKEND=postgres: the pgmq extension, send / read_with_poll / delete. */
 export const pgQueue: Queue = {
   async requestPrice(request: PriceRequest): Promise<string | null> {
-    // A duplicate pending quote hits uq_queue_pending_quote and inserts nothing.
-    const { rows } = await query<{ id: string }>(
-      `INSERT INTO queue_messages (topic, payload) VALUES ($1, $2)
-       ON CONFLICT DO NOTHING RETURNING id`,
-      [TOPIC_REQUESTS, JSON.stringify(request)],
-    );
-    return rows[0]?.id ?? null;
+    try {
+      const { rows } = await query<{ id: string }>(
+        'SELECT pgmq.send($1, $2::jsonb) AS id',
+        [QUEUE_REQUESTS, JSON.stringify(request)],
+      );
+      return rows[0]?.id ?? null;
+    } catch (err) {
+      // uq_pending_quote: the same quote request is already waiting.
+      if ((err as { code?: string }).code === UNIQUE_VIOLATION) return null;
+      throw err;
+    }
   },
 
   async startConsumer(): Promise<void> {
-    console.log(`[history] consuming ${TOPIC_RESULTS} from postgres`);
-    const wake = new Wakeup();
-    void listen(TOPIC_RESULTS, wake);
-    void loop(wake);
+    console.log(`[history] consuming ${QUEUE_RESULTS} from pgmq`);
+    void loop();
   },
 };
 
-async function loop(wake: Wakeup): Promise<void> {
+async function loop(): Promise<void> {
   for (;;) {
     try {
-      const taken = await take(TOPIC_RESULTS);
-      for (const message of taken) await handle(message);
-      if (taken.length === BATCH) continue; // more may be waiting
+      const { rows } = await query<{ msg_id: string; message: unknown }>(
+        'SELECT msg_id, message FROM pgmq.read_with_poll($1, $2, $3, $4)',
+        [QUEUE_RESULTS, LEASE_S, BATCH, POLL_S],
+      );
+      for (const row of rows) await handle(row.msg_id, row.message);
     } catch (err) {
       console.error(`[history] queue read failed: ${errorMessage(err)}`);
+      await new Promise((resolve) => setTimeout(resolve, 1000));
     }
-    await wake.wait(POLL_MS);
   }
 }
 
-/** Leases up to BATCH ready messages; other consumers skip the locked rows. */
-async function take(topic: string): Promise<{ id: string; payload: ResultPayload }[]> {
-  const { rows } = await query<{ id: string; payload: ResultPayload }>(
-    `UPDATE queue_messages
-        SET available_at = now() + make_interval(secs => $2), attempts = attempts + 1
-      WHERE id IN (SELECT id FROM queue_messages
-                    WHERE topic = $1 AND available_at <= now()
-                    ORDER BY id LIMIT $3
-                    FOR UPDATE SKIP LOCKED)
-      RETURNING id, payload`,
-    [topic, LEASE_S, BATCH],
-  );
-  return rows.sort((a, b) => Number(a.id) - Number(b.id));
-}
-
-async function handle(message: { id: string; payload: ResultPayload }): Promise<void> {
-  try {
-    await storeResult(message.payload);
-  } catch (err) {
-    // No ack: the lease expires and the message is retried.
-    console.error(`[history] result ${message.id} failed: ${errorMessage(err)}`);
+async function handle(id: string, message: unknown): Promise<void> {
+  const payload = parseResult(message);
+  if (!payload) {
+    // Malformed: drop it, retrying cannot help.
+    console.error(`[history] bad result ${id}, dropped`);
+    await query('SELECT pgmq.delete($1, $2::bigint)', [QUEUE_RESULTS, id]);
     return;
   }
-  await query('DELETE FROM queue_messages WHERE id = $1', [message.id]);
-}
-
-/** Keeps a dedicated connection on LISTEN; reconnects after a drop. */
-async function listen(topic: string, wake: Wakeup): Promise<void> {
-  for (;;) {
-    const client = new pg.Client({ connectionString: config.databaseUrl });
-    // Handlers first: an 'error' event without a listener would crash the process.
-    const closed = new Promise<void>((resolve) => {
-      client.on('error', (err: Error) => {
-        console.error(`[history] listen connection lost: ${err.message}`);
-        resolve();
-      });
-      client.on('end', () => resolve());
-    });
-    client.on('notification', () => wake.fire());
-    try {
-      await client.connect();
-      await client.query(`LISTEN "${topic}"`);
-      await closed;
-    } catch (err) {
-      console.error(`[history] listen failed: ${errorMessage(err)}`);
-    }
-    await client.end().catch(() => undefined);
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+  try {
+    await storeResult(payload);
+  } catch (err) {
+    // No delete: the lease expires and the result is retried.
+    console.error(`[history] result ${id} failed: ${errorMessage(err)}`);
+    return;
   }
-}
-
-/** A sleep that a notification can cut short. */
-class Wakeup {
-  private resolve: (() => void) | null = null;
-  private pending = false;
-
-  fire(): void {
-    if (this.resolve) {
-      this.resolve();
-      this.resolve = null;
-    } else {
-      this.pending = true; // arrived while busy: skip the next wait
-    }
-  }
-
-  wait(ms: number): Promise<void> {
-    if (this.pending) {
-      this.pending = false;
-      return Promise.resolve();
-    }
-    return new Promise((resolve) => {
-      const timer = setTimeout(() => {
-        this.resolve = null;
-        resolve();
-      }, ms);
-      this.resolve = () => {
-        clearTimeout(timer);
-        resolve();
-      };
-    });
-  }
+  await query('SELECT pgmq.delete($1, $2::bigint)', [QUEUE_RESULTS, id]);
 }

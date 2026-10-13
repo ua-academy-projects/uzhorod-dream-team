@@ -6,7 +6,8 @@ import { pool } from './pool.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS_DIR = join(HERE, '..', '..', '..', '..', 'db', 'migrations');
-
+// Any constant: serializes migrations when several instances start at once.
+const MIGRATION_LOCK = 727274;
 
 /**
  * Applies pending db/migrations/*.sql files in alphabetical order, each in its
@@ -15,6 +16,7 @@ const MIGRATIONS_DIR = join(HERE, '..', '..', '..', '..', 'db', 'migrations');
 export async function runMigrations(): Promise<string[]> {
   const client = await pool.connect();
   try {
+    await client.query('SELECT pg_advisory_lock($1)', [MIGRATION_LOCK]);
     await client.query(`
       CREATE TABLE IF NOT EXISTS schema_migrations (
         name       TEXT PRIMARY KEY,
@@ -37,12 +39,13 @@ export async function runMigrations(): Promise<string[]> {
         await client.query('COMMIT');
         freshlyApplied.push(file);
       } catch (err) {
-        await client.query('ROLLBACK');
+        await client.query('ROLLBACK').catch(() => undefined);
         throw new Error(`migration ${file} failed: ${errorMessage(err)}`);
       }
     }
     return freshlyApplied;
   } finally {
+    await client.query('SELECT pg_advisory_unlock($1)', [MIGRATION_LOCK]).catch(() => undefined);
     client.release();
   }
 }

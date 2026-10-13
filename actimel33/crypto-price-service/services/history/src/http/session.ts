@@ -1,8 +1,10 @@
 import session from 'express-session';
 import { RedisStore } from 'connect-redis';
+import connectPgSimple from 'connect-pg-simple';
 import type { RequestHandler } from 'express';
 import { config } from '../config.ts';
-import { redis } from '../queue/client.ts';
+import { pool } from '../db/pool.ts';
+import { redis } from '../redis.ts';
 
 const COOKIE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -17,15 +19,23 @@ declare module 'express-session' {
   }
 }
 
+/** Redis, or the session table of 004_sessions.sql with BACKEND=postgres. */
+async function sessionStore(): Promise<session.Store> {
+  if (config.backend === 'postgres') {
+    const PgStore = connectPgSimple(session);
+    return new PgStore({ pool, tableName: 'session' });
+  }
+  return new RedisStore({ client: await redis(), prefix: 'session:' });
+}
+
 /**
- * Sessions live in Redis rather than in the process: the UI keeps its theme
- * even after this service restarts, and a second instance would see the same
- * data. The cookie carries only the identifier.
+ * Sessions live outside the process: the UI keeps its theme even after this
+ * service restarts, and a second instance would see the same data. The cookie
+ * carries only the identifier.
  */
 export async function sessionMiddleware(): Promise<RequestHandler> {
-  const client = await redis();
   return session({
-    store: new RedisStore({ client, prefix: 'session:' }),
+    store: await sessionStore(),
     secret: config.sessionSecret,
     resave: false,
     // true, not false: the cookie is handed out on the very first visit rather

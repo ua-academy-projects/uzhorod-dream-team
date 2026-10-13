@@ -29,7 +29,7 @@ priceRoutes.post('/refresh', async (req: Request, res: Response) => {
   // Accepted, not done: the fetcher answers through the results stream, and
   // the next read of /price/latest will see the new point.
   const id = await service.refresh(coin, vs);
-  res.status(202).json({ queued: true, id, coin, vs });
+  res.status(202).json({ queued: id !== null, id, coin, vs });
 });
 
 priceRoutes.get('/price/history', async (req: Request, res: Response) => {

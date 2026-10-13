@@ -9,5 +9,5 @@ healthRoutes.get('/health', async (_req: Request, res: Response) => {
   const alive = await isDbAlive();
   res
     .status(alive ? 200 : 503)
-    .json({ status: alive ? 'ok' : 'degraded', db: alive ? 'ok' : 'down', queue: config.queueDriver });
+    .json({ status: alive ? 'ok' : 'degraded', db: alive ? 'ok' : 'down', backend: config.backend });
 });
