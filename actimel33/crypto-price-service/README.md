@@ -5,14 +5,14 @@ Docker container on its own Vagrant VM.
 
 ```
 browser → ui (nginx) → history (Node/TS) → PostgreSQL
-                            ↕ Redis Streams
+                            ↕ queue: Redis Streams or pgmq (BACKEND)
                         fetcher (Go) → CoinGecko
 ```
 
 | VM      | Address        | Port | Container                   |
 |---------|----------------|------|-----------------------------|
-| db      | 192.168.77.10  | 5432 | `crypto_db` (postgres:17)   |
-|         |                | 6379 | `crypto_redis` (redis:7)    |
+| db      | 192.168.77.10  | 5432 | `crypto_db` (postgres + pgmq) |
+|         |                | 6379 | `crypto_redis` (BACKEND=redis only) |
 | fetcher | 192.168.77.11  | 3002 | `crypto_fetcher`            |
 | history | 192.168.77.12  | 3001 | `crypto_history`            |
 | ui      | 192.168.77.13  | 5173 | `crypto_ui`                 |
@@ -34,11 +34,24 @@ vagrant destroy -f          # tear down
 ```
 
 Open <http://192.168.77.13:5173>. The `ui` provisioner ends with an end-to-end
-check through `/api/price/latest`.
+check through `/api/health` (ui → nginx → history → db).
 
-Secrets (`POSTGRES_PASSWORD`, `REDIS_PASSWORD`, `SESSION_SECRET`) are generated
-on the first `vagrant up` into `.vagrant/secrets.env` and never committed.
-Each VM builds its `.env` from `.env.example`.
+Secrets (`POSTGRES_PASSWORD`, `REDIS_PASSWORD`, `SESSION_SECRET`,
+`QUEUE_WORKER_PASSWORD`) are generated on the first `vagrant up` into
+`.vagrant/secrets.env` and never committed. Each container gets only the
+variables it needs, through a 0600 env file on its VM.
+
+## Redis or Postgres (BACKEND)
+
+```bash
+BACKEND=postgres vagrant provision db fetcher history   # queue on pgmq, sessions in Postgres, no Redis
+BACKEND=redis vagrant provision db fetcher history      # back to Redis Streams + Redis sessions
+curl -s 192.168.77.12:3001/health                       # "backend": "..."
+```
+
+The choice is remembered in `.vagrant/backend`, so a later `vagrant provision`
+keeps it. Switch db, fetcher and history together: messages and sessions are not
+carried over (at most one queued request is lost, the theme resets).
 
 ## Run locally
 
@@ -46,7 +59,7 @@ Requires Docker, Go 1.27, Node 24.
 
 ```bash
 cp .env.example .env        # set the passwords
-./dev.sh                    # PostgreSQL + Redis in compose, services as processes
+./dev.sh                    # PostgreSQL (+ Redis) in compose, services as processes
 ```
 
 UI on <http://localhost:5173>, logs in `logs/`.
@@ -57,10 +70,14 @@ UI on <http://localhost:5173>, logs in `logs/`.
 |--------|----------------------|---------------------------------------|
 | GET    | `/api/price/latest`  | latest quote, marked stale if old     |
 | GET    | `/api/price/history` | hourly points for the chart           |
-| POST   | `/api/refresh`       | queue a fetch, returns 202            |
+| POST   | `/api/refresh`       | queue a fetch, returns 202 (`queued: false` if one is already waiting) |
 | GET    | `/api/session`       | stored theme                          |
 | PUT    | `/api/session/theme` | save theme: `light`, `dark`, `system` |
 | GET    | `/health`            | liveness (history and fetcher)        |
+
+Price routes take optional `coin` and `vs` (default `bitcoin`/`usd`). Only the
+default pair or one already stored can be fetched; any other answers 404, so a
+stray name never costs a CoinGecko call.
 
 ## SSH by name
 
