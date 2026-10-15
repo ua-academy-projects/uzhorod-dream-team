@@ -7,15 +7,15 @@ import (
 	"fmt"
 	"time"
 
-	"fetcher/internal/rabbitmq"
+	"fetcher/internal/syncprotocol"
 )
 
 type MessageHandler struct{ service Service }
 
 func NewMessageHandler(service Service) *MessageHandler { return &MessageHandler{service: service} }
 
-func (h *MessageHandler) Handle(ctx context.Context, request rabbitmq.Request) (json.RawMessage, error) {
-	if request.Version != rabbitmq.Version {
+func (h *MessageHandler) Handle(ctx context.Context, request syncprotocol.Request) (json.RawMessage, error) {
+	if request.Version != syncprotocol.Version {
 		return nil, errors.New("unsupported request version")
 	}
 	if request.Deadline.IsZero() {
@@ -29,11 +29,11 @@ func (h *MessageHandler) Handle(ctx context.Context, request rabbitmq.Request) (
 	var result any
 	var err error
 	switch request.Operation {
-	case rabbitmq.ListLocations:
+	case syncprotocol.ListLocations:
 		result, err = h.service.GetLocations(ctx)
-	case rabbitmq.LatestLocations:
+	case syncprotocol.LatestLocations:
 		result, err = h.service.GetLocationsLatest(ctx)
-	case rabbitmq.LocationMeasurements:
+	case syncprotocol.LocationMeasurements:
 		if request.LocationID <= 0 {
 			return nil, errors.New("invalid location ID")
 		}

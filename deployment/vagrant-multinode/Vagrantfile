@@ -1,5 +1,11 @@
 require "ipaddr"
 
+postgres_only = case ENV.fetch("POSTGRES_ONLY", "false").downcase
+                when "true", "1", "t" then true
+                when "false", "0", "f" then false
+                else raise "POSTGRES_ONLY must be true or false"
+                end
+
 project_root = File.expand_path("../..", __dir__)
 
 settings = {
@@ -12,7 +18,7 @@ settings = {
 
 machines = {
   "db" => {hostname: "kyiv-air-db", ip: "192.168.56.201", memory: 2048, cpus: 1,
-           port: 5432, source: nil, env_files: %w[db rabbitmq], script: "scripts/db.sh",
+           port: 5432, source: "history", env_files: %w[db rabbitmq], script: "scripts/db.sh",
            containers: "kyiv-air-postgres kyiv-air-redis kyiv-air-rabbitmq"},
   "fetcher" => {hostname: "kyiv-air-fetcher", ip: "192.168.56.202", memory: 1024, cpus: 1,
                 port: 8080, source: "fetcher", env_files: %w[fetcher rabbitmq], script: "scripts/fetcher.sh",
@@ -27,6 +33,13 @@ machines = {
                 port: 80, source: nil, env_files: [], script: "scripts/bastion.sh",
                 containers: "kyiv-air-bastion"}
 }
+
+if postgres_only
+  machines["db"][:env_files] = %w[db queue]
+  machines["db"][:containers] = "kyiv-air-postgres"
+  machines["fetcher"][:env_files] = %w[fetcher queue]
+  machines["history"][:env_files] = %w[history db]
+end
 
 def validate_settings(settings, machines)
   subnets = %i[private_subnet public_subnet].map do |key|
@@ -121,7 +134,7 @@ Vagrant.configure("2") do |config|
       end
 
       topology = {
-        "ROLE" => name, "PRIVATE_IP" => machine[:ip], "SERVICE_PORT" => machine[:port].to_s,
+        "POSTGRES_ONLY" => postgres_only.to_s, "ROLE" => name, "PRIVATE_IP" => machine[:ip], "SERVICE_PORT" => machine[:port].to_s,
         "PRIVATE_SUBNET" => settings[:private_subnet], "PUBLIC_IP" => settings[:public_ip],
         "BASTION_IP" => machines["bastion"][:ip], "UI_IP" => machines["ui"][:ip], "DB_IP" => machines["db"][:ip],
         "DB_PORT" => machines["db"][:port].to_s,
@@ -153,7 +166,7 @@ Vagrant.configure("2") do |config|
       if name == "bastion"
         vm.vm.post_up_message += "\nPublic UI: http://#{settings[:public_ip]}\nSSH: vagrant@#{settings[:public_ip]} (ProxyJump to private VMs)"
       end
-      if name == "db"
+      if name == "db" && !postgres_only
         vm.vm.post_up_message += "\nRedis: #{machine[:ip]}:#{settings[:redis_port]} (History VM access only)"
         vm.vm.post_up_message += "\nRabbitMQ: #{machine[:ip]}:#{settings[:rabbitmq_port]} (Fetcher and History VM access only)\nManagement: vagrant ssh db -- -L 15672:127.0.0.1:15672"
       end

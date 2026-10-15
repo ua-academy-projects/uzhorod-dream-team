@@ -5,6 +5,8 @@ APP=/opt/kyiv-air
 CONFIG=/etc/kyiv-air
 NETWORK=kyiv-air
 READY_TIMEOUT=${READY_TIMEOUT:-300}
+POSTGRES_ONLY=${POSTGRES_ONLY:-false}
+[[ "$POSTGRES_ONLY" == true || "$POSTGRES_ONLY" == false ]] || { echo "Invalid POSTGRES_ONLY" >&2; exit 1; }
 export DEBIAN_FRONTEND=noninteractive
 
 fail() { echo "$*" >&2; exit 1; }
@@ -12,7 +14,7 @@ env_value() { sed -n "s/^$2=//p" "$1" | tr -d '\r'; }
 require_env() { [[ -s "/tmp/kyiv-air-$1.env" ]] || fail "Missing env/$1.env. Run full provisioning."; }
 
 cleanup_uploads() {
-  rm -f /tmp/kyiv-air-{fetcher,history,db,ui,rabbitmq}.env /tmp/kyiv-air-{common,docker-firewall}.sh /tmp/kyiv-air-images.env /tmp/kyiv-air-bastion.conf.template
+  rm -f /tmp/kyiv-air-{fetcher,history,db,ui,rabbitmq,queue}.env /tmp/kyiv-air-{common,docker-firewall}.sh /tmp/kyiv-air-images.env /tmp/kyiv-air-bastion.conf.template
 }
 
 copy_env() {
@@ -38,9 +40,18 @@ read_database() {
   REDIS_PASSWORD=$(env_value /tmp/kyiv-air-db.env REDIS_PASSWORD)
   [[ "$DB_NAME" =~ ^[a-z_][a-z0-9_]*$ ]] || fail "POSTGRES_DB must be a lowercase identifier."
   validate_password POSTGRES_PASSWORD "$DB_PASSWORD" 16
-  validate_password REDIS_PASSWORD "$REDIS_PASSWORD" 32
+  if [[ "$POSTGRES_ONLY" == false ]]; then validate_password REDIS_PASSWORD "$REDIS_PASSWORD" 32; fi
   DATABASE_URL="postgres://kyiv_air:${DB_PASSWORD}@${DB_HOST}:5432/${DB_NAME}?sslmode=disable"
   REDIS_URL="redis://:${REDIS_PASSWORD}@${REDIS_HOST}:6379/0"
+}
+
+read_queue() {
+  require_env queue
+  QUEUE_DB_NAME=$(env_value /tmp/kyiv-air-queue.env POSTGRES_DB)
+  FETCHER_DB_PASSWORD=$(env_value /tmp/kyiv-air-queue.env POSTGRES_FETCHER_PASSWORD)
+  [[ "$QUEUE_DB_NAME" =~ ^[a-z_][a-z0-9_]*$ ]] || fail "POSTGRES_DB in queue.env must be a lowercase identifier."
+  validate_password POSTGRES_FETCHER_PASSWORD "$FETCHER_DB_PASSWORD" 16
+  FETCHER_DATABASE_URL="postgres://kyiv_air_fetcher:${FETCHER_DB_PASSWORD}@${DB_HOST}:5432/${QUEUE_DB_NAME}?sslmode=disable"
 }
 
 read_rabbitmq() {
@@ -73,7 +84,7 @@ install_docker() {
 configure_firewall() {
   local key
   {
-    for key in ROLE PRIVATE_IP PRIVATE_SUBNET PUBLIC_IP BASTION_IP HISTORY_IP FETCHER_IP SERVICE_PORT; do
+    for key in POSTGRES_ONLY ROLE PRIVATE_IP PRIVATE_SUBNET PUBLIC_IP BASTION_IP HISTORY_IP FETCHER_IP SERVICE_PORT; do
       printf '%s=%q\n' "$key" "${!key:-}"
     done
   } > "$CONFIG/firewall.env"

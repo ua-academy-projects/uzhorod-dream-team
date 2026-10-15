@@ -12,20 +12,35 @@ import (
 	"fetcher/internal/config"
 	"fetcher/internal/locations"
 	"fetcher/internal/openaq"
+	"fetcher/internal/postgresqueue"
 	"fetcher/internal/rabbitmq"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func main() {
-	cfg := config.Load()
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatal(err)
+	}
 	aqClient := openaq.NewClient(cfg)
 	locService := locations.NewService(aqClient)
 	locHandler := locations.NewHandler(locService)
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
-	worker := rabbitmq.NewWorker(cfg.RabbitMQ, locations.NewMessageHandler(locService))
+	var worker interface{ Run(context.Context) }
+	if cfg.PostgresOnly {
+		pool, err := pgxpool.New(ctx, cfg.DatabaseURL)
+		if err != nil {
+			log.Fatalf("Invalid PostgreSQL configuration: %v", err)
+		}
+		defer pool.Close()
+		worker = postgresqueue.NewWorker(pool, locations.NewMessageHandler(locService))
+	} else {
+		worker = rabbitmq.NewWorker(cfg.RabbitMQ, locations.NewMessageHandler(locService))
+	}
 	workerDone := make(chan struct{})
 	go func() {
 		defer close(workerDone)

@@ -7,19 +7,17 @@ import (
 	"log"
 
 	"fetcher/internal/config"
+	"fetcher/internal/syncprotocol"
+
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
-type Handler interface {
-	Handle(context.Context, Request) (json.RawMessage, error)
-}
-
 type Worker struct {
 	cfg     config.RabbitMQ
-	handler Handler
+	handler syncprotocol.Handler
 }
 
-func NewWorker(cfg config.RabbitMQ, handler Handler) *Worker {
+func NewWorker(cfg config.RabbitMQ, handler syncprotocol.Handler) *Worker {
 	return &Worker{cfg: cfg, handler: handler}
 }
 
@@ -60,7 +58,7 @@ func (w *Worker) consume(session *Session) error {
 type publishFunc func(context.Context, string, amqp.Publishing) error
 
 func (w *Worker) process(ctx context.Context, delivery amqp.Delivery, publish publishFunc) error {
-	var request Request
+	var request syncprotocol.Request
 	if delivery.CorrelationId == "" || delivery.ReplyTo == "" || json.Unmarshal(delivery.Body, &request) != nil || request.Deadline.IsZero() {
 		return delivery.Reject(false)
 	}
@@ -73,7 +71,7 @@ func (w *Worker) process(ctx context.Context, delivery amqp.Delivery, publish pu
 	if ctx.Err() != nil {
 		return delivery.Ack(false)
 	}
-	response := Response{Version: Version, Data: data}
+	response := syncprotocol.Response{Version: syncprotocol.Version, Data: data}
 	if err != nil {
 		response.Data = nil
 		response.Error = err.Error()

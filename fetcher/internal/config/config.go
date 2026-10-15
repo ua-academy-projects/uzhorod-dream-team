@@ -1,13 +1,18 @@
 package config
 
 import (
+	"fmt"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/joho/godotenv"
 )
 
 type Config struct {
+	PostgresOnly bool
+	DatabaseURL  string
+
 	Environment  string
 	Port         string
 	OpenAQURL    string
@@ -16,7 +21,7 @@ type Config struct {
 	RabbitMQ     RabbitMQ
 }
 
-func Load() *Config {
+func Load() (*Config, error) {
 	env := os.Getenv("ENVIRONMENT")
 	if env == "" {
 		env = "development"
@@ -47,12 +52,25 @@ func Load() *Config {
 		}
 	}
 
+	postgresOnly := false
+	if value := os.Getenv("POSTGRES_ONLY"); value != "" {
+		var err error
+		postgresOnly, err = strconv.ParseBool(value)
+		if err != nil {
+			return nil, fmt.Errorf("invalid POSTGRES_ONLY: %q", value)
+		}
+	}
+	if postgresOnly && os.Getenv("DATABASE_URL") == "" {
+		return nil, fmt.Errorf("DATABASE_URL is required when POSTGRES_ONLY=true")
+	}
 	return &Config{
+		PostgresOnly: postgresOnly,
+		DatabaseURL:  os.Getenv("DATABASE_URL"),
 		Environment:  env,
 		Port:         port,
 		OpenAQURL:    openaqURL,
 		OpenAQAPIKey: os.Getenv("OPENAQ_API_KEY"),
 		HTTPTimeout:  timeout,
 		RabbitMQ:     loadRabbitMQ(),
-	}
+	}, nil
 }

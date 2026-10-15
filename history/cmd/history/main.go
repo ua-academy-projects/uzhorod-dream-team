@@ -20,12 +20,17 @@ import (
 	"history/internal/locations"
 	"history/internal/measurements"
 	"history/internal/parameters"
+	"history/internal/postgresqueue"
+	"history/internal/rabbitmq"
 	"history/internal/sessions"
 	"history/internal/syncer"
 )
 
 func main() {
-	cfg := config.Load()
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
@@ -42,28 +47,42 @@ func main() {
 	paramRepo := parameters.NewRepository(pool)
 	measRepo := measurements.NewRepository(pool)
 
-	fetcherClient := syncer.NewFetcherClient(ctx, cfg.RabbitMQ, cfg.FetcherTimeout)
-	defer fetcherClient.Close()
+	var requester syncer.Requester
+	cleanupDone := make(chan struct{})
+	if cfg.PostgresOnly {
+		requester = postgresqueue.NewClient(pool)
+		go func() { defer close(cleanupDone); postgresqueue.Cleanup(ctx, pool) }()
+	} else {
+		client := rabbitmq.NewClient(ctx, cfg.RabbitMQ)
+		defer client.Close()
+		requester = client
+		close(cleanupDone)
+	}
+	fetcherClient := syncer.NewFetcherClient(requester, cfg.FetcherTimeout)
 
 	svc := locations.NewService(locRepo, paramRepo, measRepo)
 	handler := locations.NewHandler(svc)
 
-	redisOptions, err := redis.ParseURL(cfg.RedisURL)
-	if err != nil {
-		log.Fatal("Invalid REDIS_URL configuration")
+	var sessionRepository sessions.Repository
+	if cfg.PostgresOnly {
+		sessionRepository = sessions.NewPostgresRepository(pool)
+	} else {
+		redisOptions, err := redis.ParseURL(cfg.RedisURL)
+		if err != nil {
+			log.Fatal("Invalid REDIS_URL configuration")
+		}
+		redisOptions.DialTimeout = cfg.SessionStoreTimeout
+		redisOptions.ReadTimeout = cfg.SessionStoreTimeout
+		redisOptions.WriteTimeout = cfg.SessionStoreTimeout
+		redisOptions.ContextTimeoutEnabled = true
+		redisOptions.MaxRetries = -1
+		redisClient := redis.NewClient(redisOptions)
+		defer redisClient.Close()
+		sessionRepository = sessions.NewRepository(redisClient)
 	}
-	redisOptions.DialTimeout = cfg.SessionRedisTimeout
-	redisOptions.ReadTimeout = cfg.SessionRedisTimeout
-	redisOptions.WriteTimeout = cfg.SessionRedisTimeout
-	redisOptions.ContextTimeoutEnabled = true
-	redisOptions.MaxRetries = -1
-
-	redisClient := redis.NewClient(redisOptions)
-	defer redisClient.Close()
-
-	sessionService := sessions.NewService(sessions.NewRepository(redisClient), cfg.SessionTTL, nil)
+	sessionService := sessions.NewService(sessionRepository, cfg.SessionTTL, nil)
 	sessionHandler := sessions.NewHandler(sessionService, sessions.HandlerOptions{
-		TTL: cfg.SessionTTL, Timeout: cfg.SessionRedisTimeout,
+		TTL: cfg.SessionTTL, Timeout: cfg.SessionStoreTimeout,
 		Secure: cfg.SessionCookieSecure,
 	})
 
@@ -123,6 +142,7 @@ func main() {
 		log.Fatalf("Could not listen on %s: %v\n", cfg.Port, err)
 	}
 	cancel()
+	<-cleanupDone
 	<-syncDone
 	<-shutdownDone
 }

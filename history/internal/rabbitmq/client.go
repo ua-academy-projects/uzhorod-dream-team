@@ -11,8 +11,10 @@ import (
 	"sync"
 	"time"
 
-	amqp "github.com/rabbitmq/amqp091-go"
 	"history/internal/config"
+	"history/internal/syncprotocol"
+
+	amqp "github.com/rabbitmq/amqp091-go"
 )
 
 type Client struct {
@@ -84,7 +86,7 @@ func (c *Client) getSession(ctx context.Context) (*Session, error) {
 	}
 }
 
-func (c *Client) Call(ctx context.Context, request Request) (json.RawMessage, error) {
+func (c *Client) Call(ctx context.Context, request syncprotocol.Request) (json.RawMessage, error) {
 	if _, ok := ctx.Deadline(); !ok {
 		return nil, errors.New("RabbitMQ request requires a deadline")
 	}
@@ -100,7 +102,7 @@ func (c *Client) Call(ctx context.Context, request Request) (json.RawMessage, er
 	if err != nil {
 		return nil, err
 	}
-	request.Version = Version
+	request.Version = syncprotocol.Version
 	request.Deadline, _ = ctx.Deadline()
 	body, err := json.Marshal(request)
 	if err != nil {
@@ -134,11 +136,11 @@ func (c *Client) Call(ctx context.Context, request Request) (json.RawMessage, er
 			if delivery.CorrelationId != correlationID {
 				continue
 			}
-			var response Response
+			var response syncprotocol.Response
 			if err := json.Unmarshal(delivery.Body, &response); err != nil {
 				return nil, fmt.Errorf("decode Fetcher reply: %w", err)
 			}
-			if response.Version != Version {
+			if response.Version != syncprotocol.Version {
 				return nil, errors.New("unsupported Fetcher reply version")
 			}
 			if response.Error != "" {

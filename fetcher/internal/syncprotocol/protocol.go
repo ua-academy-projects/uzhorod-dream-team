@@ -1,4 +1,4 @@
-package rabbitmq
+package syncprotocol
 
 import (
 	"encoding/json"

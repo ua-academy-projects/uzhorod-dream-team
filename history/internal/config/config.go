@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -10,6 +11,7 @@ import (
 )
 
 type Config struct {
+	PostgresOnly            bool
 	Environment             string
 	Port                    string
 	DatabaseURL             string
@@ -22,10 +24,10 @@ type Config struct {
 	RedisURL                string
 	SessionTTL              time.Duration
 	SessionCookieSecure     bool
-	SessionRedisTimeout     time.Duration
+	SessionStoreTimeout     time.Duration
 }
 
-func Load() *Config {
+func Load() (*Config, error) {
 	env := os.Getenv("ENVIRONMENT")
 	if env == "" {
 		env = "development"
@@ -90,13 +92,25 @@ func Load() *Config {
 		redisURL = "redis://localhost:6379/0"
 	}
 	sessionTTL := positiveDuration("SESSION_TTL", 720*time.Hour)
-	sessionTimeout := positiveDuration("SESSION_REDIS_TIMEOUT", time.Second)
+	sessionTimeout := positiveDuration("SESSION_STORE_TIMEOUT", positiveDuration("SESSION_REDIS_TIMEOUT", time.Second))
 	sessionSecure := env != "development"
 	if value, err := strconv.ParseBool(os.Getenv("SESSION_COOKIE_SECURE")); err == nil {
 		sessionSecure = value
 	}
 
+	postgresOnly := false
+	if value := os.Getenv("POSTGRES_ONLY"); value != "" {
+		var err error
+		postgresOnly, err = strconv.ParseBool(value)
+		if err != nil {
+			return nil, fmt.Errorf("invalid POSTGRES_ONLY: %q", value)
+		}
+	}
+	if postgresOnly && os.Getenv("DATABASE_URL") == "" {
+		return nil, fmt.Errorf("DATABASE_URL is required when POSTGRES_ONLY=true")
+	}
 	return &Config{
+		PostgresOnly:            postgresOnly,
 		Environment:             env,
 		Port:                    port,
 		DatabaseURL:             dbURL,
@@ -109,8 +123,8 @@ func Load() *Config {
 		RedisURL:                redisURL,
 		SessionTTL:              sessionTTL,
 		SessionCookieSecure:     sessionSecure,
-		SessionRedisTimeout:     sessionTimeout,
-	}
+		SessionStoreTimeout:     sessionTimeout,
+	}, nil
 }
 
 func positiveDuration(name string, fallback time.Duration) time.Duration {

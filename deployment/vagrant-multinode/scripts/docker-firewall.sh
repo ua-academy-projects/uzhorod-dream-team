@@ -36,9 +36,11 @@ allow_port() {
 case "$ROLE" in
   db)
     allow_port "$PRIVATE_SUBNET" 5432
-    allow_port "$HISTORY_IP" 6379
-    allow_port "$FETCHER_IP" 5672
-    allow_port "$HISTORY_IP" 5672
+    if [[ "${POSTGRES_ONLY:-false}" == false ]]; then
+      allow_port "$HISTORY_IP" 6379
+      allow_port "$FETCHER_IP" 5672
+      allow_port "$HISTORY_IP" 5672
+    fi
     ;;
   fetcher|history)
     allow_port "$PRIVATE_SUBNET" "$SERVICE_PORT"
