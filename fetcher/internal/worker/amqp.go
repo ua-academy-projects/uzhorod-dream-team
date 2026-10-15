@@ -1,11 +1,11 @@
-// Package worker is the Fetcher's only interface: it consumes fetch requests from a RabbitMQ
-// queue, calls Open-Meteo and publishes the reply to the queue named in the request's ReplyTo,
-// with the same CorrelationId (request/reply over AMQP).
+// Package worker is the Fetcher's only interface: it consumes fetch requests from a queue, calls
+// Open-Meteo and publishes the reply to the queue named in the request's ReplyTo, with the same
+// CorrelationId. The queue is RabbitMQ (RunAMQP, this file) or pgmq in PostgreSQL (RunPGMQ, pgmq.go);
+// both carry the same JSON request and reply (handle.go).
 package worker
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -15,7 +15,7 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
-// Queue names shared with the History service.
+// RabbitMQ queue names shared with the History service.
 const (
 	RequestQueue = "weather.fetch.requests"
 	ReplyQueue   = "weather.fetch.replies"
@@ -26,9 +26,9 @@ const (
 	fetchTimeout = 15 * time.Second // per request, Open-Meteo call included
 )
 
-// Run consumes requests until ctx is cancelled (returns nil) or the connection to RabbitMQ
+// RunAMQP consumes requests until ctx is cancelled (returns nil) or the connection to RabbitMQ
 // is lost (returns an error). It does not reconnect: the process exits and Docker restarts it.
-func Run(ctx context.Context, url string, w Weather) error {
+func RunAMQP(ctx context.Context, url string, w Weather) error {
 	conn, err := amqp.Dial(url)
 	if err != nil {
 		return fmt.Errorf("connect to RabbitMQ: %w", err)
@@ -53,7 +53,7 @@ func Run(ctx context.Context, url string, w Weather) error {
 		return fmt.Errorf("consume %s: %w", RequestQueue, err)
 	}
 	closed := conn.NotifyClose(make(chan *amqp.Error, 1))
-	slog.Info("Fetcher worker consuming", "queue", RequestQueue)
+	slog.Info("Fetcher worker consuming", "broker", "rabbitmq", "queue", RequestQueue)
 
 	// In-flight requests finish (and get acked) before the connection is closed
 	var wg sync.WaitGroup
@@ -90,12 +90,8 @@ func respond(ch *amqp.Channel, w Weather, d amqp.Delivery) {
 		_ = d.Ack(false)
 		return
 	}
-	body, err := json.Marshal(Handle(ctx, w, d.Body))
-	if err != nil {
-		slog.Error("cannot encode reply", "error", err)
-		body = []byte(`{"ok":false,"error":"Internal error","kind":"internal"}`)
-	}
-	err = ch.PublishWithContext(ctx, "", d.ReplyTo, false, false, amqp.Publishing{
+	body := encodeReply(Handle(ctx, w, d.Body))
+	err := ch.PublishWithContext(ctx, "", d.ReplyTo, false, false, amqp.Publishing{
 		ContentType:   "application/json",
 		CorrelationId: d.CorrelationId,
 		DeliveryMode:  amqp.Persistent,

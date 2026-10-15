@@ -5,13 +5,17 @@ package config
 import (
 	"bufio"
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"strings"
 )
 
 type Config struct {
+	// UseRedisRabbitMQ picks the queue: RabbitMQ (AMQPURL) if true, pgmq in PostgreSQL (DatabaseURL) if false
+	UseRedisRabbitMQ bool
 	AMQPURL          string
+	DatabaseURL      string
 	OpenMeteoBaseURL string
 }
 
@@ -65,9 +69,30 @@ func unquote(v string) string {
 	return v
 }
 
-func Load() Config {
-	return Config{
-		AMQPURL:          getenv("AMQP_URL", "amqp://guest:guest@localhost:5672/"),
-		OpenMeteoBaseURL: getenv("OPEN_METEO_BASE_URL", "https://api.open-meteo.com/v1/forecast"),
+// boolean reads true/false (also 1/0, yes/no, any case); unset or empty gives fallback.
+// Anything else is an error, so a typo does not silently pick the default.
+func boolean(name string, fallback bool) (bool, error) {
+	raw := os.Getenv(name)
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "":
+		return fallback, nil
+	case "true", "1", "yes":
+		return true, nil
+	case "false", "0", "no":
+		return false, nil
 	}
+	return false, fmt.Errorf("environment variable %s must be true or false, got %q", name, raw)
+}
+
+func Load() (Config, error) {
+	useRedisRabbitMQ, err := boolean("USE_REDIS_RABBITMQ", true)
+	if err != nil {
+		return Config{}, err
+	}
+	return Config{
+		UseRedisRabbitMQ: useRedisRabbitMQ,
+		AMQPURL:          getenv("AMQP_URL", "amqp://guest:guest@localhost:5672/"),
+		DatabaseURL:      getenv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/weather"),
+		OpenMeteoBaseURL: getenv("OPEN_METEO_BASE_URL", "https://api.open-meteo.com/v1/forecast"),
+	}, nil
 }

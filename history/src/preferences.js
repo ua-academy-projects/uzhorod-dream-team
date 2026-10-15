@@ -1,7 +1,7 @@
 
 import { randomUUID } from 'node:crypto';
 import { Router } from 'express';
-import { cache } from './cache.js';
+import { cache } from './cache/index.js';
 import { BadRequestError, asyncHandler } from './routes.js';
 
 export const THEMES = ['light', 'dark'];
@@ -32,7 +32,8 @@ function identify(req, res, next) {
   next();
 }
 
-const key = (uid) => `prefs:${uid}`;
+// A JSON value, not the earlier Redis hash under prefs:<uid>; those just expire
+const key = (uid) => `preferences:${uid}`;
 
 const router = Router();
 router.use(identify);
@@ -42,8 +43,8 @@ router.get(
   asyncHandler(async (req, res) => {
     // Without the cache the UI falls back to the system theme instead of showing an error
     if (!cache.isReady) return res.json({ theme: null });
-    const prefs = await cache.hGetAll(key(req.uid));
-    res.json({ theme: isTheme(prefs.theme) ? prefs.theme : null });
+    const prefs = await cache.get(key(req.uid));
+    res.json({ theme: isTheme(prefs?.theme) ? prefs.theme : null });
   }),
 );
 
@@ -54,7 +55,7 @@ router.put(
     if (!isTheme(theme)) throw new BadRequestError(`"theme" must be one of: ${THEMES.join(', ')}`);
     if (!cache.isReady) return res.status(503).json({ error: 'Preferences storage is unavailable' });
     // TTL is renewed on every save, so preferences of active browsers never expire
-    await cache.multi().hSet(key(req.uid), { theme }).expire(key(req.uid), TTL_SECONDS).exec();
+    await cache.set(key(req.uid), { theme }, TTL_SECONDS);
     res.json({ theme });
   }),
 );

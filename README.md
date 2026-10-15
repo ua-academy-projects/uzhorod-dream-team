@@ -11,6 +11,10 @@ React UI ◀──── GET /api/weather/* ───────────┤
                                              └──▶ Redis (UI preferences)
 ```
 
+`USE_REDIS_RABBITMQ=false` swaps Redis and RabbitMQ for PostgreSQL itself: the queues become
+[pgmq](https://github.com/pgmq/pgmq) queues and the cache an UNLOGGED table cleaned by [pg_cron](https://github.com/citusdata/pg_cron).
+The images contain both clients; the variable only picks one at run time (see [docs/architecture.md#backends](docs/architecture.md#backends)).
+
 - [docs/architecture.md](docs/architecture.md): components, request flow, data model and HTTP API
 - [docs/weather-api.md](docs/weather-api.md): the chosen weather API and its free-tier limits
 - [docs/infrastructure.md](docs/infrastructure.md): the Vagrant VMs, their Docker containers, provisioning scripts and useful commands
@@ -19,11 +23,11 @@ React UI ◀──── GET /api/weather/* ───────────┤
 
 | Part | Tech |
 |---|---|
-| Fetcher service | Go (compiled), amqp091-go |
+| Fetcher service | Go (compiled), amqp091-go, pgx |
 | History service | Node.js, Express, Sequelize, pg, amqplib, redis |
 | Scheduler | Node.js, node-cron (a system crontab works too, see below) |
 | Frontend | React, Vite, Recharts |
-| Database, cache, queue | PostgreSQL 16, Redis, RabbitMQ (Docker locally and on the DB VM under Vagrant) |
+| Database, cache, queue | PostgreSQL 16, Redis, RabbitMQ; or PostgreSQL 16 with pgmq and pg_cron alone (Docker locally and on the DB VM under Vagrant) |
 
 ## Project structure
 
@@ -32,12 +36,14 @@ React UI ◀──── GET /api/weather/* ───────────┤
 ├── fetcher/            # Fetcher service in Go (RabbitMQ worker, no HTTP API): talks to Open-Meteo
 │   ├── cmd/fetcher/    #   main.go: entry point (queue worker, or --once)
 │   ├── Dockerfile      #   image for the Vagrant VM (each service folder has one)
-│   └── internal/       #   config, openmeteo (client + mapper), worker (queue consumer); *_test.go next to the code
+│   └── internal/       #   config, openmeteo (client + mapper), worker (RabbitMQ and pgmq consumers); *_test.go next to the code
 ├── history/            # History service (Express API, port 3001)
-│   ├── src/            #   routes, service, Sequelize model, catch-up logic, broker.js + fetcherClient.js (RabbitMQ client for the Fetcher)
+│   ├── src/            #   routes, service, Sequelize model, catch-up logic, fetcherClient.js,
+│   │                   #   broker/ (RabbitMQ or pgmq), cache/ (Redis or PostgreSQL)
 │   └── test/
 ├── scheduler/          # cron process that calls POST /api/weather/fetch
 ├── frontend/           # React UI
+├── postgres/           # PostgreSQL image with the pgmq and pg_cron extensions
 ├── docs/
 └── docker-compose.yml  # generic, reusable PostgreSQL container + RabbitMQ
 ```
@@ -60,8 +66,11 @@ cp history/.env.example history/.env
 cp scheduler/.env.example scheduler/.env
 cp frontend/.env.example frontend/.env
 
-# 2. Start PostgreSQL and RabbitMQ (Redis: any local instance on :6379)
-npm run db:up            # = docker-compose up -d
+# 2. Start plain PostgreSQL and RabbitMQ (Redis: any local instance on :6379)
+npm run db:up            # = docker-compose --profile redis-rabbitmq up -d
+# or, with USE_REDIS_RABBITMQ=false in history/.env and fetcher/.env: PostgreSQL with pgmq and pg_cron only
+npm run db:up:postgres   # = docker-compose --profile postgres up -d --build
+# both use the container name postgres: npm run db:down before switching
 
 # 3. Install dependencies for all workspaces
 npm install
@@ -117,7 +126,9 @@ Notes:
   (the value is baked into the build), or put a web server in front that proxies `/api` to History.
 - `start:frontend` downloads the small `serve` package through `npx` on first use (needs internet access).
 - Set `AMQP_URL` in `history/.env` and `fetcher/.env` (same broker) and `HISTORY_SERVICE_URL` in `scheduler/.env` to the real addresses.
-- The Fetcher has no network API; only clients with RabbitMQ credentials can send it requests.
+  With `USE_REDIS_RABBITMQ=false` (in both files) the Fetcher needs `DATABASE_URL` instead, and the PostgreSQL server
+  needs pgmq and pg_cron (`shared_preload_libraries=pg_cron`, `cron.database_name=<database>`): see `postgres/` and `docker-compose.yml`.
+- The Fetcher has no network API; only clients with broker (or queue database) credentials can send it requests.
 
 ## Run on Vagrant VMs (Docker)
 
@@ -127,14 +138,14 @@ the secrets from the root `.env` into `/etc/weather/`, builds the images on the 
 optimizations: [docs/infrastructure.md](docs/infrastructure.md).
 
 ```bash
-cp .env.example .env   # set POSTGRES_PASSWORD, REDIS_PASSWORD, RABBITMQ_PASSWORD, BRIDGE_IF
+cp .env.example .env   # set POSTGRES_PASSWORD, REDIS_PASSWORD, RABBITMQ_PASSWORD, FETCHER_DB_PASSWORD, BRIDGE_IF
 cp ~/.ssh/id_ed25519.pub .   # your SSH public key, added to authorized_keys on every VM
 vagrant up             # weather-postgres-db .10, weather-fetcher .11, weather-history .12, weather-frontend .13
 ```
 
 | VM | Containers |
 |---|---|
-| `weather-postgres-db` | `postgres`, `redis`, `rabbitmq` |
+| `weather-postgres-db` | `true`: `postgres` (plain), `redis`, `rabbitmq`; `false`: `postgres` with pgmq and pg_cron |
 | `weather-fetcher` | `fetcher` |
 | `weather-history` | `history`, `scheduler` |
 | `weather-frontend` | `frontend` (nginx: UI + `/api` proxy) |
@@ -143,7 +154,7 @@ Check and open:
 
 ```bash
 vagrant ssh <vm> -c "docker ps"               # every container Up; postgres, redis, rabbitmq, frontend (healthy)
-curl http://192.168.56.12:3001/api/health     # {"status":"ok","database":"up","cache":"up","broker":"up"}
+curl http://192.168.56.12:3001/api/health     # {"status":"ok","database":"up","cache":"up","broker":"up","backend":"redis-rabbitmq"}
 vagrant reload weather-frontend --provision   # prints "weather-frontend LAN URL: http://<ip>:4173"
 ```
 
@@ -152,6 +163,21 @@ management UI at http://192.168.56.10:15672 (`weather` / `RABBITMQ_PASSWORD`).
 
 After a code or `.env` change: `vagrant provision <vm>` rebuilds the images and recreates that VM's containers
 (each VM mounts only its own service folders, read-only).
+
+To switch between Redis + RabbitMQ and PostgreSQL at run time (images already on the VMs, no provisioning, no build),
+run `weather-backend` on the three VMs, DB first:
+
+```bash
+for vm in weather-postgres-db weather-fetcher weather-history; do
+  vagrant ssh $vm -c "weather-backend false"   # true = Redis + RabbitMQ + plain PostgreSQL, false = PostgreSQL + pgmq + pg_cron
+done
+```
+
+On the DB VM it starts the other PostgreSQL image and starts or removes Redis and RabbitMQ; switching to `true`
+also removes pgmq, pg_cron and their tables, so the database is plain again (the weather data stays). On the
+Fetcher and History VMs it recreates the container from the same image with the other value
+([details](docs/infrastructure.md#switching-the-backend-at-run-time)). `USE_REDIS_RABBITMQ` in `.env` is only the
+value a provisioning starts with. Saved themes start empty after a switch.
 Data stays in the named volumes `pgdata`, `redisdata` and `rabbitmqdata`.
 
 Logs of all VMs (system and containers) are pulled every 15 minutes onto `weather-history` as zstd archives and
@@ -165,7 +191,11 @@ Each part reads its own `.env` file (see the `.env.example` files):
 | File | Variable | Default | Purpose |
 |---|---|---|---|
 | `.env` | `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `POSTGRES_PORT` | `postgres` / `postgres` / `weather` / `5432` | PostgreSQL container |
-| `fetcher/.env` (read at start from the `fetcher/` folder; real environment variables override it) | `AMQP_URL` | `amqp://guest:guest@localhost:5672/` | RabbitMQ with the request/reply queues |
+| | `USE_REDIS_RABBITMQ` | `true` | Vagrant: mode the DB, Fetcher and History VMs are provisioned in, Redis + RabbitMQ + plain PostgreSQL (`true`) or PostgreSQL with pgmq and pg_cron (`false`); later `weather-backend` |
+| | `FETCHER_DB_PASSWORD` | `fetcher` | Vagrant: PostgreSQL role `fetcher` (queues only) |
+| `fetcher/.env` (read at start from the `fetcher/` folder; real environment variables override it) | `USE_REDIS_RABBITMQ` | `true` | `true`: RabbitMQ (`AMQP_URL`), `false`: pgmq (`DATABASE_URL`); must match History |
+| | `AMQP_URL` | `amqp://guest:guest@localhost:5672/` | RabbitMQ with the request/reply queues |
+| | `DATABASE_URL` | `postgres://postgres:postgres@localhost:5432/weather` | PostgreSQL with the pgmq queues |
 | | `OPEN_METEO_BASE_URL` | `https://api.open-meteo.com/v1/forecast` | Weather API |
 | | `LOCATION_NAME`, `LATITUDE`, `LONGITUDE` | Berlin, 52.52, 13.41 | Default location, used only by `--once` |
 | `history/.env` | `PORT` | `3001` | History service port |
@@ -173,11 +203,12 @@ Each part reads its own `.env` file (see the `.env.example` files):
 | | `LOCATION_NAME`, `LATITUDE`, `LONGITUDE` | Berlin, 52.52, 13.41 | Location to track (sent to the Fetcher with every request) |
 | | `CATCH_UP_ON_START` | `true` | Fetch missed hourly history when the service starts |
 | | `INITIAL_BACKFILL_DAYS` | `30` | Days to load when the database is empty |
-| | `AMQP_URL` | `amqp://guest:guest@localhost:5672` | RabbitMQ, to reach the Fetcher |
-| | `REDIS_URL` | `redis://localhost:6379` | Redis for UI preferences |
+| | `USE_REDIS_RABBITMQ` | `true` | `true`: Redis + RabbitMQ, `false`: cache table + pgmq in `DATABASE_URL` |
+| | `AMQP_URL` | `amqp://guest:guest@localhost:5672` | RabbitMQ, to reach the Fetcher (`true` only) |
+| | `REDIS_URL` | `redis://localhost:6379` | Redis for UI preferences (`true` only) |
 | | `TRIGGER_TOKEN` | empty (off) | If set, POST endpoints require an `X-Trigger-Token` header |
 | `scheduler/.env` | `HISTORY_SERVICE_URL` | `http://localhost:3001` | Where to send the trigger |
-| | `CRON_SCHEDULE` | `0 * * * *` (hourly) | For example `*/30 * * * *` for every 30 minutes |
+| | `CRON_SCHEDULE` | `0 * * * *` (hourly) | More often (e.g. `*/30 * * * *`) only refreshes the current hour's row |
 | | `TRIGGER_TOKEN` | empty | Must match the History value |
 | `frontend/.env` | `VITE_API_URL` | empty (uses the Vite proxy) | History service base URL |
 | | `VITE_PROXY_TARGET` | `http://localhost:3001` | Where the dev proxy sends `/api` |
@@ -203,7 +234,8 @@ curl 'localhost:3001/api/weather/latest'
 curl 'localhost:3001/api/weather/history?from=2026-09-01&to=2026-09-30'
 
 docker exec -it postgres psql -U postgres -d weather -c 'select count(*) from weather_observations;'
-npm run db:down                               # stop PostgreSQL (data stays in the postgres-data volume)
+npm run db:down                               # stop PostgreSQL and RabbitMQ (data stays in the volumes)
+docker exec -it postgres psql -U postgres -d weather -c 'select * from pgmq.metrics_all();'   # pgmq queues
 ```
 
 ## Go for beginners (Fetcher)
@@ -214,14 +246,15 @@ compiled service (Fetcher, Go).
 1. **Install Go** (1.22+): `sudo apt install golang-go` (check the version, Ubuntu may ship an older one), or download
    the tarball from https://go.dev/dl/, unpack it to `/usr/local` and add `export PATH=$PATH:/usr/local/go/bin`
    to your `~/.zshrc`. Check with `go version`.
-2. **Dependencies**: `fetcher/go.mod` is the equivalent of `package.json` (one dependency, the RabbitMQ client
-   `amqp091-go`); `go build` downloads it automatically, `go mod download` does it explicitly.
+2. **Dependencies**: `fetcher/go.mod` is the equivalent of `package.json` (two dependencies: the RabbitMQ client
+   `amqp091-go` and the PostgreSQL driver `pgx`); `go build` downloads them automatically, `go mod download` does it explicitly.
 3. **Run (development)**: `cd fetcher && go run ./cmd/fetcher` compiles and starts it (like `node src/server.js`).
 4. **Build a binary**: `cd fetcher && go build -o bin/fetcher ./cmd/fetcher && ./bin/fetcher`. The result is a single
    executable file that runs without Go installed.
 5. **Test and check**: `go test ./...`, `go vet ./...`, and `gofmt -l .` (lists unformatted files; `gofmt -w .` fixes them).
 6. **Configuration** comes from `fetcher/.env` (copy `fetcher/.env.example`), which the Fetcher reads at start from its
    working directory, so run it from the `fetcher/` folder. Real environment variables override the file, e.g.
-   `AMQP_URL=amqp://... go run ./cmd/fetcher`. Without any config it uses RabbitMQ on localhost (guest) and the Open-Meteo forecast URL.
+   `AMQP_URL=amqp://... go run ./cmd/fetcher`. Without any config it uses RabbitMQ on localhost (guest) and the Open-Meteo forecast URL;
+   `USE_REDIS_RABBITMQ=false` switches it to pgmq in `DATABASE_URL`.
 7. **Vocabulary**: a *module* is the whole project (`go.mod`); `cmd/` holds entry points (programs);
    `internal/` holds code that can't be imported from outside the module; a `_test.go` file next to the code is a test.

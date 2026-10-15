@@ -1,9 +1,10 @@
-// Command fetcher runs the Fetcher service: a RabbitMQ worker that talks to Open-Meteo.
+// Command fetcher runs the Fetcher service: a queue worker that talks to Open-Meteo.
 // It has no HTTP API: requests arrive on a queue and replies go back through a queue.
 //
 // Usage:
 //
-//	fetcher                    consume fetch requests from RabbitMQ (AMQP_URL)
+//	fetcher                    consume fetch requests from RabbitMQ (AMQP_URL), or from pgmq
+//	                           in PostgreSQL (DATABASE_URL) if USE_REDIS_RABBITMQ=false
 //	fetcher --once             print the current weather for the default location and exit
 //	fetcher --once --history 2 print hourly data for the last 2 days and exit
 package main
@@ -34,7 +35,11 @@ func main() {
 		fmt.Fprintln(os.Stderr, "cannot read .env:", err)
 		os.Exit(1)
 	}
-	cfg := config.Load()
+	cfg, err := config.Load()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 	client := openmeteo.NewClient(cfg.OpenMeteoBaseURL)
 
 	if *once {
@@ -101,5 +106,8 @@ func runOnce(client *openmeteo.Client, historyDays int) error {
 func work(cfg config.Config, client *openmeteo.Client) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	return worker.Run(ctx, cfg.AMQPURL, client)
+	if cfg.UseRedisRabbitMQ {
+		return worker.RunAMQP(ctx, cfg.AMQPURL, client)
+	}
+	return worker.RunPGMQ(ctx, cfg.DatabaseURL, client)
 }

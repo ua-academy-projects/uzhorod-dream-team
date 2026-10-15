@@ -4,20 +4,25 @@ import { sequelize } from './db/index.js';
 import { FetcherError } from './fetcherClient.js';
 import historyRoutes from './routes.js';
 import preferencesRoutes from './preferences.js';
-import { cache } from './cache.js';
-import { isBrokerReady } from './broker.js';
+import config from './config.js';
+import { cache } from './cache/index.js';
+import { isBrokerReady } from './broker/index.js';
 
 const app = express();
 
 app.use(cors());
 app.use(express.json());
 
+const backend = config.useRedisRabbitMQ ? 'redis-rabbitmq' : 'postgres';
+const up = (ready) => (ready ? 'up' : 'down');
+
 app.get('/api/health', async (req, res) => {
+  const services = () => ({ cache: up(cache.isReady), broker: up(isBrokerReady()), backend });
   try {
     await sequelize.authenticate();
-    res.json({ status: 'ok', database: 'up', cache: cache.isReady ? 'up' : 'down', broker: isBrokerReady() ? 'up' : 'down' });
+    res.json({ status: 'ok', database: 'up', ...services() });
   } catch {
-    res.status(503).json({ status: 'degraded', database: 'down', cache: cache.isReady ? 'up' : 'down', broker: isBrokerReady() ? 'up' : 'down' });
+    res.status(503).json({ status: 'degraded', database: 'down', ...services() });
   }
 });
 

@@ -9,7 +9,15 @@ if File.exist?(".env")
     host_env[key] = value if key && !key.start_with?("#") && value
   end
 end
-%w[POSTGRES_PASSWORD REDIS_PASSWORD RABBITMQ_PASSWORD].each do |key|
+setting = ->(key, default) { host_env[key].to_s.empty? ? default : host_env[key] }
+
+USE_REDIS_RABBITMQ = case setting.("USE_REDIS_RABBITMQ", "true").strip.downcase
+                     when "true", "1", "yes" then "true"
+                     when "false", "0", "no" then "false"
+                     else abort "USE_REDIS_RABBITMQ in .env must be true or false, got \"#{host_env["USE_REDIS_RABBITMQ"]}\""
+                     end
+
+%w[POSTGRES_PASSWORD FETCHER_DB_PASSWORD REDIS_PASSWORD RABBITMQ_PASSWORD].each do |key|
   abort "Set #{key} in .env (see .env.example)" if host_env[key].to_s.empty?
 end
 
@@ -22,23 +30,21 @@ unless File.exist?(LOGPULL_KEY)
     or abort "ssh-keygen failed to create #{LOGPULL_KEY}"
 end
 
-setting = ->(key, default) { host_env[key].to_s.empty? ? default : host_env[key] }
-
 NET = "192.168.56"
 
 VMS = {
   "weather-postgres-db" => {
-    ip: "#{NET}.10", memory: 1536, script: "db.sh", sync: [],
-    env: %w[DB_IP HISTORY_IP POSTGRES_PASSWORD POSTGRES_DB POSTGRES_PORT REDIS_PASSWORD REDIS_PORT
-            RABBITMQ_PASSWORD RABBITMQ_PORT RABBITMQ_UI_PORT],
+    ip: "#{NET}.10", memory: 1536, script: "db.sh", sync: %w[postgres],
+    env: %w[USE_REDIS_RABBITMQ DB_IP HISTORY_IP FETCHER_IP POSTGRES_PASSWORD POSTGRES_DB POSTGRES_PORT FETCHER_DB_PASSWORD
+            REDIS_PASSWORD REDIS_PORT RABBITMQ_PASSWORD RABBITMQ_PORT RABBITMQ_UI_PORT],
   },
   "weather-fetcher" => {
     ip: "#{NET}.11", memory: 1024, script: "fetcher.sh", sync: %w[fetcher],
-    env: %w[DB_IP RABBITMQ_PASSWORD RABBITMQ_PORT],
+    env: %w[USE_REDIS_RABBITMQ DB_IP RABBITMQ_PASSWORD RABBITMQ_PORT POSTGRES_DB POSTGRES_PORT FETCHER_DB_PASSWORD],
   },
   "weather-history" => {
     ip: "#{NET}.12", memory: 1024, script: "history.sh", sync: %w[history scheduler],
-    env: %w[DB_IP HISTORY_IP HISTORY_PORT POSTGRES_PASSWORD POSTGRES_DB POSTGRES_PORT REDIS_PASSWORD REDIS_PORT
+    env: %w[USE_REDIS_RABBITMQ DB_IP HISTORY_IP HISTORY_PORT POSTGRES_PASSWORD POSTGRES_DB POSTGRES_PORT REDIS_PASSWORD REDIS_PORT
             RABBITMQ_PASSWORD RABBITMQ_PORT TRIGGER_TOKEN CRON_SCHEDULE LOGPULL_KEY_B64 LOG_SOURCES],
   },
   "weather-frontend" => {
@@ -48,25 +54,28 @@ VMS = {
 }
 
 PROVISION_ENV = {
-  "DB_IP"              => VMS["weather-postgres-db"][:ip],
-  "HISTORY_IP"         => VMS["weather-history"][:ip],
-  "SSH_PUBKEY"         => File.read("id_ed25519.pub").strip,
-  "LOGPULL_PUBKEY"     => File.read("#{LOGPULL_KEY}.pub").strip,
-  "LOGPULL_KEY_B64"    => [File.read(LOGPULL_KEY)].pack("m0"),
-  "LOG_SOURCES"        => VMS.reject { |name, _| name == "weather-history" }.map { |name, vm| "#{name}=#{vm[:ip]}" }.join(" "),
-  "LOG_RETENTION_DAYS" => setting.("LOG_RETENTION_DAYS", "7"),
-  "POSTGRES_PASSWORD"  => host_env["POSTGRES_PASSWORD"],
-  "POSTGRES_DB"        => setting.("POSTGRES_DB", "weather"),
-  "REDIS_PASSWORD"     => host_env["REDIS_PASSWORD"],
-  "RABBITMQ_PASSWORD"  => host_env["RABBITMQ_PASSWORD"],
-  "TRIGGER_TOKEN"      => host_env.fetch("TRIGGER_TOKEN", ""),
-  "CRON_SCHEDULE"      => setting.("CRON_SCHEDULE", "*/15 * * * *"),
-  "HISTORY_PORT"       => setting.("HISTORY_PORT", "3001"),
-  "FRONTEND_PORT"      => setting.("FRONTEND_PORT", "4173"),
-  "POSTGRES_PORT"      => setting.("POSTGRES_PORT", "5432"),
-  "REDIS_PORT"         => setting.("REDIS_PORT", "6379"),
-  "RABBITMQ_PORT"      => setting.("RABBITMQ_PORT", "5672"),
-  "RABBITMQ_UI_PORT"   => setting.("RABBITMQ_UI_PORT", "15672"),
+  "USE_REDIS_RABBITMQ"  => USE_REDIS_RABBITMQ,
+  "DB_IP"               => VMS["weather-postgres-db"][:ip],
+  "FETCHER_IP"          => VMS["weather-fetcher"][:ip],
+  "HISTORY_IP"          => VMS["weather-history"][:ip],
+  "SSH_PUBKEY"          => File.read("id_ed25519.pub").strip,
+  "LOGPULL_PUBKEY"      => File.read("#{LOGPULL_KEY}.pub").strip,
+  "LOGPULL_KEY_B64"     => [File.read(LOGPULL_KEY)].pack("m0"),
+  "LOG_SOURCES"         => VMS.reject { |name, _| name == "weather-history" }.map { |name, vm| "#{name}=#{vm[:ip]}" }.join(" "),
+  "LOG_RETENTION_DAYS"  => setting.("LOG_RETENTION_DAYS", "7"),
+  "POSTGRES_PASSWORD"   => host_env["POSTGRES_PASSWORD"],
+  "POSTGRES_DB"         => setting.("POSTGRES_DB", "weather"),
+  "FETCHER_DB_PASSWORD" => host_env["FETCHER_DB_PASSWORD"].to_s,
+  "REDIS_PASSWORD"      => host_env["REDIS_PASSWORD"].to_s,
+  "RABBITMQ_PASSWORD"   => host_env["RABBITMQ_PASSWORD"].to_s,
+  "TRIGGER_TOKEN"       => host_env.fetch("TRIGGER_TOKEN", ""),
+  "CRON_SCHEDULE"       => setting.("CRON_SCHEDULE", "0 * * * *"),
+  "HISTORY_PORT"        => setting.("HISTORY_PORT", "3001"),
+  "FRONTEND_PORT"       => setting.("FRONTEND_PORT", "4173"),
+  "POSTGRES_PORT"       => setting.("POSTGRES_PORT", "5432"),
+  "REDIS_PORT"          => setting.("REDIS_PORT", "6379"),
+  "RABBITMQ_PORT"       => setting.("RABBITMQ_PORT", "5672"),
+  "RABBITMQ_UI_PORT"    => setting.("RABBITMQ_UI_PORT", "15672"),
 }
 
 Vagrant.configure("2") do |config|

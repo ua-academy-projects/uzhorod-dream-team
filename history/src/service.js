@@ -4,7 +4,7 @@
 import { Op } from 'sequelize';
 import config from './config.js';
 import * as fetcher from './fetcherClient.js';
-import { daysToCatchUp } from './catchUp.js';
+import { daysToCatchUp, startOfHour } from './catchUp.js';
 import { describeWeatherCode } from './weatherCodes.js';
 import { WeatherObservation } from './model.js';
 
@@ -29,9 +29,13 @@ function toDto(row) {
   return { ...data, conditions: describeWeatherCode(data.weatherCode) };
 }
 
-/** Invokes the Fetcher for current weather and stores (or refreshes) the result. */
+/**
+ * Invokes the Fetcher for current weather and stores (or refreshes) the result
+ * under the start of its hour, so there is one row per hour like in the backfilled history.
+ */
 export async function triggerFetch(location = config.location) {
-  const observation = await fetcher.fetchCurrent(location);
+  const current = await fetcher.fetchCurrent(location);
+  const observation = { ...current, observedAt: startOfHour(current.observedAt) };
   await WeatherObservation.bulkCreate([observation], { updateOnDuplicate: UPDATABLE_FIELDS });
   const saved = await WeatherObservation.findOne({
     where: { locationName: observation.locationName, observedAt: observation.observedAt },

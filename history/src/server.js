@@ -4,8 +4,8 @@ import app from './app.js';
 import './model.js';
 import * as history from './service.js';
 import { withRetries } from './catchUp.js';
-import { connectCache } from './cache.js';
-import { connectBroker } from './broker.js';
+import { connectCache } from './cache/index.js';
+import { connectBroker } from './broker/index.js';
 
 async function start() {
   // Both connect in the background and keep retrying; the read-only API works without them
@@ -18,6 +18,7 @@ async function start() {
 
   app.listen(config.port, () => {
     console.log(`History service listening on http://localhost:${config.port}`);
+    console.log(`Cache and broker: ${config.useRedisRabbitMQ ? 'Redis + RabbitMQ' : 'PostgreSQL (cache table + pgmq)'}`);
     console.log(`Tracking location: ${config.location.name} (${config.location.latitude}, ${config.location.longitude})`);
   });
 

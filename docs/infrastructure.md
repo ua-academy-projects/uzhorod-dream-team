@@ -22,7 +22,7 @@ vagrant ssh <vm> -c "docker ps"
 
 | VM | Host-only IP | Containers | Published ports |
 |---|---|---|---|
-| `weather-postgres-db` | 192.168.56.10 | `postgres`, `redis`, `rabbitmq` | 5432, 6379, 5672, 15672 on 192.168.56.10 only |
+| `weather-postgres-db` | 192.168.56.10 | `true`: `postgres` (plain `postgres:16-alpine`), `redis`, `rabbitmq`; `false`: `postgres` (`weather/postgres`, with pgmq and pg_cron) | 5432 (and 6379, 5672, 15672 with `true`) on 192.168.56.10 only |
 | `weather-fetcher` | 192.168.56.11 | `fetcher` (no port, RabbitMQ worker) | — |
 | `weather-history` | 192.168.56.12 | `history`, `scheduler` (Docker network `weather`) | 3001 on 192.168.56.12 only |
 | `weather-frontend` | 192.168.56.13 + LAN (DHCP) | `frontend` (nginx, static UI + `/api` proxy) | 4173 → 8080 on all interfaces |
@@ -35,18 +35,24 @@ network `weather`, which has its own DNS.
 ## Vagrantfile
 
 - **Secrets** live in the (gitignored) root `.env`, never in the Vagrantfile. It is parsed as `KEY=VALUE` lines
-  (no quotes: everything after the first `=` is the value). `POSTGRES_PASSWORD`, `REDIS_PASSWORD` and
-  `RABBITMQ_PASSWORD` are required; `vagrant up` aborts with "Set … in .env" if one is empty.
+  (no quotes: everything after the first `=` is the value). `POSTGRES_PASSWORD`, `FETCHER_DB_PASSWORD`,
+  `REDIS_PASSWORD` and `RABBITMQ_PASSWORD` are required (provisioning prepares both backends, so a switch needs no secrets later); `vagrant up` aborts with
+  "Set … in .env" if one is empty.
+- **`USE_REDIS_RABBITMQ`** (default `true`): where the cache and the History ↔ Fetcher queues live, see
+  [architecture.md#backends](architecture.md#backends). Empty or missing means `true`; `true/false`, `1/0`, `yes/no`
+  in any case are accepted, anything else aborts (a typo should not silently keep the old backend). It is the
+  mode the DB, Fetcher and History VMs start in; [`weather-backend`](#switching-the-backend-at-run-time) switches them
+  later without provisioning and without building.
 - **`VMS`**: one entry per VM; add an entry here to add a machine.
-  - `ip`, `memory`, `cpus` (default 1); the DB VM has 1536 MB because it runs three containers;
+  - `ip`, `memory`, `cpus` (default 1); the DB VM has 1536 MB because with `true` it runs three containers;
   - `script`: provisioning for that VM (from `provision/`);
   - `sync`: the service directories mounted on the VM (see *Synced folders*);
   - `env`: the `PROVISION_ENV` keys its script uses;
   - `lan: true`: also bridge the VM into the host's LAN (DHCP from the router) so other devices can reach it.
 - **`PROVISION_ENV`** holds everything the provisioning scripts may need: where each service lives (`DB_IP`,
-  `HISTORY_IP`) plus secrets and settings from the host `.env` (`POSTGRES_DB`, `TRIGGER_TOKEN`, `CRON_SCHEDULE`, …).
+  `FETCHER_IP`, `HISTORY_IP`) plus secrets and settings from the host `.env` (`POSTGRES_DB`, `TRIGGER_TOKEN`, `CRON_SCHEDULE`, …).
   Each VM gets only its `env` keys plus `SSH_PUBKEY` (`PROVISION_ENV.slice`), so e.g. the frontend VM receives no
-  password at all and the fetcher VM only `RABBITMQ_PASSWORD`. A script that starts using a new variable needs it
+  password at all and the fetcher VM only `RABBITMQ_PASSWORD` and `FETCHER_DB_PASSWORD`. A script that starts using a new variable needs it
   added to its VM's `env` (the `: "${VAR:?}"` checks at the top of the scripts fail otherwise).
   `setting.(key, default)` takes a value from `.env` and falls back to the default if it is missing or empty.
 - **Ports** are settings too, so each is defined in one place and every script that needs it (the published port
@@ -64,7 +70,7 @@ network `weather`, which has its own DNS.
   After changing a port, re-provision the VM that runs the service and the VMs of its clients, e.g. for
   `REDIS_PORT`: `vagrant provision weather-postgres-db weather-history`.
 - **Synced folders**: the default sync of the whole project root is disabled. Each VM gets only the directories of
-  its own services (`sync:` in `VMS`; the db VM none), mounted read-only
+  its own services (`sync:` in `VMS`; the db VM only `postgres/`, for its image), mounted read-only
   (`type: "virtualbox"`, `ro`) at `/vagrant/<dir>`. The mounts are live, so `vagrant provision` always builds the
   current code. The VMs never see the root `.env`, `.git` or `.vagrant/` (which holds the private SSH keys of all
   VMs) and cannot write to the host. The local `.env`, `node_modules/`, `dist/` and `bin/` inside a service
@@ -113,18 +119,60 @@ right before the VM's own script (which Vagrant uploads itself), so no VM sees t
   ("DNS: transient error"), and the retry reuses every step that already succeeded from the cache.
 - `run_container <name> <docker run args…>`: removes the old container (`docker rm -f`) and starts a new one with
   `--restart unless-stopped` and `--env-file /etc/weather/<name>.env`. Re-provisioning therefore always applies the
-  current image and env file; data lives in named volumes and survives.
+  current image and env file; data lives in named volumes and survives. The arguments are also saved (shell-quoted)
+  to `/etc/weather/<name>.run`, so `weather-backend` can recreate the container exactly the same way.
+- `save_run <name> <docker run args…>`: only saves the arguments to `/etc/weather/<name>.run` (the DB VM uses it for
+  the containers of the mode that is not running).
+- `install_backend_switch <container…>`: installs `/usr/local/bin/weather-backend` for these containers (Fetcher and History VMs), see
+  [Switching the backend at run time](#switching-the-backend-at-run-time).
 - `ensure_network <name>`: creates a Docker network if it does not exist yet.
+- `wait_healthy <name>`: waits up to 2 minutes until the container's healthcheck reports `healthy`.
+- `psql_as_postgres <db>`: runs the SQL from stdin in the `postgres` container as `postgres` (over the socket, `trust`),
+  stopping at the first error, so a password in the SQL never shows up in argv.
 - `setup_journald`, `setup_log_export`, `setup_log_pull`, `install_timer`: log collection, see [Logs](#logs).
 
 ## provision/db.sh (weather-postgres-db)
+
+Prepares both modes and then starts one, so a later switch needs neither provisioning nor a build:
+
+- writes the config files of all three services (table below) and the two SQL files of the switch;
+- builds `weather/postgres` (see [Images](#images)) in both modes; `postgres:16-alpine` is pulled on first use;
+- saves the `docker run` arguments of `postgres-plain` (`postgres:16-alpine`), `postgres-pgmq` (`weather/postgres`
+  with the pg_cron settings, see [PostgreSQL](#postgresql)), `redis` and `rabbitmq` to `/etc/weather/<name>.run`
+  (`save_run`), without starting anything;
+- installs the DB version of `weather-backend` and runs `weather-backend $USE_REDIS_RABBITMQ`.
+
+`weather-backend` on this VM:
+
+| | `true` | `false` |
+|---|---|---|
+| `postgres` | recreated from `postgres:16-alpine`; then `sql/pgmq-cleanup.sql` | recreated from `weather/postgres`; then `sql/pgmq-setup.sql` |
+| `redis`, `rabbitmq` | recreated (started) | removed (their volumes stay) |
+
+- `pgmq-cleanup.sql` makes the database plain again: `DROP EXTENSION pg_cron, pgmq`, `DROP SCHEMA pgmq, cron`
+  (the queue tables come from `pgmq.create()`, not from the extension, so dropping the extension leaves them),
+  `DROP TABLE cache_entries`, `DROP OWNED BY fetcher` and `DROP ROLE fetcher`. The weather data in `public` stays.
+  It works on the plain image although the extension files are missing there. To keep the queues and the cache
+  across switches instead, leave out this step.
+- `pgmq-setup.sql` (idempotent): the role `fetcher` (`LOGIN`, password `FETCHER_DB_PASSWORD`, set again every time),
+  the pgmq extension and both queues, `USAGE` on schema `pgmq` plus `SELECT, INSERT, UPDATE, DELETE` on
+  `pgmq.q_weather_fetch_requests` and `pgmq.q_weather_fetch_replies` only, so `fetcher` has no access to
+  `weather_observations`. The queues exist before the Fetcher switches, so it does not wait for History. History
+  creates pg_cron, `cache_entries` and the cron job itself on start.
+- It waits for the postgres healthcheck and retries the SQL a few times (the first start of an empty volume
+  restarts PostgreSQL once after init), and records the mode in `/etc/weather/backend`.
+
+It also installs `/usr/local/bin/redis-cli`, a wrapper that runs `redis-cli` inside the `redis` container
+(`docker exec`, with `-t` only on a terminal, so it works in pipes too). It is authenticated through
+`REDISCLI_AUTH` from `redis.env`, and `vagrant` is in the `docker` group, so neither a password nor `sudo` is
+needed. With `false` it says that the container is not running.
 
 Writes, into `/etc/weather/`:
 
 | File | For | Contents |
 |---|---|---|
 | `postgres.env` | postgres | `POSTGRES_PASSWORD`, `POSTGRES_DB`: on the first start (empty volume) the image sets the password and creates the database |
-| `pg_hba.conf` | postgres | `local all all trust` (socket inside the container, used by `pg_isready` and init) and `host all postgres 192.168.56.12/32 scram-sha-256`: only the History VM, with a password |
+| `pg_hba.conf` | postgres | `local all all trust` (socket inside the container, used by `pg_isready`, init and `psql_as_postgres`) and `host all postgres 192.168.56.12/32 scram-sha-256`: only the History VM, with a password. Also `host weather fetcher 192.168.56.11/32 scram-sha-256`: the Fetcher VM, only as `fetcher` and only into the app database (in both modes; with `true` the role does not exist, so the line lets nobody in) |
 | `redis.conf` | redis | `requirepass`, `appendonly yes` (data survives restarts), `maxmemory 64mb` with `volatile-lru`; `bind 0.0.0.0` inside the container, the `-p` binding limits it to the DB IP. 0640, owner uid 999, because of the password |
 | `redis.env` | redis | `REDISCLI_AUTH`, so the healthcheck's `redis-cli` authenticates without the password in argv |
 | `rabbitmq.env` | rabbitmq | `RABBITMQ_DEFAULT_USER/PASS/VHOST`: vhost `weather` and user `weather` (tag `administrator`) are created on the first start, and `guest` is not created at all. `RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS`: see [RabbitMQ](#rabbitmq) |
@@ -140,12 +188,13 @@ change a password later, change it inside the running service or remove the volu
 
 | File | Contents |
 |---|---|
-| `fetcher.env` | `AMQP_URL` (DB VM), `OPEN_METEO_BASE_URL` |
-| `history.env` | `PORT`, `DATABASE_URL`, `AMQP_URL`, `REDIS_URL` (all on the DB VM), `TRIGGER_TOKEN` |
+| `fetcher.env` | `USE_REDIS_RABBITMQ`; `AMQP_URL` and `DATABASE_URL` as `fetcher` (both on the DB VM, the flag picks one); `OPEN_METEO_BASE_URL` |
+| `history.env` | `PORT`, `USE_REDIS_RABBITMQ`, `DATABASE_URL`, `AMQP_URL`, `REDIS_URL` (all on the DB VM), `TRIGGER_TOKEN` |
 | `scheduler.env` | `HISTORY_SERVICE_URL=http://history:3001` (container name on the `weather` network), `CRON_SCHEDULE`, `TRIGGER_TOKEN` |
 | `frontend.env` | `HISTORY_URL=http://192.168.56.12:3001`, the nginx `/api` proxy target |
 
-Passwords are inserted into URLs as they are, so they must not contain URL special characters (`@ : / # %`).
+Passwords are inserted into URLs as they are, so they must not contain URL special characters (`@ : / # %`);
+`FETCHER_DB_PASSWORD` also goes into SQL as a literal, so no `'` either.
 The env file wins over any `.env`, because dotenv (Node) and the Fetcher never override variables that are already
 set; the images do not contain `.env` files anyway.
 
@@ -155,9 +204,9 @@ Each per-VM script ends with the containers of that VM; the full `docker run` ar
 
 | VM (script) | Order | Image | Publish | Notes |
 |---|---|---|---|---|
-| DB ([db.sh](../provision/db.sh)) | 1 | `postgres:16-alpine` | `DB_IP:POSTGRES_PORT` | volume `pgdata`, mounted `pg_hba.conf`, tuning `-c …` (see [PostgreSQL](#postgresql)) |
-| | 2 | `redis:7-alpine` | `DB_IP:REDIS_PORT` | volume `redisdata`, mounted `redis.conf`, `--user redis` |
-| | 3 | `rabbitmq:4.1-management-alpine` | `DB_IP:RABBITMQ_PORT`, `DB_IP:RABBITMQ_UI_PORT` | volume `rabbitmqdata`, mounted `rabbitmq/*`, `--hostname rabbitmq` |
+| DB ([db.sh](../provision/db.sh)) | 1 | `postgres:16-alpine` (`true`) or `weather/postgres` (`false`, built on the VM) | `DB_IP:POSTGRES_PORT` | volume `pgdata`, mounted `pg_hba.conf`, tuning `-c …`, with `false` also pg_cron (see [PostgreSQL](#postgresql)) |
+| | 2 | `redis:7-alpine` | `DB_IP:REDIS_PORT` | `true` only; volume `redisdata`, mounted `redis.conf`, `--user redis` |
+| | 3 | `rabbitmq:4.1-management-alpine` | `DB_IP:RABBITMQ_PORT`, `DB_IP:RABBITMQ_UI_PORT` | `true` only; volume `rabbitmqdata`, mounted `rabbitmq/*`, `--hostname rabbitmq` |
 | Fetcher ([fetcher.sh](../provision/fetcher.sh)) | 1 | `weather/fetcher` | — | built on the VM |
 | History ([history.sh](../provision/history.sh)) | 1 | `weather/history` | `HISTORY_IP:HISTORY_PORT` | network `weather` |
 | | 2 | `weather/scheduler` | — | network `weather`, calls `http://history:<port>`; its first call 3 s after start may come before History is up, it is logged and the next run follows the schedule |
@@ -181,6 +230,33 @@ What the flags do:
 - `--hostname rabbitmq`: RabbitMQ stores data per node name (`rabbit@<hostname>`); a fixed name keeps the volume
   usable after the container is recreated.
 
+### Switching the backend at run time
+
+Every image both modes need is already on the VMs, and every env file and `docker run` argument list is already
+written, so a switch only starts other containers from existing images. `weather-backend` is installed on the DB,
+Fetcher and History VMs; run it on all three, DB first:
+
+```bash
+for vm in weather-postgres-db weather-fetcher weather-history; do
+  vagrant ssh $vm -c "weather-backend false"             # false: PostgreSQL + pgmq + pg_cron, true: Redis + RabbitMQ
+done
+vagrant ssh weather-history -c "weather-backend"         # show the current value (no change)
+```
+
+- On the DB VM it swaps the containers as described in [provision/db.sh](#provisiondbsh-weather-postgres-db).
+- On the Fetcher and History VMs the env files hold the URLs of both backends and only the `USE_REDIS_RABBITMQ`
+  line differs. Docker reads `--env-file` only when a container is created (`docker restart` keeps the old value),
+  so `weather-backend` changes the line in `/etc/weather/<name>.env` and recreates the container from the image it
+  was running, with the arguments saved in `<name>.run` (`install_backend_switch`).
+
+No apt, no build; about 20 s for all three (most of it waiting for PostgreSQL). It calls `sudo` itself (the env files
+belong to root). While the VMs are switched one after another, fetches answer 502 and History reconnects to the
+restarted PostgreSQL by itself. Requests in the old queues expire (20 s), and saved themes are not copied between
+Redis and `cache_entries`, so the UI falls back to the system theme once.
+
+`USE_REDIS_RABBITMQ` in the root `.env` is the value provisioning writes, so the next `vagrant provision` of these
+VMs sets it back to `.env`; change it there too to keep a switch.
+
 **After a code or `.env` change**: `vagrant provision <vm>` rebuilds that VM's images and recreates its containers.
 Data stays in the named volumes (`pgdata`, `redisdata`, `rabbitmqdata`). `docker stop <name>` keeps a container
 stopped across reboots (that is the "unless-stopped" part) until `docker start <name>` or the next provisioning.
@@ -202,7 +278,8 @@ a non-root user, secrets only at run time.
 
 | Image | Build | Runtime | Size |
 |---|---|---|---|
-| `weather/fetcher` | `golang:1.22-alpine`, `CGO_ENABLED=0`, `-trimpath -ldflags="-s -w"` | `distroless/static-debian12:nonroot`: no shell or libc, but CA certificates (HTTPS to Open-Meteo) and tzdata | ~8 MB |
+| `weather/postgres` | `postgres:16-alpine` + `build-base`: pgmq (plain SQL) and pg_cron (C, `make with_llvm=no`: the alpine image is built with JIT, and without it PGXS wants clang for bitcode) from release tarballs, versions as build args | `postgres:16-alpine` + only the extension files and `pg_cron.so` | ~295 MB (the base image is ~290 MB) |
+| `weather/fetcher` | `golang:1.22-alpine`, `CGO_ENABLED=0`, `-trimpath -ldflags="-s -w"` | `distroless/static-debian12:nonroot`: no shell or libc, but CA certificates (HTTPS to Open-Meteo) and tzdata | ~20 MB |
 | `weather/history` | `node:22-alpine3.24`, `npm ci --omit=dev`; `.ts`, `.map`, `.md` files removed from `node_modules`; `node` binary stripped | `alpine:3.24` + `libstdc++` + the `node` binary only (no npm, yarn, corepack). No healthcheck: check it with `curl …/api/health` | ~140 MB |
 | `weather/scheduler` | same | same | ~125 MB |
 | `weather/frontend` | `node:22-alpine3.24`, `vite build`, then `gzip -9` copies of js/css/html/svg | `nginx-unprivileged:1.27-alpine-slim` (port 8080, uid 101) | ~13 MB |
@@ -218,9 +295,15 @@ files, unknown paths fall back to `index.html`, and `/healthz` is the healthchec
 
 ### PostgreSQL
 
-`postgres:16-alpine`; `hba_file` points at the mounted `pg_hba.conf`. Tuned for a small VM: `shared_buffers=64MB`,
-`effective_cache_size=192MB`, `max_connections=30`, `--shm-size 128m`. History creates the `weather` database if it
-is missing (`ensureDatabase()`), so a reused volume works too.
+`postgres:16-alpine` with `true`, `weather/postgres` (the same plus pgmq and pg_cron) with `false`; both use the
+volume `pgdata`. `hba_file` points at the mounted `pg_hba.conf`. Tuned for a small VM: `shared_buffers=64MB`,
+`effective_cache_size=192MB`, `max_connections=30`, `--shm-size 128m`.
+With `false` also `shared_preload_libraries=pg_cron` (it must be loaded at server start), `cron.database_name=<POSTGRES_DB>`
+and `cron.host=/var/run/postgresql`. pg_cron runs each job over a client connection, by default TCP to `localhost`
+(`::1` in the container), which `pg_hba.conf` does not allow; over the socket the existing `local all all trust`
+line lets it in. Runs and errors: `cron.job_run_details`. History creates the `weather` database if it
+is missing (`ensureDatabase()`), so a reused volume works too. With `false` the connections are History's Sequelize
+pool (5) and broker pool (3) and the Fetcher's pool (5), well under 30.
 
 ### RabbitMQ
 
@@ -283,6 +366,10 @@ systemctl list-timers 'weather-log-*'
 # management UI: http://192.168.56.10:15672  (weather / RABBITMQ_PASSWORD)
 vagrant ssh weather-postgres-db -c "docker exec rabbitmq rabbitmqctl list_queues -p weather name messages consumers"
 vagrant ssh weather-postgres-db -c "docker exec -it postgres psql -U postgres weather"
+vagrant ssh weather-postgres-db -c "redis-cli --scan --pattern 'preferences:*'"   # cache keys; also: redis-cli get <key>, ttl <key>
+vagrant ssh weather-postgres-db -- -t redis-cli                                    # interactive
+vagrant ssh weather-postgres-db -c "docker exec postgres psql -U postgres weather -c 'select * from pgmq.metrics_all()'"
+vagrant ssh weather-postgres-db -c "docker exec postgres psql -U postgres weather -c 'select * from cron.job_run_details order by runid desc limit 3'"
 vagrant ssh weather-history -c "docker ps"
 vagrant ssh weather-history -c "docker logs --tail 50 history"
 vagrant ssh weather-history -c "sudo cat /etc/weather/scheduler.env"

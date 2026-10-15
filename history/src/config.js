@@ -14,9 +14,20 @@ function number(name, fallback) {
   return value;
 }
 
+export function boolean(name, fallback) {
+  const raw = process.env[name];
+  if (raw === undefined || raw === '') return fallback;
+  const value = raw.trim().toLowerCase();
+  if (['true', '1', 'yes'].includes(value)) return true;
+  if (['false', '0', 'no'].includes(value)) return false;
+  throw new Error(`Environment variable ${name} must be true or false, got "${raw}"`);
+}
+
 const config = {
   port: number('PORT', 3001),
   databaseUrl: process.env.DATABASE_URL,
+  // true: Redis cache + RabbitMQ queues; false: both live in PostgreSQL (cache table + pgmq)
+  useRedisRabbitMQ: boolean('USE_REDIS_RABBITMQ', true),
   amqpUrl: process.env.AMQP_URL || 'amqp://guest:guest@localhost:5672',
   redisUrl: process.env.REDIS_URL || 'redis://localhost:6379',
   triggerToken: process.env.TRIGGER_TOKEN || '',

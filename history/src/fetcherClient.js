@@ -4,7 +4,7 @@
  * doesn't care how the Fetcher is reached.
  */
 import config from './config.js';
-import * as broker from './broker.js';
+import * as broker from './broker/index.js';
 
 export const MAX_HISTORY_DAYS = 92; // must match the Fetcher service limit
 

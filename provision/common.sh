@@ -202,10 +202,82 @@ SH
   install_timer weather-log-pull "*:5/15"
 }
 
-run_container() {
+wait_healthy() {
+  local attempt
+  for attempt in $(seq 60); do
+    [ "$(docker inspect -f '{{.State.Health.Status}}' "$1")" = healthy ] && return 0
+    sleep 2
+  done
+  echo "container $1 is not healthy after 2 minutes" >&2
+  return 1
+}
+
+# The first start of an empty volume restarts PostgreSQL once after init, so retry a few times
+psql_as_postgres() {
+  local sql attempt
+  sql=$(cat)
+  for attempt in 1 2 3 4 5; do
+    docker exec -i -e PGOPTIONS='-c client_min_messages=warning' postgres \
+      psql -X -q -v ON_ERROR_STOP=1 -U postgres -d "$1" <<<"$sql" && return 0
+    [ "$attempt" -lt 5 ] && sleep 3
+  done
+  return 1
+}
+
+save_run() {
   local name=$1
   shift
-  docker rm -f "$name" >/dev/null 2>&1 || true
-  docker run -d --name "$name" --restart unless-stopped --env-file "$ENV_DIR/$name.env" "$@" >/dev/null
-  echo "started container $name"
+  printf '%q ' "$@" | install -m 0640 -o root -g docker /dev/stdin "$ENV_DIR/$name.run"
+}
+
+# start_saved <container> <run file>: (re)creates the container from $ENV_DIR/<run file>.run
+start_saved() {
+  docker rm -f "$1" >/dev/null 2>&1 || true
+  eval "docker run -d --name $1 --restart unless-stopped --env-file $ENV_DIR/$1.env $(cat "$ENV_DIR/$2.run")" >/dev/null
+  echo "started container $1 ($(docker inspect -f '{{.Config.Image}}' "$1"))"
+}
+
+run_container() {
+  save_run "$@"
+  start_saved "$1" "$1"
+}
+
+install_backend_switch() {
+  install -m 0755 /dev/stdin /usr/local/bin/weather-backend <<SH
+#!/usr/bin/env bash
+set -euo pipefail
+containers=($*)
+SH
+  cat >> /usr/local/bin/weather-backend <<'SH'
+env_dir=/etc/weather
+
+show() {
+  for name in "${containers[@]}"; do
+    printf '%s: USE_REDIS_RABBITMQ=%s\n' "$name" \
+      "$(docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$name" | sed -n 's/^USE_REDIS_RABBITMQ=//p')"
+  done
+}
+
+arg=${1:-}
+case "${arg,,}" in
+  "") show; exit 0 ;;
+  true | 1 | yes) value=true ;;
+  false | 0 | no) value=false ;;
+  *) echo "usage: weather-backend [true|false]   (true: Redis + RabbitMQ, false: PostgreSQL)" >&2; exit 2 ;;
+esac
+[ "$(id -u)" = 0 ] || exec sudo "$0" "$@"
+
+for name in "${containers[@]}"; do
+  image=$(docker inspect -f '{{.Image}}' "$name")
+  sed -i "s/^USE_REDIS_RABBITMQ=.*/USE_REDIS_RABBITMQ=$value/" "$env_dir/$name.env"
+  docker rm -f "$name" >/dev/null
+  eval "docker run -d --name $name --restart unless-stopped --env-file $env_dir/$name.env $(cat "$env_dir/$name.run")" >/dev/null
+  if [ "$(docker inspect -f '{{.Image}}' "$name")" = "$image" ]; then
+    echo "$name: recreated from the same image ${image:7:12}"
+  else
+    echo "$name: warning: the image tag changed since the last start, started from the newer image" >&2
+  fi
+done
+show
+SH
 }

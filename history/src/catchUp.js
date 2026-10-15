@@ -14,6 +14,13 @@ export function daysToCatchUp(latest, now, { initialDays, maxDays }) {
   return Math.min(Math.ceil(gapHours / 24), maxDays);
 }
 
+/** Start of the UTC hour of `date` (10:45:12 → 10:00:00), so fetches line up with the hourly history. */
+export function startOfHour(date) {
+  const hour = new Date(date);
+  hour.setUTCMinutes(0, 0, 0);
+  return hour;
+}
+
 /**
  * Runs `task` until it succeeds, with exponential backoff between attempts.
  * Never throws: after the last failed attempt it logs and gives up.

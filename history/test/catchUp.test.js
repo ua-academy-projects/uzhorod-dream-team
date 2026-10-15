@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { daysToCatchUp, withRetries } from '../src/catchUp.js';
+import { daysToCatchUp, startOfHour, withRetries } from '../src/catchUp.js';
 
 const limits = { initialDays: 30, maxDays: 92 };
 const now = new Date('2026-09-30T12:00:00Z');
@@ -45,4 +45,11 @@ test('withRetries gives up without throwing', async () => {
   const result = await withRetries(async () => { throw new Error('nope'); }, { attempts: 2, initialDelayMs: 1, log });
   assert.equal(result, null);
   assert.equal(errors.length, 1);
+});
+
+test('startOfHour truncates to the UTC hour without changing the input', () => {
+  const quarter = new Date('2026-09-30T10:45:12.345Z');
+  assert.equal(startOfHour(quarter).toISOString(), '2026-09-30T10:00:00.000Z');
+  assert.equal(quarter.toISOString(), '2026-09-30T10:45:12.345Z');
+  assert.equal(startOfHour(new Date('2026-09-30T11:00:00Z')).toISOString(), '2026-09-30T11:00:00.000Z');
 });

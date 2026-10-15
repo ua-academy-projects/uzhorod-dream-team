@@ -9,8 +9,9 @@
     "frontend"
   ],
   "scripts": {
-    "db:up": "docker-compose up -d",
-    "db:down": "docker-compose down",
+    "db:up": "docker-compose --profile redis-rabbitmq up -d",
+    "db:up:postgres": "docker-compose --profile postgres up -d --build",
+    "db:down": "docker-compose --profile redis-rabbitmq --profile postgres down",
     "dev:fetcher": "cd fetcher && go run ./cmd/fetcher",
     "dev:history": "concurrently -n history,scheduler -c blue,magenta \"npm run dev -w history\" \"npm start -w scheduler\"",
     "dev:frontend": "npm run dev -w frontend",

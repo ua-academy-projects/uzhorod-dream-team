@@ -1,27 +1,43 @@
 # Generic PostgreSQL instance; this app only needs its own database (POSTGRES_DB) inside it,
-# so the same container can be reused by other projects.
+# so the same container can be reused by other projects. Two variants, one per USE_REDIS_RABBITMQ value,
+# with the same container name, port and volume (stop one before starting the other: npm run db:down):
+#   profile redis-rabbitmq (true):  plain postgres:16-alpine, plus RabbitMQ
+#   profile postgres (false):       weather/postgres with pgmq and pg_cron (jobs run in POSTGRES_DB)
+x-postgres: &postgres
+  container_name: postgres
+  restart: unless-stopped
+  environment:
+    POSTGRES_USER: ${POSTGRES_USER:-postgres}
+    POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    POSTGRES_DB: ${POSTGRES_DB:-weather}
+  ports:
+    - "${POSTGRES_PORT:-5432}:5432"
+  volumes:
+    - postgres-data:/var/lib/postgresql/data
+  healthcheck:
+    test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+    interval: 5s
+    timeout: 5s
+    retries: 10
+
 services:
   postgres:
+    <<: *postgres
     image: postgres:16-alpine
-    container_name: postgres
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      POSTGRES_DB: ${POSTGRES_DB:-weather}
-    ports:
-      - "${POSTGRES_PORT:-5432}:5432"
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
+    profiles: [redis-rabbitmq]
 
-  # Queues between History and Fetcher; management UI on http://localhost:15672 (guest/guest)
+  postgres-pgmq:
+    <<: *postgres
+    build: ./postgres
+    image: weather/postgres
+    profiles: [postgres]
+    command: postgres -c shared_preload_libraries=pg_cron -c cron.database_name=${POSTGRES_DB:-weather} -c cron.host=/var/run/postgresql
+
+  # Queues between History and Fetcher with USE_REDIS_RABBITMQ=true (profile redis-rabbitmq);
+  # management UI on http://localhost:15672 (guest/guest)
   rabbitmq:
     image: rabbitmq:3-management
+    profiles: [redis-rabbitmq]
     container_name: rabbitmq
     restart: unless-stopped
     ports:

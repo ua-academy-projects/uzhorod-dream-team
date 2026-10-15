@@ -42,3 +42,17 @@ func TestLoadDotEnvMissingFileIsNotAnError(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestLoadUseRedisRabbitMQ(t *testing.T) {
+	for raw, want := range map[string]bool{"": true, "true": true, "YES": true, "1": true, "false": false, " No ": false, "0": false} {
+		t.Setenv("USE_REDIS_RABBITMQ", raw)
+		cfg, err := Load()
+		if err != nil || cfg.UseRedisRabbitMQ != want {
+			t.Errorf("USE_REDIS_RABBITMQ=%q: got %v, %v; want %v", raw, cfg.UseRedisRabbitMQ, err, want)
+		}
+	}
+	t.Setenv("USE_REDIS_RABBITMQ", "flase")
+	if _, err := Load(); err == nil {
+		t.Error("a typo must be an error, not the default")
+	}
+}

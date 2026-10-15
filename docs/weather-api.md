@@ -38,7 +38,7 @@ curl 'https://api.open-meteo.com/v1/forecast?latitude=52.52&longitude=13.41&curr
 | **Non-commercial use only.** Commercial use needs a paid plan. | Fine for a demo. |
 | **Rate limits:** about 10,000 calls/day, 5,000/hour, 600/minute. | An hourly scheduler makes 24 calls a day, well within the limits. |
 | **Model data, not station measurements.** Values come from weather models at roughly 1–11 km resolution. | Readings can differ slightly from a nearby weather station. |
-| **15-minute resolution for `current`.** Calling more often returns the same value. | The table's unique index on `(location_name, observed_at)` stops duplicate rows. |
+| **15-minute resolution for `current`.** Calling more often returns the same value. | History stores each fetch under the start of its hour, and the unique index on `(location_name, observed_at)` keeps one row per hour. |
 | **`past_days` is capped at 92.** | The backfill endpoint rejects `days > 92`. |
 | **The archive API lags about 5 days** behind real time. | Not used. Recent days come from `past_days` instead. |
 | **Attribution required (CC BY 4.0).** | The UI header links to Open-Meteo. |
