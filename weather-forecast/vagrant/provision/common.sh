@@ -105,8 +105,9 @@ read_broker_settings() {
 }
 
 configure_ssh() {
+  local ssh_template=${1:-sshd_config}
 
-  require_templates sshd_config ssh.socket.conf
+  require_templates "$ssh_template" ssh.socket.conf
   [[ ${WEATHER_SSH_PORT:-} =~ ^[0-9]+$ ]] &&
     (( WEATHER_SSH_PORT >= 1024 && WEATHER_SSH_PORT <= 65535 )) || {
     echo 'WEATHER_SSH_PORT must be between 1024 and 65535'; return 1;
@@ -133,7 +134,7 @@ configure_ssh() {
   chmod 600 /home/vagrant/.ssh/authorized_keys
 
   config_tmp=$(mktemp)
-  if ! render_template sshd_config > "$config_tmp"; then
+  if ! render_template "$ssh_template" > "$config_tmp"; then
     rm -f "$config_tmp"
     return 1
   fi

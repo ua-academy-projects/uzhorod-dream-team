@@ -12,6 +12,7 @@ containers. Deployment uses Docker CLI without Docker Compose.
 | `fetcher` | `192.168.56.12` | 8001 inside container | Python Fetcher and RabbitMQ worker |
 | `history` | `192.168.56.13` | 8002 | Go API, timers, queue consumer, database writer |
 | `ui` | `192.168.56.14` | 80 | Nginx and static HTML/CSS/JavaScript |
+| `bastion` | `192.168.56.10` | SSH | SSH jump host; client ProxyJump configuration is separate |
 
 The UI VM port 80 is forwarded to port 8080 on the Arch host. The browser
 therefore uses `http://localhost:8080/` and sends relative `/api/` requests.
@@ -67,11 +68,14 @@ weather data from PostgreSQL.
 
 ## Provisioning
 
-`vagrant/Vagrantfile` defines the four VMs, private addresses, resources,
+`vagrant/Vagrantfile` defines the five VMs, private addresses, resources,
 rsync folders, filtered secret files, templates, and role-specific scripts.
 
-The shared Vagrant provisioner installs Docker Engine and enables its systemd
-service. `vagrant/provision/common.sh` renders configuration, manages container replacement,
+The shared Vagrant provisioner prepares base packages and staging directories.
+`vagrant/provision/docker.sh` installs Docker Engine and enables its systemd
+service on the four service VMs. Bastion has no Docker provisioning, application
+rsync folder, or service credentials; `bastion.sh` only configures SSH.
+`vagrant/provision/common.sh` renders configuration, manages container replacement,
 waits for database dependencies, and configures SSH. Role scripts in
 `vagrant/provision/` then:
 
@@ -121,6 +125,15 @@ the SSH service to `WEATHER_SSH_PORT`. New VM state automatically selects port
 22 for bootstrap; subsequent commands use the configured port. The private
 key never leaves the Arch host. The SSH port is passed through configuration and is not stored in the
 repository.
+
+Service VMs use `sshd-services.conf`, which permits SSH login as `vagrant` only
+from Bastion (`192.168.56.10`) or the Arch host management address
+(`192.168.122.1`). Bastion uses the base `sshd_config` template. Client SSH
+aliases use `ProxyJump bastion`; Vagrant retains direct management access for
+provisioning, rsync, backups, and the UI SSH port-forwarding tunnel.
+This is an SSH login restriction, not a firewall rule. The management exception
+is based on the source address and also permits manual connections from that
+address. If these addresses change, update the service SSH template.
 
 Secrets stay in the local `weather-deploy-input/secrets.env`. Vagrant creates
 temporary per-role files and transfers only the variables required by each
