@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 source /home/vagrant/weather-staging/common.sh || exit 1
 
-configure_ssh
+configure_ssh sshd-services.conf
 
 load_secrets
 candidate=''

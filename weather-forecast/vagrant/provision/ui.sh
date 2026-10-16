@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 source /home/vagrant/weather-staging/common.sh || exit 1
 
-configure_ssh
+configure_ssh sshd-services.conf
 require_templates nginx.conf
 
 history_ip=${1:?History IP is required}
