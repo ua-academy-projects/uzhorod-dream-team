@@ -1,0 +1,6 @@
+.env*
+secrets.env
+.venv*/
+__pycache__/
+tests/
+requirements-dev.txt
