@@ -1,8 +1,10 @@
 # Weather Forecast Architecture
 
-Each service runs in a Docker container on an Ubuntu 24.04 Vagrant VM.
-systemd starts Docker Engine; `unless-stopped` restart policies restart
-containers. Deployment uses Docker CLI without Docker Compose.
+The application runs in six Docker containers across four Ubuntu 24.04
+Vagrant VMs. A fifth Ubuntu VM, Bastion, provides SSH access and has no Docker
+provisioning. systemd starts Docker Engine on the service VMs;
+`unless-stopped` restart policies restart containers. Deployment uses Docker
+CLI without Docker Compose.
 
 ## Components
 
@@ -36,8 +38,11 @@ browser -> Nginx -> History -> RabbitMQ weather.requests
 
 History starts a collection when the page requests it, when the user presses
 the collection button, and every 15 minutes. A job has a request ID and type.
-History stores its state in PostgreSQL, publishes a durable message, and waits
-for the Fetcher response. Results are validated before they are stored.
+History stores its state in PostgreSQL and publishes a durable message.
+`POST /api/collect` returns `202 Accepted` with the request ID after publication
+is confirmed. The browser polls `GET /api/jobs/<request_id>` until the job is
+completed or failed, then loads the saved weather. Fetcher responses are
+processed asynchronously and validated before they are stored.
 
 Temperature history uses a second job type. History checks the stored hourly
 range at startup and every hour. It requests an initial 30-day backfill or
@@ -63,8 +68,9 @@ response is published successfully.
 
 Redis stores only UI theme preferences. The browser keeps a random
 `weather_session` cookie; History uses it as the `session:<id>` Redis key.
-The cookie and Redis entry expire after 30 days. Redis failure does not remove
-weather data from PostgreSQL.
+The cookie and Redis entry expire after 30 days, with their lifetimes renewed
+when preferences are read or saved. A missing entry returns the default light
+theme. Redis failure does not remove weather data from PostgreSQL.
 
 ## Provisioning
 
@@ -111,7 +117,12 @@ It refuses an existing database.
 
 ## Network and access
 
-The four VMs communicate through the private `192.168.56.0/24` network.
+All five VMs have addresses on the private `192.168.56.0/24` network.
+Vagrant/libvirt also attaches a management interface to the existing `default`
+network, configured as `192.168.122.0/24`. Management addresses are assigned
+dynamically; the Arch host management address used by the SSH allowlist is
+`192.168.122.1`.
+
 Docker publishes PostgreSQL, RabbitMQ, and Redis ports on the DB VM private
 address. PostgreSQL permits network access to `weather_app` only from the
 History VM and requires SCRAM password authentication. Containers use the
@@ -131,6 +142,16 @@ from Bastion (`192.168.56.10`) or the Arch host management address
 (`192.168.122.1`). Bastion uses the base `sshd_config` template. Client SSH
 aliases use `ProxyJump bastion`; Vagrant retains direct management access for
 provisioning, rsync, backups, and the UI SSH port-forwarding tunnel.
+The normal SSH route is:
+
+```text
+Arch SSH client -> Bastion (192.168.56.10) -> db / fetcher / history / ui
+```
+
+The client authenticates to both VMs using the private key on Arch; agent
+forwarding and a private key on Bastion are not required. The SSH aliases are
+configured separately in the host's `~/.ssh/config`.
+
 This is an SSH login restriction, not a firewall rule. The management exception
 is based on the source address and also permits manual connections from that
 address. If these addresses change, update the service SSH template.
@@ -150,7 +171,8 @@ migrations/    PostgreSQL schema migrations
 vagrant/       Vagrantfile and configuration templates
 vagrant/provision/  Role-specific provisioning scripts and shared helpers
 vagrant/scripts/    VM maintenance scripts, including PostgreSQL backup
-scripts/       Host-side log collection and Docker reports
+scripts/       Host-side VM log collection
+cron/          Cron template for the Arch host
 docs/          Architecture documentation
 ```
 
@@ -158,5 +180,47 @@ docs/          Architecture documentation
 
 All six containers use Docker's `local` log driver with `max-size=10m` and
 `max-file=3`. Docker rotates container stdout/stderr logs on each VM.
-`docker logs` reads them. Container replacement removes those local logs;
-central collection and long-term storage are a separate deployment step.
+`docker logs` reads them. Container replacement removes those local logs.
+
+`scripts/collect-vm-logs.sh` collects logs onto the Arch host from `db`,
+`fetcher`, `history`, and `ui`. Bastion is not currently included. The script
+uses the host's SSH aliases, so service VM connections follow `ProxyJump`
+when configured. `BatchMode=yes` and `sudo -n` require access without
+interactive password or passphrase prompts.
+
+The collector retrieves two sources:
+
+- the system journal through `journalctl`, including service and kernel
+  messages recorded by journald;
+- stdout/stderr from each of the six containers through `docker logs`.
+
+The Docker `local` driver stores container output separately from journald.
+Collecting the system journal therefore does not retrieve the same Docker
+log stream a second time. Files written only to other paths, such as
+application-specific files under `/var/log`, are not collected automatically.
+
+The first collection requests up to 14 days of available logs. Later runs use
+journal cursors and Docker timestamps saved under `logs/.state/`. Checkpoints
+advance after a successful transfer and local save; an unavailable VM is
+skipped without advancing its checkpoints. A lock prevents overlapping runs.
+Logs already removed by local rotation cannot be recovered by the collector.
+
+Files are grouped under `logs/<vm>/system/` and
+`logs/<vm>/containers/<container>/`. Directories are created with mode `700`
+and files with mode `600`; logs and checkpoint files are ignored by Git.
+
+`cron/weather-log-collector.cron` is a template for the Arch user's crontab.
+It schedules collection every 15 minutes using absolute paths and writes
+collector diagnostics to daily `logs/collector-<UTC-date>.log` files. Keeping
+the template in the repository does not install or activate the schedule.
+
+Each run compresses `.log` files older than one day with gzip and removes
+`.log.gz` files older than 14 days. Age is measured from the file's modification
+time on Arch, not the timestamp of individual log messages; gzip preserves
+that modification time. This also applies to collector diagnostic logs.
+
+After destroying a VM environment, manually rename `logs/` to
+`logs-<timestamp>.old/` before collecting from replacement VMs. The collector
+does not detect VM replacement or rename directories automatically. New runs
+create a fresh `logs/` tree and checkpoints; compression and retention also
+cover `logs-*.old/` archives.
