@@ -10,7 +10,8 @@ __pycache__/
 *.py[cod]
 history/bin/
 *.test
-*.log
+/logs/
+/logs-*.old/
 .DS_Store
 .vagrant/
 .deploy/
