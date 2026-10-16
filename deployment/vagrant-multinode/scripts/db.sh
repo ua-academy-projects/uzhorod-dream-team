@@ -20,8 +20,8 @@ sed -i '/^REDIS_PASSWORD=/d' "$CONFIG/db.env"
 pg_ports=(-p "$PRIVATE_IP:5432:5432" -p 127.0.0.1:5432:5432)
 docker pull "$POSTGRES_IMAGE"
 docker volume create kyiv-air-postgres-data >/dev/null
-replace_container kyiv-air-postgres "${pg_ports[@]}" --env-file "$CONFIG/db.env" \
-  -v kyiv-air-postgres-data:/var/lib/postgresql/data "$POSTGRES_IMAGE"
+replace_container kyiv-air-postgres --user root "${pg_ports[@]}" --env-file "$CONFIG/db.env" \
+  -v kyiv-air-postgres-data:/var/lib/postgresql/data "$POSTGRES_IMAGE" postgres -c shared_preload_libraries=
 wait_command PostgreSQL docker exec kyiv-air-postgres pg_isready -h 127.0.0.1 -U kyiv_air -d "$DB_NAME"
 wait_command "PostgreSQL database" docker exec kyiv-air-postgres psql -U kyiv_air -d "$DB_NAME" -v ON_ERROR_STOP=1 -c 'SELECT 1'
 docker exec -i kyiv-air-postgres psql -U kyiv_air -d "$DB_NAME" -v ON_ERROR_STOP=1 < <(
@@ -44,8 +44,12 @@ if [[ "$POSTGRES_ONLY" == true ]]; then
 SELECT 'CREATE ROLE kyiv_air_fetcher LOGIN' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname='kyiv_air_fetcher')
 \gexec
 ALTER ROLE kyiv_air_fetcher WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION PASSWORD :'password';
-GRANT USAGE ON SCHEMA sync_queue TO kyiv_air_fetcher;
-GRANT SELECT, UPDATE ON sync_queue.requests TO kyiv_air_fetcher;
+GRANT USAGE ON SCHEMA pgmq TO kyiv_air_fetcher;
+GRANT SELECT, UPDATE, DELETE ON pgmq.q_kyiv_air_requests TO kyiv_air_fetcher;
+GRANT INSERT ON pgmq.q_kyiv_air_replies TO kyiv_air_fetcher;
+GRANT SELECT (msg_id) ON pgmq.q_kyiv_air_replies TO kyiv_air_fetcher;
+GRANT USAGE ON SEQUENCE pgmq.q_kyiv_air_replies_msg_id_seq TO kyiv_air_fetcher;
+GRANT EXECUTE ON FUNCTION pgmq.pop(text,integer), pgmq.send(text,jsonb) TO kyiv_air_fetcher;
 SQL
   ) >/dev/null
   for container in kyiv-air-redis kyiv-air-rabbitmq; do

@@ -17,10 +17,10 @@ set_env fetcher POSTGRES_ONLY "$POSTGRES_ONLY"
 if [[ "$POSTGRES_ONLY" == true ]]; then
   set_env fetcher DATABASE_URL "$FETCHER_DATABASE_URL"
   sed -i '/^RABBITMQ_URL=/d' "$CONFIG/fetcher.env"
-  docker pull "$POSTGRES_IMAGE"
+  docker pull "$POSTGRES_CLIENT_IMAGE"
   wait_command "PostgreSQL queue" docker run --rm --network "$NETWORK" --env-file "$CONFIG/fetcher.env" \
-    -e PGCONNECT_TIMEOUT=3 --entrypoint sh "$POSTGRES_IMAGE" -c \
-    'psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "SELECT id FROM sync_queue.requests LIMIT 0"'
+    -e PGCONNECT_TIMEOUT=3 --entrypoint sh "$POSTGRES_CLIENT_IMAGE" -c \
+    'psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "SELECT msg_id FROM pgmq.q_kyiv_air_requests LIMIT 0; SELECT msg_id FROM pgmq.q_kyiv_air_replies LIMIT 0"'
 else
   sed -i '/^DATABASE_URL=/d' "$CONFIG/fetcher.env"
   set_env fetcher RABBITMQ_URL "$RABBITMQ_URL"

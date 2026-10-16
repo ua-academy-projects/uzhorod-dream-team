@@ -182,11 +182,12 @@ start_databases() {
     rabbit_ports=(-p "$address:5672:5672" -p 127.0.0.1:5672:5672)
   fi
   docker pull "$POSTGRES_IMAGE"
+  docker pull "$POSTGRES_CLIENT_IMAGE"
   docker pull "$REDIS_IMAGE"
   docker pull "$RABBITMQ_IMAGE"
   for component in postgres redis rabbitmq; do docker volume create "kyiv-air-$component-data" >/dev/null; done
-  replace_container kyiv-air-postgres "${pg_ports[@]}" --env-file "$CONFIG/db.env" \
-    -v kyiv-air-postgres-data:/var/lib/postgresql/data "$POSTGRES_IMAGE"
+  replace_container kyiv-air-postgres --user root "${pg_ports[@]}" --env-file "$CONFIG/db.env" \
+    -v kyiv-air-postgres-data:/var/lib/postgresql/data "$POSTGRES_IMAGE" postgres -c shared_preload_libraries=
   wait_command PostgreSQL docker exec kyiv-air-postgres pg_isready -h 127.0.0.1 -U kyiv_air -d "$DB_NAME"
   wait_command "PostgreSQL database" docker exec kyiv-air-postgres psql -U kyiv_air -d "$DB_NAME" -v ON_ERROR_STOP=1 -c 'SELECT 1'
   docker exec -i kyiv-air-postgres psql -U kyiv_air -d "$DB_NAME" -v ON_ERROR_STOP=1 < <(
@@ -231,7 +232,7 @@ wait_dependencies() {
   wait_tcp "$RABBITMQ_HOST" 5672
   if [[ "$ROLE" == history ]]; then
     probe=(docker run --rm --network "$NETWORK" --env-file "$CONFIG/history.env" --env-file "$CONFIG/redis-probe.env")
-    wait_command PostgreSQL "${probe[@]}" -e PGCONNECT_TIMEOUT=3 --entrypoint sh "$POSTGRES_IMAGE" -c \
+    wait_command PostgreSQL "${probe[@]}" -e PGCONNECT_TIMEOUT=3 --entrypoint sh "$POSTGRES_CLIENT_IMAGE" -c \
       'psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "SELECT 1"'
     wait_command Redis "${probe[@]}" -e "REDIS_HOST=$REDIS_HOST" "$REDIS_IMAGE" sh -c \
       '[ "$(redis-cli -h "$REDIS_HOST" PING)" = PONG ]'

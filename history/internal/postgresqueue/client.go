@@ -29,11 +29,19 @@ func (c *Client) Call(ctx context.Context, request syncprotocol.Request) (json.R
 	}
 	request.Version = syncprotocol.Version
 	request.Deadline = deadline
-	body, err := json.Marshal(request)
+	payload, err := json.Marshal(request)
 	if err != nil {
 		return nil, err
 	}
 	id := rand.Text()
+	body, err := json.Marshal(message{CorrelationID: id, Deadline: deadline, Payload: payload})
+	if err != nil {
+		return nil, err
+	}
+	filter, err := json.Marshal(map[string]string{"correlation_id": id})
+	if err != nil {
+		return nil, err
+	}
 	var conn *pgxpool.Conn
 	defer func() {
 		if conn != nil {
@@ -56,7 +64,7 @@ func (c *Client) Call(ctx context.Context, request syncprotocol.Request) (json.R
 			if err != nil {
 				return nil, err
 			}
-			_, err = tx.Exec(ctx, `INSERT INTO sync_queue.requests(id,request,deadline) VALUES($1,$2,$3)`, id, body, deadline)
+			_, err = tx.Exec(ctx, `SELECT pgmq.send($1,$2::jsonb)`, requestsChannel, body)
 			if err == nil {
 				_, err = tx.Exec(ctx, `SELECT pg_notify($1,$2)`, requestsChannel, id)
 			}
@@ -73,10 +81,14 @@ func (c *Client) Call(ctx context.Context, request syncprotocol.Request) (json.R
 			inserted = true
 		}
 		var response []byte
-		err = conn.QueryRow(ctx, `DELETE FROM sync_queue.requests WHERE id=$1 AND completed AND deadline>statement_timestamp() RETURNING response`, id).Scan(&response)
+		response, err = receiveReply(ctx, conn, filter)
 		if err == nil {
+			var envelope message
+			if err = json.Unmarshal(response, &envelope); err != nil {
+				return nil, err
+			}
 			var reply syncprotocol.Response
-			if err = json.Unmarshal(response, &reply); err != nil {
+			if err = json.Unmarshal(envelope.Payload, &reply); err != nil {
 				return nil, err
 			}
 			if reply.Version != syncprotocol.Version {
@@ -109,11 +121,44 @@ func (c *Client) Call(ctx context.Context, request syncprotocol.Request) (json.R
 	return nil, ctx.Err()
 }
 
+func receiveReply(ctx context.Context, conn *pgxpool.Conn, filter []byte) ([]byte, error) {
+	tx, err := conn.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		rollbackCtx, cancel := context.WithTimeout(context.Background(), connectionTimeout)
+		defer cancel()
+		_ = tx.Rollback(rollbackCtx)
+	}()
+	var id int64
+	var body []byte
+	err = tx.QueryRow(ctx, `SELECT msg_id,message FROM pgmq.read($1,0,1,$2::jsonb) WHERE (message->>'deadline')::timestamptz>statement_timestamp()`, repliesChannel, filter).Scan(&id, &body)
+	if err != nil {
+		return nil, err
+	}
+	var deleted bool
+	if err = tx.QueryRow(ctx, `SELECT pgmq.delete($1,$2::bigint)`, repliesChannel, id).Scan(&deleted); err != nil {
+		return nil, err
+	}
+	if !deleted {
+		return nil, errors.New("PostgreSQL reply disappeared before acknowledgement")
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return body, nil
+}
+
 func Cleanup(ctx context.Context, pool *pgxpool.Pool) {
 	clean := func() {
 		cleanupCtx, cancel := context.WithTimeout(ctx, cleanupTimeout)
 		defer cancel()
-		for _, query := range []string{`DELETE FROM sync_queue.requests WHERE deadline<=statement_timestamp()`, `DELETE FROM sessions WHERE expires_at<=statement_timestamp()`} {
+		for _, query := range []string{
+			`SELECT pgmq.delete('kyiv_air_requests',msg_id) FROM pgmq.q_kyiv_air_requests WHERE (message->>'deadline')::timestamptz<=statement_timestamp()`,
+			`SELECT pgmq.delete('kyiv_air_replies',msg_id) FROM pgmq.q_kyiv_air_replies WHERE (message->>'deadline')::timestamptz<=statement_timestamp()`,
+			`DELETE FROM sessions WHERE expires_at<=statement_timestamp()`,
+		} {
 			if _, err := pool.Exec(cleanupCtx, query); err != nil && ctx.Err() == nil {
 				log.Printf("PostgreSQL transient data cleanup failed: %v", err)
 			}

@@ -66,21 +66,27 @@ func (w *Worker) process(ctx context.Context) (bool, error) {
 		defer cancel()
 		_ = tx.Rollback(rollbackCtx)
 	}()
-	var id string
 	var body []byte
-	var deadline time.Time
-	err = tx.QueryRow(ctx, `SELECT id,request,deadline FROM sync_queue.requests WHERE NOT completed AND deadline>statement_timestamp() ORDER BY deadline,id FOR UPDATE SKIP LOCKED LIMIT 1`).Scan(&id, &body, &deadline)
+	err = tx.QueryRow(ctx, `SELECT message FROM pgmq.pop($1,1)`, requestsChannel).Scan(&body)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil
 	}
 	if err != nil {
 		return false, err
 	}
-	requestCtx, cancel := context.WithDeadline(ctx, deadline)
+	var envelope message
+	if err = json.Unmarshal(body, &envelope); err != nil || envelope.CorrelationID == "" || envelope.Deadline.IsZero() {
+		log.Print("Discarding invalid PostgreSQL queue message")
+		return true, tx.Commit(ctx)
+	}
+	if !envelope.Deadline.After(time.Now()) {
+		return true, tx.Commit(ctx)
+	}
+	requestCtx, cancel := context.WithDeadline(ctx, envelope.Deadline)
 	defer cancel()
 	var request syncprotocol.Request
 	response := syncprotocol.Response{Version: syncprotocol.Version}
-	if err = json.Unmarshal(body, &request); err == nil {
+	if err = json.Unmarshal(envelope.Payload, &request); err == nil {
 		response.Data, err = w.handler.Handle(requestCtx, request)
 	}
 	if requestCtx.Err() != nil {
@@ -94,10 +100,14 @@ func (w *Worker) process(ctx context.Context) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	if _, err = tx.Exec(requestCtx, `UPDATE sync_queue.requests SET completed=TRUE,response=$2 WHERE id=$1`, id, reply); err != nil {
+	body, err = json.Marshal(message{CorrelationID: envelope.CorrelationID, Deadline: envelope.Deadline, Payload: reply})
+	if err != nil {
 		return false, err
 	}
-	if _, err = tx.Exec(requestCtx, `SELECT pg_notify($1,$2)`, repliesChannel, id); err != nil {
+	if _, err = tx.Exec(requestCtx, `SELECT pgmq.send($1,$2::jsonb)`, repliesChannel, body); err != nil {
+		return false, err
+	}
+	if _, err = tx.Exec(requestCtx, `SELECT pg_notify($1,$2)`, repliesChannel, envelope.CorrelationID); err != nil {
 		return false, err
 	}
 	return true, tx.Commit(requestCtx)

@@ -7,7 +7,7 @@ read_database
 if [[ "$POSTGRES_ONLY" == false ]]; then read_rabbitmq; fi
 install_docker
 build_image history "$HISTORY_IMAGE" --target runtime
-docker pull "$POSTGRES_IMAGE"
+docker pull "$POSTGRES_CLIENT_IMAGE"
 configure_firewall
 ensure_network
 
@@ -17,7 +17,7 @@ set_env history POSTGRES_ONLY "$POSTGRES_ONLY"
 set_env history DATABASE_URL "$DATABASE_URL"
 set_env history ALLOWED_ORIGINS "$UI_ORIGIN"
 probe=(docker run --rm --network "$NETWORK" --env-file "$CONFIG/history.env")
-wait_command PostgreSQL "${probe[@]}" -e PGCONNECT_TIMEOUT=3 --entrypoint sh "$POSTGRES_IMAGE" -c \
+wait_command PostgreSQL "${probe[@]}" -e PGCONNECT_TIMEOUT=3 --entrypoint sh "$POSTGRES_CLIENT_IMAGE" -c \
   'psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "SELECT id FROM sessions LIMIT 0"'
 
 if [[ "$POSTGRES_ONLY" == false ]]; then
