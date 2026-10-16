@@ -1,0 +1,4 @@
+.env*
+secrets.env
+bin/
+*_test.go

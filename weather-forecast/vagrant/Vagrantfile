@@ -122,7 +122,7 @@ EOF
   SHELL
 
   config.vm.provision "file",
-    source: File.join(__dir__, "common.sh"),
+    source: File.join(__dir__, "provision", "common.sh"),
     destination: "/home/vagrant/weather-staging/common.sh"
 
   config.vm.provision "file",
@@ -187,7 +187,7 @@ EOF
 
             remote_script = "/home/vagrant/weather-staging/backup-db.sh"
             remote_dump = "/home/vagrant/weather-staging/weather_history.auto.dump"
-            machine.communicate.upload(File.join(__dir__, "backup-db.sh"), remote_script)
+            machine.communicate.upload(File.join(__dir__, "scripts", "backup-db.sh"), remote_script)
             machine.communicate.sudo("bash #{remote_script}", error_check: true)
             next unless machine.communicate.test("test -s #{remote_dump}")
 
@@ -235,7 +235,7 @@ EOF
       vm.vm.provision "shell", name: "weather-#{name}",
         privileged: true,
         env: provision_environment,
-        path: File.join(__dir__, "provision-#{name}.sh"), args: arguments
+        path: File.join(__dir__, "provision", "#{name}.sh"), args: arguments
     end
   end
 end

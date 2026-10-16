@@ -71,17 +71,18 @@ weather data from PostgreSQL.
 rsync folders, filtered secret files, templates, and role-specific scripts.
 
 The shared Vagrant provisioner installs Docker Engine and enables its systemd
-service. `common.sh` renders configuration, manages container replacement,
-waits for database dependencies, and configures SSH. Role scripts then:
+service. `vagrant/provision/common.sh` renders configuration, manages container replacement,
+waits for database dependencies, and configures SSH. Role scripts in
+`vagrant/provision/` then:
 
-- `provision-db.sh` runs official PostgreSQL 18, RabbitMQ 4.3, and Redis 7.4 Alpine
+- `db.sh` runs official PostgreSQL 18, RabbitMQ 4.3, and Redis 7.4 Alpine
   images, configures runtime secrets and persistent volumes, restores a dump
   into an empty database if available, and applies all SQL migrations;
-- `provision-fetcher.sh` builds the Python multi-stage image and starts the
+- `fetcher.sh` builds the Python multi-stage image and starts the
   RabbitMQ worker without publishing its internal HTTP port;
-- `provision-history.sh` builds the static Go binary in a multi-stage image
+- `history.sh` builds the static Go binary in a multi-stage image
   and publishes port 8002 on the History VM private address;
-- `provision-ui.sh` builds the static Nginx image, mounts the rendered proxy
+- `ui.sh` builds the static Nginx image, mounts the rendered proxy
   configuration, and publishes port 80 for Vagrant's host port 8080 forward.
 
 On an existing DB VM, provisioning first exports the native PostgreSQL 18
@@ -91,8 +92,9 @@ native PostgreSQL, RabbitMQ, and Redis services are disabled. Existing native
 RabbitMQ messages and Redis preferences are not imported into the new volumes.
 
 Named volumes preserve PostgreSQL, RabbitMQ, and Redis state when containers
-are replaced. Before `vagrant destroy db`, a Vagrant trigger saves a consistent
-PostgreSQL dump to the host's ignored `weather-deploy-input/weather_history.auto.dump`.
+are replaced. Before `vagrant destroy db`, a Vagrant trigger runs
+`vagrant/scripts/backup-db.sh` on the DB VM and saves a consistent PostgreSQL dump
+to the host's ignored `weather-deploy-input/weather_history.auto.dump`.
 It boots a stopped DB VM without provisioning if needed. If backup or download
 fails, destruction is aborted. A new DB VM automatically receives and restores
 this dump before migrations. RabbitMQ messages and Redis preferences are not
@@ -132,7 +134,10 @@ fetcher/       Python provider client, worker, tests, requirements
 history/       Go API, queue handling, storage, timers, tests
 ui/            Static web page and browser JavaScript
 migrations/    PostgreSQL schema migrations
-vagrant/       Vagrantfile, provisioning and backup scripts, configuration templates
+vagrant/       Vagrantfile and configuration templates
+vagrant/provision/  Role-specific provisioning scripts and shared helpers
+vagrant/scripts/    VM maintenance scripts, including PostgreSQL backup
+scripts/       Host-side log collection and Docker reports
 docs/          Architecture documentation
 ```
 
