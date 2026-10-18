@@ -1,9 +1,8 @@
 import session from 'express-session';
 import { RedisStore } from 'connect-redis';
-import connectPgSimple from 'connect-pg-simple';
 import type { RequestHandler } from 'express';
 import { config } from '../config.ts';
-import { pool } from '../db/pool.ts';
+import { HstoreStore } from './pg-session-store.ts';
 import { redis } from '../redis.ts';
 
 const COOKIE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
@@ -19,12 +18,9 @@ declare module 'express-session' {
   }
 }
 
-/** Redis, or the session table of 004_sessions.sql with BACKEND=postgres. */
+/** Redis, or the hstore session table of 005_session_hstore.sql with BACKEND=postgres. */
 async function sessionStore(): Promise<session.Store> {
-  if (config.backend === 'postgres') {
-    const PgStore = connectPgSimple(session);
-    return new PgStore({ pool, tableName: 'session' });
-  }
+  if (config.backend === 'postgres') return new HstoreStore();
   return new RedisStore({ client: await redis(), prefix: 'session:' });
 }
 
