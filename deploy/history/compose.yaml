@@ -1,0 +1,29 @@
+name: iss
+
+services:
+  history:
+    build: ./src
+    image: iss-history:latest
+    restart: unless-stopped
+    environment:
+      QUEUE_BACKEND: ${QUEUE_BACKEND:?}
+      SESSION_BACKEND: ${SESSION_BACKEND:?}
+      POSTGRES_HOST: ${DB_IP:?}
+      POSTGRES_PORT: ${POSTGRES_PORT:?}
+      POSTGRES_USER: ${POSTGRES_USER:?}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+      POSTGRES_DB: ${POSTGRES_DB:?}
+      POSTGRES_FETCHER_USER: ${POSTGRES_FETCHER_USER:?}
+      RABBITMQ_HOST: ${DB_IP:?}
+      RABBITMQ_PORT: ${RABBITMQ_PORT:?}
+      RABBITMQ_USER: ${RABBITMQ_USER:?}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?}
+      RABBITMQ_QUEUE: ${RABBITMQ_QUEUE:?}
+      REDIS_HOST: ${DB_IP:?}
+      REDIS_PORT: ${REDIS_PORT:?}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?}
+      HISTORY_PORT: ${HISTORY_PORT:?}
+      HISTORY_RESULT_LIMIT: ${HISTORY_RESULT_LIMIT:?}
+      HISTORY_SESSION_TTL: ${HISTORY_SESSION_TTL:?}
+    ports:
+      - "${HISTORY_PORT:?}:${HISTORY_PORT:?}"

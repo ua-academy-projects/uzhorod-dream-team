@@ -1,0 +1,78 @@
+name: iss
+
+services:
+  postgres:
+    build: ./src
+    image: iss-postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+      POSTGRES_DB: ${POSTGRES_DB:?}
+      POSTGRES_FETCHER_USER: ${POSTGRES_FETCHER_USER:?}
+      POSTGRES_FETCHER_PASSWORD: ${POSTGRES_FETCHER_PASSWORD:?}
+      HISTORY_IP: ${HISTORY_IP:?}
+      FETCHER_IP: ${FETCHER_IP:?}
+      QUEUE_BACKEND: ${QUEUE_BACKEND:?}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        cat > /tmp/pg_hba.conf <<EOF
+        local all all trust
+        host all all 127.0.0.1/32 scram-sha-256
+        host $$POSTGRES_DB $$POSTGRES_USER $$HISTORY_IP/32 scram-sha-256
+        EOF
+        case "$$QUEUE_BACKEND" in
+          postgres|pgmq) echo "host $$POSTGRES_DB $$POSTGRES_FETCHER_USER $$FETCHER_IP/32 scram-sha-256" >> /tmp/pg_hba.conf ;;
+        esac
+        exec docker-entrypoint.sh postgres -c hba_file=/tmp/pg_hba.conf \
+          -c shared_preload_libraries=pg_cron -c cron.database_name="$$POSTGRES_DB" -c cron.use_background_workers=on
+    ports:
+      - "${POSTGRES_PORT:?}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    profiles: [redis]
+    image: redis:7-alpine
+    restart: unless-stopped
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?}
+    command: ["sh", "-c", "exec redis-server --requirepass \"$$REDIS_PASSWORD\" --appendonly yes"]
+    ports:
+      - "${REDIS_PORT:?}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" --no-auth-warning ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  rabbitmq:
+    profiles: [rabbitmq]
+    image: rabbitmq:3.13-alpine
+    restart: unless-stopped
+    hostname: iss-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:?}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?}
+    ports:
+      - "${RABBITMQ_PORT:?}:5672"
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+
+volumes:
+  postgres-data:
+  redis-data:
+  rabbitmq-data:

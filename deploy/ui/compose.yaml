@@ -1,0 +1,12 @@
+name: iss
+
+services:
+  ui:
+    build: ./src
+    image: iss-ui:latest
+    restart: unless-stopped
+    environment:
+      HISTORY_IP: ${HISTORY_IP:?}
+      HISTORY_PORT: ${HISTORY_PORT:?}
+    ports:
+      - "${UI_PORT:?}:80"

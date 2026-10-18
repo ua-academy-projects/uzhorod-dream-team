@@ -1,0 +1,23 @@
+name: iss
+
+services:
+  fetcher:
+    build: ./src
+    image: iss-fetcher:latest
+    restart: unless-stopped
+    environment:
+      QUEUE_BACKEND: ${QUEUE_BACKEND:?}
+      RABBITMQ_HOST: ${DB_IP:?}
+      RABBITMQ_PORT: ${RABBITMQ_PORT:?}
+      RABBITMQ_USER: ${RABBITMQ_USER:?}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?}
+      RABBITMQ_QUEUE: ${RABBITMQ_QUEUE:?}
+      POSTGRES_HOST: ${DB_IP:?}
+      POSTGRES_PORT: ${POSTGRES_PORT:?}
+      POSTGRES_DB: ${POSTGRES_DB:?}
+      POSTGRES_FETCHER_USER: ${POSTGRES_FETCHER_USER:?}
+      POSTGRES_FETCHER_PASSWORD: ${POSTGRES_FETCHER_PASSWORD:?}
+      FETCHER_ISS_API_URL: ${FETCHER_ISS_API_URL:?}
+      FETCHER_POLL_INTERVAL: ${FETCHER_POLL_INTERVAL:?}
+    volumes:
+      - /etc/ssl/certs/ca-certificates.crt:/etc/ssl/certs/ca-certificates.crt:ro
