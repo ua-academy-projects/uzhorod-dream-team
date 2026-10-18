@@ -40,12 +40,35 @@
 - only history writes prices; the fetcher's HTTP is `/health` only;
 - from outside only the UI and the bastion are reachable: [NETWORK-ACCESS.md](NETWORK-ACCESS.md).
 
+## Networks
+
+```
+ Windows / Wi-Fi
+       │  a route exists only to this network
+       ▼
+ crypto-edge     192.168.78.0/24 ── ordinary libvirt network, reachable from outside
+       │                │
+    bastion            ui            ← the only VMs with a second interface (edge_ip)
+       │                │
+ crypto-private  192.168.77.0/24 ── isolated: forward_mode none, no route in or out
+       │         │          │          │          │
+    bastion      db      fetcher    history      ui
+
+ Vagrant management 192.168.121.0/24 (added by Vagrant): provisioning, internet for the VMs
+```
+
+- **private** — every VM; services talk here (history → db, fetcher → db, ui → history).
+- **edge** — only the bastion (admins come in) and ui (users come in): a DMZ, like a public subnet.
+- One network would not do: a route from Windows to the UI would expose db, history and fetcher too.
+- `private_network` is just Vagrant's name for a host-only network; `forward_mode: "none"` is what makes
+  `crypto-private` isolated, so the VMs reach the internet through the management network.
+
 ## BACKEND
 
 | | `redis` (default) | `postgres` |
 |---|---|---|
 | queue | Redis Streams | pgmq extension |
-| sessions | Redis | table `session` |
+| sessions (key-value) | Redis keys with TTL | **hstore** extension: table `session` |
 | Redis container | yes | no |
 
 ```
@@ -97,9 +120,19 @@ The fetcher logs into Postgres as `queue_worker`: requests and results only.
 ## Session
 
 ```
- browser ──cookie connect.sid (signed id)──▶ history ──▶ redis | table "session"
+ browser ──cookie connect.sid (signed id)──▶ history ──▶ redis | table "session" (hstore)
  value: { theme: light | dark | system } · 30 days
 ```
+
+With `BACKEND=postgres` a session is a row of key-value pairs (`005_session_hstore.sql`,
+store: `http/pg-session-store.ts`):
+
+```
+ sid      | data (hstore)                                  | expire
+ aB3x…    | "theme"=>"dark", "cookie"=>"{maxAge, expires…}" | +30 days
+```
+
+Expired rows are never served and are deleted every 15 min; `select data->'theme' from session`.
 
 ## Provisioning
 
