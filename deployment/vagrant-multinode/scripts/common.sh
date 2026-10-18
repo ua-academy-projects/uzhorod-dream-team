@@ -14,7 +14,7 @@ env_value() { sed -n "s/^$2=//p" "$1" | tr -d '\r'; }
 require_env() { [[ -s "/tmp/kyiv-air-$1.env" ]] || fail "Missing env/$1.env. Run full provisioning."; }
 
 cleanup_uploads() {
-  rm -f /tmp/kyiv-air-{fetcher,history,db,ui,rabbitmq,queue}.env /tmp/kyiv-air-{common,docker-firewall}.sh /tmp/kyiv-air-images.env /tmp/kyiv-air-bastion.conf.template
+  rm -f /tmp/kyiv-air-{fetcher,history,db,ui,rabbitmq,queue,cloudflare}.env /tmp/kyiv-air-{common,docker-firewall}.sh /tmp/kyiv-air-images.env /tmp/kyiv-air-bastion.conf.template
 }
 
 copy_env() {

@@ -15,7 +15,12 @@ copy_env history
 set_env history PORT 8081
 set_env history POSTGRES_ONLY "$POSTGRES_ONLY"
 set_env history DATABASE_URL "$DATABASE_URL"
-set_env history ALLOWED_ORIGINS "$UI_ORIGIN"
+allowed_origins=$(env_value "$CONFIG/history.env" ALLOWED_ORIGINS)
+case ",$allowed_origins," in
+  *",$UI_ORIGIN,"*) ;;
+  *) allowed_origins="${allowed_origins:+$allowed_origins,}$UI_ORIGIN" ;;
+esac
+set_env history ALLOWED_ORIGINS "$allowed_origins"
 probe=(docker run --rm --network "$NETWORK" --env-file "$CONFIG/history.env")
 wait_command PostgreSQL "${probe[@]}" -e PGCONNECT_TIMEOUT=3 --entrypoint sh "$POSTGRES_CLIENT_IMAGE" -c \
   'psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "SELECT id FROM sessions LIMIT 0"'

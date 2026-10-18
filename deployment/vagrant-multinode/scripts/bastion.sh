@@ -2,6 +2,8 @@
 set -Eeuo pipefail
 source <(sed 's/\r$//' /tmp/kyiv-air-common.sh)
 
+require_env cloudflare
+
 install_docker
 configure_firewall
 ensure_network
@@ -53,3 +55,8 @@ replace_container kyiv-air-bastion -p "$PUBLIC_IP:80:8080" -p 127.0.0.1:80:8080 
   -v "$CONFIG/bastion.conf.template:/etc/nginx/templates/default.conf.template:ro" "$BASTION_IMAGE"
 wait_http "http://$PUBLIC_IP/"
 wait_http "http://$PUBLIC_IP/api/v1/session"
+
+# Cloudflare Tunnel Setup
+CLOUDFLARE_TOKEN=$(env_value /tmp/kyiv-air-cloudflare.env CLOUDFLARE_TUNNEL_TOKEN)
+
+replace_container cloudflare cloudflare/cloudflared:latest tunnel --no-autoupdate run --token "$CLOUDFLARE_TOKEN"

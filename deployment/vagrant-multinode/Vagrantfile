@@ -30,7 +30,7 @@ machines = {
            port: 80, source: "ui", env_files: %w[ui], script: "scripts/ui.sh",
            containers: "kyiv-air-ui"},
   "bastion" => {hostname: "kyiv-air-bastion", ip: "192.168.56.200", memory: 512, cpus: 1,
-                port: 80, source: nil, env_files: [], script: "scripts/bastion.sh",
+                port: 80, source: nil, env_files: %w[cloudflare], script: "scripts/bastion.sh",
                 containers: "kyiv-air-bastion"}
 }
 
