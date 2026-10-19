@@ -8,8 +8,9 @@ import httpx
 import pytest
 
 from fetcher.config import Settings
-from fetcher.worker import execute_job, handle_message
-from fetcher.tests.test_app import provider
+from fetcher.workers.jobs import execute_job
+from fetcher.workers.rabbitmq import handle_message
+from tests.test_app import provider
 
 
 def request(kind="current_weather"):

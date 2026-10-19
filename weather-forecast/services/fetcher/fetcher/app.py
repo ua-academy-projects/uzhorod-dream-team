@@ -44,9 +44,9 @@ def create_app(config: Settings = settings):
             worker = None
             if queue_enabled:
                 if config.backend == "postgres":
-                    from .postgres_worker import run_worker
+                    from .workers.postgres import run_worker
                 else:
-                    from .worker import run_worker
+                    from .workers.rabbitmq import run_worker
                 worker = asyncio.create_task(run_worker(client, config, app.state))
             try:
                 yield

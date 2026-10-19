@@ -12,11 +12,11 @@ import pytest
 
 from fetcher.app import create_app
 from fetcher.config import Settings
-from fetcher.postgres_worker import (
+from fetcher.workers.postgres import (
     DeliveryLost, claim_request, finish_request, process_request, extend_visibility,
 )
-from fetcher.tests.test_app import provider
-from fetcher.tests.test_worker import request
+from tests.test_app import provider
+from tests.test_worker import request
 
 
 @pytest.fixture
@@ -196,7 +196,7 @@ def test_backend_configuration_and_health(monkeypatch):
         state.broker_ready = True
         await asyncio.Future()
 
-    monkeypatch.setattr("fetcher.postgres_worker.run_worker", worker)
+    monkeypatch.setattr("fetcher.workers.postgres.run_worker", worker)
 
     async def check():
         config = replace(Settings(), backend="postgres", database_url="postgres://localhost/test",

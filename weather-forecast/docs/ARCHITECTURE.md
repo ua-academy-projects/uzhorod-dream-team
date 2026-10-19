@@ -321,12 +321,9 @@ only its separate database password. UI and Bastion receive no service secrets.
 
 ```text
 services/
-  fetcher/                Python Fetcher package and Docker build context
-    app.py                HTTP app
-    config.py             Environment configuration
-    provider.py           Open-Meteo client
-    worker.py             Shared job execution and RabbitMQ worker
-    postgres_worker.py    PGMQ worker
+  fetcher/
+    fetcher/              HTTP app, configuration, provider client
+      workers/            Shared job execution, RabbitMQ and PGMQ workers
     tests/                Python tests
   history/
     cmd/history/          Process startup and dependency wiring
@@ -362,7 +359,7 @@ From the project root, run Python tests with
 `.venv/bin/python -m pytest services/fetcher/tests`. For Go, change to
 `services/history/`, then run `go test ./...` and
 `go build -o bin/history ./cmd/history`. Local startup uses
-`python -m fetcher` from `services/` and `go run ./cmd/history` from
+`python -m fetcher` from `services/fetcher/` and `go run ./cmd/history` from
 `services/history/`, with the chosen backend environment configured. History's
 default local UI directory is `../ui/public`; deployed History containers keep
 `HISTORY_SERVE_UI=false` and use the separate Nginx VM.

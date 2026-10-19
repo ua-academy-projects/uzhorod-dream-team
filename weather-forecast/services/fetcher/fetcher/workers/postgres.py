@@ -7,7 +7,7 @@ from uuid import UUID
 
 import asyncpg
 
-from .worker import execute_job
+from .jobs import execute_job
 
 logger = logging.getLogger("uvicorn.error")
 
