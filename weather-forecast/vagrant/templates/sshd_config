@@ -5,8 +5,23 @@ PubkeyAuthentication yes
 PasswordAuthentication no
 KbdInteractiveAuthentication no
 AuthenticationMethods publickey
+AllowUsers jump vagrant@192.168.122.1
 
 UsePAM yes
 X11Forwarding no
-AllowTcpForwarding yes
+AllowAgentForwarding no
+AllowStreamLocalForwarding no
+AllowTcpForwarding local
+PermitTTY no
+PermitTunnel no
+PermitUserRC no
+MaxSessions 0
+PermitOpen 192.168.56.11:22 192.168.56.11:@PORT@ 192.168.56.12:22 192.168.56.12:@PORT@ 192.168.56.13:22 192.168.56.13:@PORT@ 192.168.56.14:22 192.168.56.14:@PORT@ 192.168.56.14:80
+
 Subsystem sftp internal-sftp
+
+# Vagrant keeps its own key for provisioning; normal users use jump.
+Match User vagrant Address 192.168.122.1
+    MaxSessions 10
+    PermitTTY yes
+    PermitOpen 192.168.56.14:80

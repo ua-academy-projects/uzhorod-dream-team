@@ -15,7 +15,7 @@ CLI without Docker Compose.
 | `fetcher` | `192.168.56.12` | 8001 inside container | Python Fetcher and queue worker |
 | `history` | `192.168.56.13` | 8002 | Go API, timers, queue consumer, database writer |
 | `ui` | `192.168.56.14` | 80 | Nginx and static HTML/CSS/JavaScript |
-| `bastion` | `192.168.56.10` | SSH | SSH jump host; client ProxyJump configuration is separate |
+| `bastion` | external `192.168.122.10`; internal `192.168.56.10` | SSH | SSH jump host, internal DHCP/DNS, outbound gateway |
 
 The UI VM port 80 is forwarded to port 8080 on the host. The browser
 therefore uses `http://localhost:8080/` and sends relative `/api/` requests.
@@ -110,7 +110,13 @@ rsync folders, filtered secret files, templates, and role-specific scripts.
 The shared Vagrant provisioner prepares base packages and staging directories.
 `vagrant/provision/docker.sh` installs Docker Engine and enables its systemd
 service on the four service VMs. Bastion has no Docker provisioning, application
-rsync folder, or service credentials; `bastion.sh` only configures SSH.
+rsync folder, or service credentials. Vagrant uses its own `vagrant` SSH account
+and generated per-VM key to provision Bastion. `bastion.sh` configures the
+forwarding-only `jump` account, internal DHCP/DNS, and the outbound firewall.
+A readiness marker is written only after the gateway services are active;
+service VM startup requires this marker and active gateway services.
+No QEMU Guest Agent, custom base box, or experimental communicator is required.
+
 `vagrant/provision/common.sh` renders configuration, manages container replacement,
 waits for database dependencies, and configures SSH. Role scripts in
 `vagrant/provision/` then:
@@ -124,7 +130,8 @@ waits for database dependencies, and configures SSH. Role scripts in
 - `history.sh` builds the static Go binary in a multi-stage image
   and publishes port 8002 on the History VM private address;
 - `ui.sh` builds the static Nginx image, mounts the rendered proxy
-  configuration, and publishes port 80 for Vagrant's host port 8080 forward.
+  configuration, and publishes port 80. Vagrant forwards host port 8080 through
+  Bastion to the UI VM's internal address.
 
 `WEATHER_BACKEND` comes from the ignored host deployment input. If omitted,
 the default mode is preserved. `WEATHER_SKIP_BUILD=1` on the Vagrant command
@@ -153,11 +160,28 @@ It refuses an existing database.
 
 ## Network and access
 
-All five VMs have addresses on the private `192.168.56.0/24` network.
-Vagrant/libvirt also attaches a management interface to the existing `default`
-network, configured as `192.168.122.0/24`. Management addresses are assigned
-dynamically; the host management address used by the SSH allowlist is
-`192.168.122.1`.
+The project owns two libvirt networks:
+
+- `weather-external`: NAT network `192.168.122.0/24`, host address
+  `192.168.122.1`; only Bastion attaches here. The DHCP pool contains only
+  `192.168.122.10`, giving its stock first NIC a stable address;
+- `weather-internal`: a bridge without a host IP, libvirt DHCP,
+  forwarding, or host IPv6. Bastion uses `192.168.56.10/24`; the four service
+  VMs use `.11` through `.14` on their only NIC.
+
+Bastion supplies internal DHCP/DNS and routes outbound traffic through NAT.
+Fixed MAC reservations assign service addresses before SSH is available.
+Vagrant uses these same fixed addresses for service SSH. The installed
+vagrant-libvirt 0.12.2 otherwise queries libvirt DHCP even when `ssh.host` is
+configured. A small driver override in Vagrantfile returns an explicitly
+configured `ssh.host`, delegating normal discovery to the provider when none
+is set. This also covers `vagrant ssh-config`, which does not run action
+triggers. DHCP for the service VMs remains entirely on Bastion.
+There is no direct host route into the internal network. The project no longer
+attaches VMs to `default` or `vagrant0`. Vagrant creates both project networks
+using provider options, without separate XML definitions or a setup script.
+Bridge names are assigned by libvirt/Vagrant; inspect them with `net-dumpxml`
+instead of assuming a particular `virbr` number.
 
 Docker publishes PostgreSQL on the DB VM private address, and RabbitMQ/Redis
 ports when those containers are running. PostgreSQL permits network access to
@@ -169,8 +193,9 @@ other VMs' private addresses, not Docker names across hosts. Fetcher does not
 need an incoming published port; its worker connects outward to the selected
 queue on DB.
 
-During the first provisioning, Vagrant uses the stock SSH connection to
-bootstrap the VM. Provisioning then installs the public key from
+During the first provisioning, Vagrant uses stock SSH port 22. It connects
+directly to Bastion and reaches the service VMs through Bastion. Provisioning
+then installs the public key from
 `~/.ssh/weather_vm.pub`, disables password and root SSH login, and switches
 the SSH service to `WEATHER_SSH_PORT`. New VM state automatically selects port
 22 for bootstrap; subsequent commands use the configured port. The private
@@ -178,23 +203,121 @@ key never leaves the host. The SSH port is passed through configuration and is n
 repository.
 
 Service VMs use `sshd-services.conf`, which permits SSH login as `vagrant` only
-from Bastion (`192.168.56.10`) or the host management address
-(`192.168.122.1`). Bastion uses the base `sshd_config` template. Client SSH
-aliases use `ProxyJump bastion`; Vagrant retains direct management access for
-provisioning, rsync, backups, and the UI SSH port-forwarding tunnel.
+from Bastion (`192.168.56.10`). There is no host-management-network exception.
+Bastion uses `sshd_config` with `MaxSessions 0` for the ordinary `jump` account.
+This account has no sudo and a nologin shell. It allows local TCP forwarding to
+the four service IPs on port 22 (initial provisioning) or the configured SSH
+port, and to UI port 80. Shells, remote commands, SFTP, agent forwarding, Unix
+socket forwarding, remote forwarding, tunnels and TTYs are disabled for `jump`.
+
+The administrative exception is `vagrant@192.168.122.1`: Vagrant can open SSH
+sessions on Bastion from the host using its separate per-VM key. This permits
+provisioning, file uploads and shutdown; `vagrant ssh bastion` also works.
+Its local forwarding is restricted to UI port 80 for Vagrant's host port 8080
+tunnel. The host public key for normal use is installed only for `jump`, not
+added to the administrative account. This exception does not create a direct
+network path to any service VM.
+Client SSH aliases use `ProxyJump bastion`; Vagrant also connects to services
+through Bastion for provisioning, rsync, and backups. The host port 8080 tunnel
+connects directly to Bastion, which opens the connection to `192.168.56.14:80`.
 The normal SSH route is:
 
 ```text
-Host SSH client -> Bastion (192.168.56.10) -> db / fetcher / history / ui
+Host -> Bastion external (192.168.122.10) -> Bastion internal (192.168.56.10)
+     -> db / fetcher / history / ui (192.168.56.11-14)
 ```
 
 The client authenticates to both VMs using the private key on the host; agent
-forwarding and a private key on Bastion are not required. The SSH aliases are
-configured separately in the host's `~/.ssh/config`.
+forwarding and a private key on Bastion are not required. Client aliases remain
+in the host's existing `~/.ssh/config`: Bastion points to `192.168.122.10`, service
+aliases point to their `.56.*` addresses, and services use `ProxyJump bastion`.
+Bastion's alias must use `User jump`; the service aliases keep `User vagrant`.
+They use the configured SSH port and `~/.ssh/weather_vm` as before. Vagrant's
+proxy specifies Bastion's address and the host identity explicitly, so it does
+not depend on those aliases. Its separate `vagrant/.vagrant/known_hosts` file
+uses accept-new checking; before a replacement VM is created, only that VM's
+old entry is removed. Configure normal SSH to use the same file if you want
+this host-key reset to apply to the aliases too.
 
-This is an SSH login restriction, not a firewall rule. The management exception
-is based on the source address and also permits manual connections from that
-address. If these addresses change, update the service SSH template.
+The SSH allowlist is additional protection, not the network boundary. Service
+VMs have no external NIC, the internal bridge has no host address, and Bastion
+rejects new external-to-internal forwarded traffic. A direct SSH attempt from
+the host must fail before authentication. Machine actions are sequential:
+Bastion starts first and stops/destroys last, preserving the DB backup path.
+
+### Transition and verification
+
+The source changes do not rewire existing VM interfaces. An ignored
+`vagrant/Vagrantfile.previous` keeps the previous configuration for this one-time
+transition. The pinned stock Bento box is used without a guest-agent dependency.
+When deliberately ready to recreate the environment, destroy old VMs with
+`VAGRANT_VAGRANTFILE=Vagrantfile.previous vagrant destroy` and confirm that the
+DB trigger saved `weather-deploy-input/weather_history.auto.dump`. This is a
+manual, destructive transition, not an automatic action. Keep host log archives
+and the database dump. RabbitMQ/Redis VM-local state is not included in that dump.
+
+Retire old `default`/`vagrant0` networks manually only after verifying that no
+other live or persistent VM uses them, including powered-off VMs. Save their
+XML first. An old `default` network on `192.168.122.0/24` must be retired
+before creating `weather-external` on that subnet. If another
+project needs it, resolve that conflict before migration. The preflight check
+refuses overlapping network definitions; it never deletes them automatically.
+The internal subnet must no longer have a host interface or route.
+Do not run the old configuration against newly created project domains.
+
+The existing host firewall drops incoming traffic by default. Its persistent
+input chain needs DHCP for libvirt bridges and DNS from Bastion, before the
+final drop. These rules can replace the old broad `iifname "virbr0" accept`
+when that rule is no longer needed by another project:
+
+```nft
+iifname "virbr*" udp sport 68 udp dport 67 accept
+iifname "virbr*" ip saddr 192.168.122.10 udp dport 53 accept
+iifname "virbr*" ip saddr 192.168.122.10 tcp dport 53 accept
+```
+
+Keep loopback, established/related, and the home-LAN port 8080 rule. Do not flush
+the host's live ruleset after libvirt/Docker have installed their own rules.
+Host firewall and `~/.ssh/config` are not modified by project provisioning.
+
+After the host preparation, ordinary `vagrant up` creates the networks and
+starts Bastion before the services. After updating SSH aliases, check:
+
+```bash
+virsh -c qemu:///system net-dumpxml weather-external
+virsh -c qemu:///system net-dumpxml weather-internal
+virsh -c qemu:///system domiflist vagrant_bastion
+vagrant ssh bastion -c 'ip -br -4 addr; ip -4 route'
+vagrant ssh db -c 'ip -br -4 addr; ip -4 route'
+ssh -v db hostname
+timeout 8s ssh -o ProxyJump=none -o ConnectTimeout=5 db hostname
+ssh bastion hostname
+ssh -T bastion
+curl -f http://127.0.0.1:8080/api/latest
+```
+
+Expect two NICs on Bastion, one on DB, DB's default route via `.56.10`, and a
+working SSH proxy. The default libvirt domain prefix is `vagrant_`; use the
+actual name from `virsh list --all` if yours differs. Direct service SSH must
+fail before authentication; Bastion SSH commands and shell sessions through
+the ordinary `jump` alias must be refused after authentication. The separate
+Vagrant administrative connection is expected to work. The external network has only Bastion attached;
+`weather-internal` XML has no `<ip>` or `<forward>` element. Also check
+`ssh -R` to Bastion is refused, and forwarding to an unlisted destination is
+refused when a client attempts to use it. Check all four service aliases,
+Fetcher's outbound DNS/HTTPS, log collection, `vagrant provision db`,
+`vagrant provision bastion`, and halt/up behavior separately. Vagrant must
+recreate the port 8080 tunnel after provisioning switches SSH ports. Bastion
+shutdown uses Vagrant's administrative SSH connection and the provider's normal
+shutdown handling. Halting or destroying only Bastion while dependent service
+VMs remain running/defined is refused. A full destroy/up backup/restore check is still a
+deployment verification, not something local syntax validation can prove.
+
+For rollback before creating new domains, restore old network definitions and
+use `Vagrantfile.previous`. If new domains already exist, back them up and remove
+them using the new configuration first, preserving Bastion until DB backup
+finishes. Then restore the old networks/configuration. Remove the temporary
+previous Vagrantfile after the migration is verified.
 
 Secrets stay in the local `weather-deploy-input/secrets.env`. Vagrant creates
 temporary per-role files and transfers only the variables required by each
