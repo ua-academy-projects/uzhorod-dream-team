@@ -16,7 +16,7 @@ CLI without Docker Compose.
 | `ui` | `192.168.56.14` | 80 | Nginx and static HTML/CSS/JavaScript |
 | `bastion` | `192.168.56.10` | SSH | SSH jump host; client ProxyJump configuration is separate |
 
-The UI VM port 80 is forwarded to port 8080 on the Arch host. The browser
+The UI VM port 80 is forwarded to port 8080 on the host. The browser
 therefore uses `http://localhost:8080/` and sends relative `/api/` requests.
 Other devices in the home network use `http://<host-LAN-IP>:8080/` while
 the host is running and its firewall allows port 8080.
@@ -120,7 +120,7 @@ It refuses an existing database.
 All five VMs have addresses on the private `192.168.56.0/24` network.
 Vagrant/libvirt also attaches a management interface to the existing `default`
 network, configured as `192.168.122.0/24`. Management addresses are assigned
-dynamically; the Arch host management address used by the SSH allowlist is
+dynamically; the host management address used by the SSH allowlist is
 `192.168.122.1`.
 
 Docker publishes PostgreSQL, RabbitMQ, and Redis ports on the DB VM private
@@ -134,21 +134,21 @@ bootstrap the VM. Provisioning then installs the public key from
 `~/.ssh/weather_vm.pub`, disables password and root SSH login, and switches
 the SSH service to `WEATHER_SSH_PORT`. New VM state automatically selects port
 22 for bootstrap; subsequent commands use the configured port. The private
-key never leaves the Arch host. The SSH port is passed through configuration and is not stored in the
+key never leaves the host. The SSH port is passed through configuration and is not stored in the
 repository.
 
 Service VMs use `sshd-services.conf`, which permits SSH login as `vagrant` only
-from Bastion (`192.168.56.10`) or the Arch host management address
+from Bastion (`192.168.56.10`) or the host management address
 (`192.168.122.1`). Bastion uses the base `sshd_config` template. Client SSH
 aliases use `ProxyJump bastion`; Vagrant retains direct management access for
 provisioning, rsync, backups, and the UI SSH port-forwarding tunnel.
 The normal SSH route is:
 
 ```text
-Arch SSH client -> Bastion (192.168.56.10) -> db / fetcher / history / ui
+Host SSH client -> Bastion (192.168.56.10) -> db / fetcher / history / ui
 ```
 
-The client authenticates to both VMs using the private key on Arch; agent
+The client authenticates to both VMs using the private key on the host; agent
 forwarding and a private key on Bastion are not required. The SSH aliases are
 configured separately in the host's `~/.ssh/config`.
 
@@ -172,7 +172,7 @@ vagrant/       Vagrantfile and configuration templates
 vagrant/provision/  Role-specific provisioning scripts and shared helpers
 vagrant/scripts/    VM maintenance scripts, including PostgreSQL backup
 scripts/       Host-side VM log collection
-cron/          Cron template for the Arch host
+cron/          Cron template for the host
 docs/          Architecture documentation
 ```
 
@@ -182,7 +182,7 @@ All six containers use Docker's `local` log driver with `max-size=10m` and
 `max-file=3`. Docker rotates container stdout/stderr logs on each VM.
 `docker logs` reads them. Container replacement removes those local logs.
 
-`scripts/collect-vm-logs.sh` collects logs onto the Arch host from `db`,
+`scripts/collect-vm-logs.sh` collects logs onto the host from `db`,
 `fetcher`, `history`, and `ui`. Bastion is not currently included. The script
 uses the host's SSH aliases, so service VM connections follow `ProxyJump`
 when configured. `BatchMode=yes` and `sudo -n` require access without
@@ -209,14 +209,14 @@ Files are grouped under `logs/<vm>/system/` and
 `logs/<vm>/containers/<container>/`. Directories are created with mode `700`
 and files with mode `600`; logs and checkpoint files are ignored by Git.
 
-`cron/weather-log-collector.cron` is a template for the Arch user's crontab.
+`cron/weather-log-collector.cron` is a template for the host user's crontab.
 It schedules collection every 15 minutes using absolute paths and writes
 collector diagnostics to daily `logs/collector-<UTC-date>.log` files. Keeping
 the template in the repository does not install or activate the schedule.
 
 Each run compresses `.log` files older than one day with gzip and removes
 `.log.gz` files older than 14 days. Age is measured from the file's modification
-time on Arch, not the timestamp of individual log messages; gzip preserves
+time on the host, not the timestamp of individual log messages; gzip preserves
 that modification time. This also applies to collector diagnostic logs.
 
 After destroying a VM environment, manually rename `logs/` to
