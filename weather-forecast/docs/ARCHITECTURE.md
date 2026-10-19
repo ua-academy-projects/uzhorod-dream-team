@@ -1,7 +1,8 @@
 # Weather Forecast Architecture
 
-The application runs in six Docker containers across four Ubuntu 24.04
-Vagrant VMs. A fifth Ubuntu VM, Bastion, provides SSH access and has no Docker
+The application runs in Docker containers across four Ubuntu 24.04 Vagrant
+VMs: six containers with RabbitMQ/Redis, or four in PostgreSQL mode.
+A fifth Ubuntu VM, Bastion, provides SSH access and has no Docker
 provisioning. systemd starts Docker Engine on the service VMs;
 `unless-stopped` restart policies restart containers. Deployment uses Docker
 CLI without Docker Compose.
@@ -10,8 +11,8 @@ CLI without Docker Compose.
 
 | VM | Address | Ports | Responsibility |
 | --- | --- | --- | --- |
-| `db` | `192.168.56.11` | 5432, 5672, 6379 | PostgreSQL, RabbitMQ, Redis |
-| `fetcher` | `192.168.56.12` | 8001 inside container | Python Fetcher and RabbitMQ worker |
+| `db` | `192.168.56.11` | 5432; 5672 and 6379 in RabbitMQ/Redis mode | PostgreSQL; optional RabbitMQ and Redis |
+| `fetcher` | `192.168.56.12` | 8001 inside container | Python Fetcher and queue worker |
 | `history` | `192.168.56.13` | 8002 | Go API, timers, queue consumer, database writer |
 | `ui` | `192.168.56.14` | 80 | Nginx and static HTML/CSS/JavaScript |
 | `bastion` | `192.168.56.10` | SSH | SSH jump host; client ProxyJump configuration is separate |
@@ -26,7 +27,8 @@ the host is running and its firewall allows port 8080.
 The browser sends requests only to Nginx. Nginx serves the static UI and
 proxies `/api/` to History. History never calls Fetcher directly.
 
-Current weather follows this path:
+`WEATHER_BACKEND` selects the queue and preferences store at container startup.
+The default `rabbitmq_redis` mode follows this path:
 
 ```text
 browser -> Nginx -> History -> RabbitMQ weather.requests
@@ -36,11 +38,20 @@ browser -> Nginx -> History -> RabbitMQ weather.requests
                               History -> browser
 ```
 
+With `WEATHER_BACKEND=postgres`, messages travel through PostgreSQL instead:
+
+```text
+History -> PGMQ weather_requests -> Fetcher -> Open-Meteo
+History <- PGMQ weather_responses <- Fetcher
+History -> PostgreSQL weather_snapshots / temperature_history
+```
+
 History starts a collection when the page requests it, when the user presses
 the collection button, and every 15 minutes. A job has a request ID and type.
 History stores its state in PostgreSQL and publishes a durable message.
-`POST /api/collect` returns `202 Accepted` with the request ID after publication
-is confirmed. The browser polls `GET /api/jobs/<request_id>` until the job is
+`POST /api/collect` returns `202 Accepted` with the request ID after RabbitMQ
+confirms publication or PostgreSQL commits the job and request together.
+The browser polls `GET /api/jobs/<request_id>` until the job is
 completed or failed, then loads the saved weather. Fetcher responses are
 processed asynchronously and validated before they are stored.
 
@@ -55,7 +66,9 @@ PostgreSQL contains:
 
 - `weather_snapshots` for current weather records;
 - `temperature_history` for hourly chart points;
-- `weather_jobs` for queued, completed, and failed jobs.
+- `weather_jobs` for queued, completed, and failed jobs, tagged with their backend;
+- PGMQ `weather_requests` and `weather_responses` queues in the `pgmq` schema;
+- `weather_preferences` with `hstore` key/value preferences and expiry times.
 
 The `(city, weather_time)` key prevents duplicate current-weather rows. A
 repeated collection updates the existing row and its `fetched_at` value.
@@ -66,11 +79,28 @@ manual acknowledgements. History acknowledges a response only after the
 database transaction succeeds. Fetcher acknowledges a request only after its
 response is published successfully.
 
-Redis stores only UI theme preferences. The browser keeps a random
+In PostgreSQL mode, PGMQ manages message delivery through `send`, `read`,
+`set_vt`, and `delete`. Fetcher reads one request with a 30-second visibility
+timeout, renewed every 10 seconds. The delivery count and visibility deadline
+are checked under the message row lock before renewal or acknowledgement.
+Publishing the response and acknowledging the request happen in one transaction.
+History reads a response, saves the weather and job result, and acknowledges the
+response in one transaction. Failed transactions leave messages available for
+retry; job IDs prevent duplicate results. Idle workers poll once per second.
+
+Redis stores only UI theme preferences in the default mode; PostgreSQL mode
+uses `hstore` values in `weather_preferences` instead. The browser keeps a random
 `weather_session` cookie; History uses it as the `session:<id>` Redis key.
-The cookie and Redis entry expire after 30 days, with their lifetimes renewed
+In PostgreSQL it is the `session_id` key. The cookie and cache entry expire
+after 30 days, with their lifetimes renewed
 when preferences are read or saved. A missing entry returns the default light
-theme. Redis failure does not remove weather data from PostgreSQL.
+theme. An expired PostgreSQL entry also returns the default; a background task
+removes expired rows every five minutes. Reads renew TTL atomically without
+overwriting concurrent preference updates. Redis failure does not remove
+weather data from PostgreSQL.
+
+Both application images support both modes. Selection and deployment commands
+are documented in [BACKENDS.md](BACKENDS.md).
 
 ## Provisioning
 
@@ -85,15 +115,20 @@ rsync folder, or service credentials; `bastion.sh` only configures SSH.
 waits for database dependencies, and configures SSH. Role scripts in
 `vagrant/provision/` then:
 
-- `db.sh` runs official PostgreSQL 18, RabbitMQ 4.3, and Redis 7.4 Alpine
-  images, configures runtime secrets and persistent volumes, restores a dump
-  into an empty database if available, and applies all SQL migrations;
+- `db.sh` builds PostgreSQL 18 Alpine with PGMQ 1.13.0 and hstore and, in the default mode, runs RabbitMQ 4.3 and
+  Redis 7.4 Alpine. It configures secrets and volumes, restores a dump into an
+  empty database if available, and applies all migrations. PostgreSQL mode
+  configures the Fetcher role and stops RabbitMQ/Redis without removing volumes;
 - `fetcher.sh` builds the Python multi-stage image and starts the
-  RabbitMQ worker without publishing its internal HTTP port;
+  selected queue worker without publishing its internal HTTP port;
 - `history.sh` builds the static Go binary in a multi-stage image
   and publishes port 8002 on the History VM private address;
 - `ui.sh` builds the static Nginx image, mounts the rendered proxy
   configuration, and publishes port 80 for Vagrant's host port 8080 forward.
+
+`WEATHER_BACKEND` comes from the ignored host deployment input. If omitted,
+the default mode is preserved. `WEATHER_SKIP_BUILD=1` on the Vagrant command
+reuses existing PostgreSQL and application images; by default provisioning builds them.
 
 On an existing DB VM, provisioning first exports the native PostgreSQL 18
 `weather_history` database. Application connections are disabled during this
@@ -108,7 +143,8 @@ to the host's ignored `weather-deploy-input/weather_history.auto.dump`.
 It boots a stopped DB VM without provisioning if needed. If backup or download
 fails, destruction is aborted. A new DB VM automatically receives and restores
 this dump before migrations. RabbitMQ messages and Redis preferences are not
-backed up across VM destruction. The dump represents the database at snapshot
+backed up across VM destruction. PostgreSQL-mode queue and preferences tables
+are included in the database dump. The dump represents the database at snapshot
 time; later writes during destruction are outside that snapshot.
 
 Explicit external import is still available with `WEATHER_IMPORT_DB=1` and
@@ -123,11 +159,15 @@ network, configured as `192.168.122.0/24`. Management addresses are assigned
 dynamically; the host management address used by the SSH allowlist is
 `192.168.122.1`.
 
-Docker publishes PostgreSQL, RabbitMQ, and Redis ports on the DB VM private
-address. PostgreSQL permits network access to `weather_app` only from the
-History VM and requires SCRAM password authentication. Containers use the
+Docker publishes PostgreSQL on the DB VM private address, and RabbitMQ/Redis
+ports when those containers are running. PostgreSQL permits network access to
+`weather_app` only from History and to `weather_fetcher` only from Fetcher,
+using SCRAM password authentication. Loopback checks are also allowed inside
+the DB container. The Fetcher role can consume PGMQ requests and publish responses; it cannot read weather records or preferences.
+Containers use the
 other VMs' private addresses, not Docker names across hosts. Fetcher does not
-need an incoming published port; its worker connects outward to RabbitMQ.
+need an incoming published port; its worker connects outward to the selected
+queue on DB.
 
 During the first provisioning, Vagrant uses the stock SSH connection to
 bootstrap the VM. Provisioning then installs the public key from
@@ -160,6 +200,9 @@ Secrets stay in the local `weather-deploy-input/secrets.env`. Vagrant creates
 temporary per-role files and transfers only the variables required by each
 VM. Service environment files are stored under `/etc/weather-forecast/` with
 restricted permissions.
+In PostgreSQL mode, DB receives the application and Fetcher database passwords,
+History receives only its application database password, and Fetcher receives
+only its separate database password. UI and Bastion receive no service secrets.
 
 ## Source layout
 
@@ -167,6 +210,7 @@ restricted permissions.
 fetcher/       Python provider client, worker, tests, requirements
 history/       Go API, queue handling, storage, timers, tests
 ui/            Static web page and browser JavaScript
+db/            Multi-stage PostgreSQL image with PGMQ and hstore
 migrations/    PostgreSQL schema migrations
 vagrant/       Vagrantfile and configuration templates
 vagrant/provision/  Role-specific provisioning scripts and shared helpers
@@ -178,7 +222,7 @@ docs/          Architecture documentation
 
 ## Logs
 
-All six containers use Docker's `local` log driver with `max-size=10m` and
+All service containers use Docker's `local` log driver with `max-size=10m` and
 `max-file=3`. Docker rotates container stdout/stderr logs on each VM.
 `docker logs` reads them. Container replacement removes those local logs.
 
@@ -192,7 +236,9 @@ The collector retrieves two sources:
 
 - the system journal through `journalctl`, including service and kernel
   messages recorded by journald;
-- stdout/stderr from each of the six containers through `docker logs`.
+- container stdout/stderr through `docker logs`, including retained logs from
+  stopped containers. Missing optional RabbitMQ/Redis containers are skipped;
+  missing required containers or Docker access failures are reported.
 
 The Docker `local` driver stores container output separately from journald.
 Collecting the system journal therefore does not retrieve the same Docker
