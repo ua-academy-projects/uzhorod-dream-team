@@ -3,19 +3,32 @@ source /home/vagrant/weather-staging/common.sh || exit 1
 
 configure_ssh sshd-services.conf
 
+db_ip=${1:?DB IP is required}
+
 load_secrets
 candidate=''
 trap '[[ -z ${candidate:-} ]] || rm -f -- "$candidate"; rm -f -- "$stage/secrets.env"' EXIT
 
-check_rabbitmq_url
+check_backend
+if [[ "$WEATHER_BACKEND" == postgres ]]; then
+  check_fetcher_database_password
+else
+  check_rabbitmq_url
+fi
 
 candidate=$(mktemp "$config/fetcher.env.XXXXXX")
-printf 'RABBITMQ_URL=%s\n' "$RABBITMQ_URL" > "$candidate"
+printf 'WEATHER_BACKEND=%s\n' "$WEATHER_BACKEND" > "$candidate"
+if [[ "$WEATHER_BACKEND" == postgres ]]; then
+  printf 'DATABASE_URL=postgres://weather_fetcher:%s@%s:5432/weather_history?sslmode=disable\n' \
+    "$WEATHER_FETCHER_DB_PASSWORD" "$db_ip" >> "$candidate"
+else
+  printf 'RABBITMQ_URL=%s\n' "$RABBITMQ_URL" >> "$candidate"
+fi
 chmod 600 "$candidate"
 mv -f "$candidate" "$config/fetcher.env"
 candidate=''
 
-docker build -f "$stage/fetcher/Dockerfile" -t weather-fetcher:dev "$stage/fetcher"
+build_service_image fetcher
 
 if [[ -f /etc/systemd/system/weather-fetcher.service ]]; then
   systemctl disable --now weather-fetcher.service

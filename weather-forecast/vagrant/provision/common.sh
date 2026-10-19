@@ -33,8 +33,30 @@ load_secrets() {
   source "$stage/secrets.env"
 }
 
+check_backend() {
+  WEATHER_BACKEND=${WEATHER_BACKEND:-rabbitmq_redis}
+  [[ "$WEATHER_BACKEND" == rabbitmq_redis || "$WEATHER_BACKEND" == postgres ]] || {
+    echo 'WEATHER_BACKEND must be rabbitmq_redis or postgres'; return 1;
+  }
+}
+
+build_service_image() {
+  local service=$1 image=${2:-weather-$1:dev}
+  if [[ ${WEATHER_SKIP_BUILD:-0} == 1 ]]; then
+    docker image inspect "$image" >/dev/null
+  else
+    docker build -f "$stage/$service/Dockerfile" -t "$image" "$stage/$service"
+  fi
+}
+
 check_database_password() {
   [[ ${WEATHER_DB_PASSWORD:-} =~ ^[a-f0-9]{48}$ ]] || { echo 'WEATHER_DB_PASSWORD must contain 48 hexadecimal characters'; return 1; }
+}
+
+check_fetcher_database_password() {
+  [[ ${WEATHER_FETCHER_DB_PASSWORD:-} =~ ^[a-f0-9]{48}$ ]] || {
+    echo 'WEATHER_FETCHER_DB_PASSWORD must contain 48 hexadecimal characters'; return 1;
+  }
 }
 
 check_rabbitmq_url() {
@@ -56,6 +78,7 @@ render_template() {
       -e "s|@CONFIG_DIR@|$config|g" \
       -e "s|@DB_IP@|${db_ip:-}|g" \
       -e "s|@HISTORY_IP@|${history_ip:-}|g" \
+      -e "s|@FETCHER_IP@|${fetcher_ip:-}|g" \
       -e "s|@SERVICE@|${service_name:-}|g" \
       -e "s|@PORT@|${WEATHER_SSH_PORT:-}|g" \
       -e "s|@WORKDIR@|${working_directory:-}|g" \

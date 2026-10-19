@@ -10,7 +10,13 @@ import (
 	"time"
 )
 
+const (
+	backendRabbitMQRedis = "rabbitmq_redis"
+	backendPostgres      = "postgres"
+)
+
 type Config struct {
+	Backend             string
 	RedisAddr           string
 	RedisPassword       string
 	SessionCookieSecure bool
@@ -35,6 +41,7 @@ func envOr(name, fallback string) string {
 
 func loadConfig() (Config, error) {
 	c := Config{
+		Backend:       envOr("WEATHER_BACKEND", backendRabbitMQRedis),
 		RedisAddr:     envOr("REDIS_ADDR", "127.0.0.1:6379"),
 		RedisPassword: os.Getenv("REDIS_PASSWORD"),
 		DatabaseURL:   os.Getenv("DATABASE_URL"),
@@ -46,16 +53,22 @@ func loadConfig() (Config, error) {
 	if c.DatabaseURL == "" {
 		return c, fmt.Errorf("DATABASE_URL is required")
 	}
-	u, err := url.Parse(c.RabbitMQURL)
-	if err != nil || (u.Scheme != "amqp" && u.Scheme != "amqps") || u.Host == "" || u.Fragment != "" {
-		return c, fmt.Errorf("RABBITMQ_URL must be an AMQP(S) URL")
+	if c.Backend != backendRabbitMQRedis && c.Backend != backendPostgres {
+		return c, fmt.Errorf("WEATHER_BACKEND must be rabbitmq_redis or postgres")
 	}
-	c.SessionCookieSecure, err = strconv.ParseBool(envOr("SESSION_COOKIE_SECURE", "false"))
-	if err != nil {
-		return c, fmt.Errorf("SESSION_COOKIE_SECURE must be true or false")
+	if c.Backend == backendRabbitMQRedis {
+		u, err := url.Parse(c.RabbitMQURL)
+		if err != nil || (u.Scheme != "amqp" && u.Scheme != "amqps") || u.Host == "" || u.Fragment != "" {
+			return c, fmt.Errorf("RABBITMQ_URL must be an AMQP(S) URL")
+		}
 	}
 	if _, _, err := net.SplitHostPort(c.RedisAddr); err != nil {
 		return c, fmt.Errorf("REDIS_ADDR must be host:port")
+	}
+	var err error
+	c.SessionCookieSecure, err = strconv.ParseBool(envOr("SESSION_COOKIE_SECURE", "false"))
+	if err != nil {
+		return c, fmt.Errorf("SESSION_COOKIE_SECURE must be true or false")
 	}
 	c.Latitude, err = strconv.ParseFloat(envOr("CITY_LATITUDE", "48.6167"), 64)
 	if err != nil || !finite(c.Latitude) || c.Latitude < -90 || c.Latitude > 90 {

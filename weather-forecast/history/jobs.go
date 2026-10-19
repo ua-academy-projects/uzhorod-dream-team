@@ -87,6 +87,10 @@ func (c *Collector) submit(ctx context.Context, kind string, ranges []temperatur
 	if err != nil {
 		return job, err
 	}
+	if c.config.Backend == backendPostgres {
+		// The PostgreSQL request was committed together with its job.
+		return job, nil
+	}
 	if err := c.publish(ctx, request); err != nil {
 		return job, &APIError{Status: http.StatusServiceUnavailable,
 			Message: "RabbitMQ publication was not confirmed; check this job before retrying", RequestID: id}
@@ -127,11 +131,13 @@ func (c *Collector) recoverJobs(ctx context.Context) {
 		if err := c.jobs.ExpireJobs(ctx); err != nil && ctx.Err() == nil {
 			log.Print("Job expiration: database unavailable")
 		}
-		requests, err := c.jobs.UnpublishedJobs(ctx)
-		if err == nil {
-			for _, request := range requests {
-				if err := c.publish(ctx, request); err != nil && ctx.Err() == nil {
-					log.Printf("Pending publication request_id=%s is not confirmed", request.RequestID)
+		if c.config.Backend != backendPostgres {
+			requests, err := c.jobs.UnpublishedJobs(ctx)
+			if err == nil {
+				for _, request := range requests {
+					if err := c.publish(ctx, request); err != nil && ctx.Err() == nil {
+						log.Printf("Pending publication request_id=%s is not confirmed", request.RequestID)
+					}
 				}
 			}
 		}

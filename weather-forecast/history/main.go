@@ -55,7 +55,7 @@ func run() error {
 		return fmt.Errorf("create PostgreSQL pool: %w", err)
 	}
 	defer pool.Close()
-	store := &Store{pool: pool}
+	store := &Store{pool: pool, backend: config.Backend}
 	if err := store.Ping(ctx); err != nil {
 		return fmt.Errorf("connect PostgreSQL: %w", err)
 	}
@@ -73,20 +73,34 @@ func run() error {
 	}
 
 	checkCtx, checkCancel = context.WithTimeout(ctx, 5*time.Second)
-	_, err = pool.Exec(checkCtx, "SELECT request_id FROM weather_jobs LIMIT 0")
+	_, err = pool.Exec(checkCtx, "SELECT request_id, backend FROM weather_jobs LIMIT 0")
 	checkCancel()
 	if err != nil {
-		return fmt.Errorf("apply migrations/004_weather_jobs.sql before starting History")
+		return fmt.Errorf("apply migrations/004_weather_jobs.sql and 005_postgres_queue.sql before starting History")
 	}
 	redisClient := newRedisClient(config)
 	defer redisClient.Close()
 	preferences := &preferenceHandler{client: redisClient, secure: config.SessionCookieSecure}
-	broker := newBroker(config.RabbitMQURL)
-	collector := &Collector{store: store, jobs: store, publisher: broker, config: config}
+	collector := &Collector{store: store, jobs: store, config: config}
 	var workers sync.WaitGroup
-	workers.Add(3)
-	go func() { defer workers.Done(); broker.runPublisher(ctx) }()
-	go func() { defer workers.Done(); broker.runConsumer(ctx, store) }()
+	if config.Backend == backendPostgres {
+		checkCtx, checkCancel = context.WithTimeout(ctx, 5*time.Second)
+		_, err = pool.Exec(checkCtx, "SELECT msg_id, message FROM pgmq.q_weather_requests LIMIT 0; SELECT msg_id, message FROM pgmq.q_weather_responses LIMIT 0")
+		checkCancel()
+		if err != nil {
+			return fmt.Errorf("enable PGMQ and apply migrations/005_postgres_queue.sql before starting History")
+		}
+
+		workers.Add(1)
+		go func() { defer workers.Done(); store.runPostgresConsumer(ctx) }()
+	} else {
+		broker := newBroker(config.RabbitMQURL)
+		collector.publisher = broker
+		workers.Add(2)
+		go func() { defer workers.Done(); broker.runPublisher(ctx) }()
+		go func() { defer workers.Done(); broker.runConsumer(ctx, store) }()
+	}
+	workers.Add(1)
 	go func() { defer workers.Done(); collector.recoverJobs(ctx) }()
 	defer workers.Wait()
 	defer stop()
@@ -110,6 +124,7 @@ func run() error {
 	serverErrors := make(chan error, 1)
 	go func() { serverErrors <- server.Serve(listener) }()
 	log.Printf("History http://%s; interval=%s; first automatic collection after interval", config.Address, config.Interval)
+	log.Printf("Queue backend: %s", config.Backend)
 	log.Printf("Temperature history: %d past days; sync on startup and every %s", config.TemperatureDays, config.TemperatureInterval)
 	select {
 	case <-ctx.Done():
