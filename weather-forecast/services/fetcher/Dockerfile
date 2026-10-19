@@ -17,7 +17,7 @@ WORKDIR /app
 RUN addgroup --system app && adduser --system --ingroup app app
 
 COPY --from=builder --chown=app:app /opt/venv /opt/venv
-COPY --chown=app:app __init__.py __main__.py app.py config.py provider.py worker.py postgres_worker.py ./fetcher/
+COPY --chown=app:app fetcher/ ./fetcher/
 
 USER app
 
