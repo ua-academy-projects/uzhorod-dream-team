@@ -12,11 +12,11 @@ trap '[[ -z ${candidate:-} ]] || rm -f -- "$candidate"; rm -f -- "$stage/secrets
 
 check_database_password
 check_backend
+if [[ "$WEATHER_BACKEND" == rabbitmq_redis ]]; then
+  check_rabbitmq_url
   [[ -n ${REDIS_PASSWORD:-} && ! "$REDIS_PASSWORD" =~ [[:cntrl:]] ]] || {
     echo 'Set a single-line REDIS_PASSWORD in secrets.env'; exit 1;
   }
-if [[ "$WEATHER_BACKEND" == rabbitmq_redis ]]; then
-  check_rabbitmq_url
   read_broker_settings
 fi
 
@@ -36,10 +36,9 @@ CITY_LATITUDE=${CITY_LATITUDE:-48.6167}
 CITY_LONGITUDE=${CITY_LONGITUDE:-22.3}
 EOF
 if [[ "$WEATHER_BACKEND" == rabbitmq_redis ]]; then
-  printf 'RABBITMQ_URL=%s\n' "$RABBITMQ_URL" >> "$candidate"
+  printf 'RABBITMQ_URL=%s\nREDIS_ADDR=%s\nREDIS_PASSWORD=%s\n' \
+    "$RABBITMQ_URL" "${REDIS_ADDR:-${db_ip}:6379}" "$REDIS_PASSWORD" >> "$candidate"
 fi
-printf 'REDIS_ADDR=%s\nREDIS_PASSWORD=%s\n' \
-  "${REDIS_ADDR:-${db_ip}:6379}" "$REDIS_PASSWORD" >> "$candidate"
 chmod 600 "$candidate"
 mv -f "$candidate" "$config/history.env"
 candidate=''

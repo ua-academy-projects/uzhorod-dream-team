@@ -78,9 +78,7 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("apply migrations/004_weather_jobs.sql and 005_postgres_queue.sql before starting History")
 	}
-	redisClient := newRedisClient(config)
-	defer redisClient.Close()
-	preferences := &preferenceHandler{client: redisClient, secure: config.SessionCookieSecure}
+	preferences := &preferenceHandler{secure: config.SessionCookieSecure}
 	collector := &Collector{store: store, jobs: store, config: config}
 	var workers sync.WaitGroup
 	if config.Backend == backendPostgres {
@@ -90,10 +88,20 @@ func run() error {
 		if err != nil {
 			return fmt.Errorf("enable PGMQ and apply migrations/005_postgres_queue.sql before starting History")
 		}
-
-		workers.Add(1)
+		checkCtx, checkCancel = context.WithTimeout(ctx, 5*time.Second)
+		_, err = pool.Exec(checkCtx, "SELECT session_id, preferences OPERATOR(public.->) 'theme', expires_at FROM weather_preferences LIMIT 0")
+		checkCancel()
+		if err != nil {
+			return fmt.Errorf("apply migrations/006_postgres_preferences.sql before starting History")
+		}
+		preferences.store = store
+		workers.Add(2)
 		go func() { defer workers.Done(); store.runPostgresConsumer(ctx) }()
+		go func() { defer workers.Done(); store.runPreferencesCleanup(ctx) }()
 	} else {
+		redisClient := newRedisClient(config)
+		defer redisClient.Close()
+		preferences.store = &redisPreferences{client: redisClient}
 		broker := newBroker(config.RabbitMQURL)
 		collector.publisher = broker
 		workers.Add(2)

@@ -16,4 +16,5 @@ FROM postgres:18-alpine
 
 COPY --from=extension /extension/ /usr/local/share/postgresql/extension/
 COPY --from=extension /build/pgmq-1.13.0/LICENSE /usr/local/share/licenses/pgmq/LICENSE
-RUN test -f "$(pg_config --sharedir)/extension/pgmq.control"
+RUN test -f "$(pg_config --sharedir)/extension/pgmq.control" \
+    && test -f "$(pg_config --sharedir)/extension/hstore.control"

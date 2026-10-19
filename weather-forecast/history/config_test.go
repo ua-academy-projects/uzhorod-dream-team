@@ -13,7 +13,7 @@ func TestBackendConfiguration(t *testing.T) {
 	}
 	t.Setenv("WEATHER_BACKEND", "postgres")
 	t.Setenv("RABBITMQ_URL", "unused-invalid-url")
-	t.Setenv("REDIS_ADDR", "localhost:6379")
+	t.Setenv("REDIS_ADDR", "unused-invalid-address")
 	config, err = loadConfig()
 	if err != nil || config.Backend != backendPostgres {
 		t.Fatalf("PostgreSQL required an unused backend: %v", err)

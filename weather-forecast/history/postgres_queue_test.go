@@ -44,7 +44,7 @@ func postgresTestStore(t *testing.T) *Store {
 		}
 		pool.Close()
 	})
-	for _, name := range []string{"001_create_weather_snapshots.sql", "002_unique_weather_time.sql", "003_temperature_history.sql", "004_weather_jobs.sql", "005_postgres_queue.sql", "005_postgres_queue.sql"} {
+	for _, name := range []string{"001_create_weather_snapshots.sql", "002_unique_weather_time.sql", "003_temperature_history.sql", "004_weather_jobs.sql", "005_postgres_queue.sql", "005_postgres_queue.sql", "006_postgres_preferences.sql", "006_postgres_preferences.sql"} {
 		sql, err := os.ReadFile("../migrations/" + name)
 		if err != nil {
 			t.Fatal(err)

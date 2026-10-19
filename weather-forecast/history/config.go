@@ -61,9 +61,9 @@ func loadConfig() (Config, error) {
 		if err != nil || (u.Scheme != "amqp" && u.Scheme != "amqps") || u.Host == "" || u.Fragment != "" {
 			return c, fmt.Errorf("RABBITMQ_URL must be an AMQP(S) URL")
 		}
-	}
-	if _, _, err := net.SplitHostPort(c.RedisAddr); err != nil {
-		return c, fmt.Errorf("REDIS_ADDR must be host:port")
+		if _, _, err := net.SplitHostPort(c.RedisAddr); err != nil {
+			return c, fmt.Errorf("REDIS_ADDR must be host:port")
+		}
 	}
 	var err error
 	c.SessionCookieSecure, err = strconv.ParseBool(envOr("SESSION_COOKIE_SECURE", "false"))
