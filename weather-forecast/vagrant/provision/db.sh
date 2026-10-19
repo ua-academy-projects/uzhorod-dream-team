@@ -25,12 +25,12 @@ trap cleanup EXIT
 
 check_database_password
 check_backend
-  [[ -n ${REDIS_PASSWORD:-} && ! "$REDIS_PASSWORD" =~ [[:cntrl:]] ]] || { echo 'Set a single-line REDIS_PASSWORD'; exit 1; }
 if [[ "$WEATHER_BACKEND" == postgres ]]; then
   check_fetcher_database_password
 else
   require_templates rabbitmq.conf
   check_rabbitmq_url
+  [[ -n ${REDIS_PASSWORD:-} && ! "$REDIS_PASSWORD" =~ [[:cntrl:]] ]] || { echo 'Set a single-line REDIS_PASSWORD'; exit 1; }
   read_broker_settings
 fi
 if [[ "$mode" == import-db ]]; then
@@ -44,8 +44,8 @@ done
 build_service_image db weather-postgres:dev
 if [[ "$WEATHER_BACKEND" == rabbitmq_redis ]]; then
   docker pull rabbitmq:4.3-alpine
+  docker pull redis:7.4-alpine
 fi
-docker pull redis:7.4-alpine
 
 install -d -m 700 "$config/backups"
 native_dump=$config/backups/native-weather-history.dump
@@ -80,18 +80,16 @@ if [[ "$WEATHER_BACKEND" == postgres ]]; then
 else
   printf 'RABBITMQ_DEFAULT_USER=%s\nRABBITMQ_DEFAULT_PASS=%s\nRABBITMQ_DEFAULT_VHOST=%s\n' \
     "$rabbit_user" "$rabbit_password" "$rabbit_vhost" > "$config/rabbitmq.env"
-  chmod 600 "$config/rabbitmq.env"
+  printf 'REDIS_PASSWORD=%s\n' "$REDIS_PASSWORD" > "$config/redis.env"
+  chmod 600 "$config/rabbitmq.env" "$config/redis.env"
   install_template rabbitmq.conf "$config/rabbitmq.conf"
 fi
-printf 'REDIS_PASSWORD=%s\n' "$REDIS_PASSWORD" > "$config/redis.env"
-chmod 600 "$config/redis.env"
 chmod 600 "$config/postgres.env"
 install_template postgres-hba.conf "$config/postgres-hba.conf"
 
 docker volume create weather-postgres-data >/dev/null
-docker volume create weather-redis-data >/dev/null
 if [[ "$WEATHER_BACKEND" == rabbitmq_redis ]]; then
-  for volume in weather-rabbitmq-data; do
+  for volume in weather-rabbitmq-data weather-redis-data; do
     docker volume create "$volume" >/dev/null
   done
 fi
@@ -145,6 +143,7 @@ fi
 # sequences must still belong to weather_app before its migrations run.
 docker exec -i weather-postgres psql -X -U postgres -d weather_history -v ON_ERROR_STOP=1 <<'SQL'
 CREATE EXTENSION IF NOT EXISTS pgmq VERSION '1.13.0';
+CREATE EXTENSION IF NOT EXISTS hstore WITH SCHEMA public;
 DO $$
 DECLARE object record;
 BEGIN
@@ -188,10 +187,14 @@ GRANT SELECT (msg_id) ON pgmq.q_weather_responses TO weather_fetcher;
 GRANT USAGE ON SEQUENCE pgmq.q_weather_responses_msg_id_seq TO weather_fetcher;
 SQL
   docker exec weather-postgres sh -c 'PGPASSWORD="$WEATHER_FETCHER_DB_PASSWORD" psql -X -h 127.0.0.1 -U weather_fetcher -d weather_history -v ON_ERROR_STOP=1 -c "SELECT msg_id FROM pgmq.q_weather_requests LIMIT 0"' >/dev/null
-  if docker container inspect weather-rabbitmq >/dev/null 2>&1; then
-    docker stop --time 60 weather-rabbitmq >/dev/null
-  fi
-else
+  for container in weather-rabbitmq weather-redis; do
+    if docker container inspect "$container" >/dev/null 2>&1; then
+      docker stop --time 60 "$container" >/dev/null
+    fi
+  done
+  echo 'PGMQ queue and hstore preferences cache are ready; RabbitMQ and Redis are not running'
+  exit 0
+fi
 
 remove_container weather-rabbitmq
 docker run --detach \
@@ -208,8 +211,6 @@ docker exec weather-rabbitmq sh -c 'rabbitmqctl authenticate_user "$RABBITMQ_DEF
 docker exec weather-rabbitmq sh -c 'rabbitmqctl set_permissions -p "$RABBITMQ_DEFAULT_VHOST" "$RABBITMQ_DEFAULT_USER" "$1" "$1" "$1"' \
   sh '^(weather\.requests|weather\.responses|amq\.default)$'
 
-fi
-
 remove_container weather-redis
 docker run --detach \
   --name weather-redis \
@@ -220,8 +221,4 @@ docker run --detach \
   --mount type=volume,src=weather-redis-data,dst=/data \
   redis:7.4-alpine sh -c 'exec /usr/local/bin/docker-entrypoint.sh redis-server --appendonly yes --requirepass "$REDIS_PASSWORD"'
 wait_for_container weather-redis sh -c 'test "$(REDISCLI_AUTH="$REDIS_PASSWORD" redis-cli --raw PING)" = PONG'
-if [[ "$WEATHER_BACKEND" == postgres ]]; then
-  echo 'PGMQ queue and Redis preferences cache are ready; RabbitMQ is not running'
-else
-  echo 'PostgreSQL, RabbitMQ and Redis containers are ready'
-fi
+echo 'PostgreSQL, RabbitMQ and Redis containers are ready'

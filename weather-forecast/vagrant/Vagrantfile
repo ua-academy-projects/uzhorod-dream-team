@@ -49,8 +49,8 @@ machines = {
     cpus: 1,
     folder: "migrations",
     exclude: [],
-    secret_keys: ["WEATHER_DB_PASSWORD", "REDIS_PASSWORD"] +
-      (postgres_backend ? ["WEATHER_FETCHER_DB_PASSWORD"] : ["RABBITMQ_URL"])
+    secret_keys: ["WEATHER_DB_PASSWORD"] +
+      (postgres_backend ? ["WEATHER_FETCHER_DB_PASSWORD"] : ["RABBITMQ_URL", "REDIS_PASSWORD"])
   },
   "fetcher" => {
     ip: "192.168.56.12",
@@ -66,8 +66,8 @@ machines = {
     cpus: 1,
     folder: "history",
     exclude: ["bin/", ".env", "*.test"],
-    secret_keys: ["WEATHER_DB_PASSWORD", "REDIS_PASSWORD"] +
-      (postgres_backend ? [] : ["RABBITMQ_URL"])
+    secret_keys: ["WEATHER_DB_PASSWORD"] +
+      (postgres_backend ? [] : ["RABBITMQ_URL", "REDIS_PASSWORD"])
   },
   "ui" => {
     ip: "192.168.56.14",
