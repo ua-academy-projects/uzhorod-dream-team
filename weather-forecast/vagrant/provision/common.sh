@@ -129,6 +129,10 @@ read_broker_settings() {
 
 configure_ssh() {
   local ssh_template=${1:-sshd_config}
+  local ssh_user=${2:-vagrant} ssh_home
+
+  ssh_home=$(getent passwd "$ssh_user" | cut -d: -f6)
+  [[ -n "$ssh_home" ]] || { echo "SSH user does not exist: $ssh_user"; return 1; }
 
   require_templates "$ssh_template" ssh.socket.conf
   [[ ${WEATHER_SSH_PORT:-} =~ ^[0-9]+$ ]] &&
@@ -140,21 +144,21 @@ configure_ssh() {
     echo 'Host public key is missing'; return 1;
   }
 
-  install -d -m 700 -o vagrant -g vagrant /home/vagrant/.ssh
+  install -d -m 700 -o "$ssh_user" -g "$ssh_user" "$ssh_home/.ssh"
 
-  install -m 600 -o vagrant -g vagrant \
+  install -m 600 -o "$ssh_user" -g "$ssh_user" \
     /home/vagrant/weather-staging/host-key.pub \
-    /home/vagrant/.ssh/host-key.pub
+    "$ssh_home/.ssh/host-key.pub"
 
-  touch /home/vagrant/.ssh/authorized_keys
+  touch "$ssh_home/.ssh/authorized_keys"
 
-  if ! grep -qxF "$(cat /home/vagrant/.ssh/host-key.pub)" \
-    /home/vagrant/.ssh/authorized_keys; then
-    cat /home/vagrant/.ssh/host-key.pub >> /home/vagrant/.ssh/authorized_keys
+  if ! grep -qxF "$(cat "$ssh_home/.ssh/host-key.pub")" \
+    "$ssh_home/.ssh/authorized_keys"; then
+    cat "$ssh_home/.ssh/host-key.pub" >> "$ssh_home/.ssh/authorized_keys"
   fi
 
-  chown vagrant:vagrant /home/vagrant/.ssh/authorized_keys
-  chmod 600 /home/vagrant/.ssh/authorized_keys
+  chown "$ssh_user:$ssh_user" "$ssh_home/.ssh/authorized_keys"
+  chmod 600 "$ssh_home/.ssh/authorized_keys"
 
   config_tmp=$(mktemp)
   if ! render_template "$ssh_template" > "$config_tmp"; then
