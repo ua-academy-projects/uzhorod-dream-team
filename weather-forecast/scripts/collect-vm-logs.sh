@@ -222,8 +222,23 @@ for vm in "${VMS[@]}"; do
     failures=1
   fi
 
+  if ! available_containers=$(remote_ssh "$vm" 'sudo -n docker ps -a --format "{{.Names}}"'); then
+    warn "could not list Docker containers on ${vm}"
+    failures=1
+    continue
+  fi
+
   read -r -a vm_containers <<<"${CONTAINERS[$vm]}"
   for container in "${vm_containers[@]}"; do
+    if [[ $'\n'"$available_containers"$'\n' != *$'\n'"$container"$'\n'* ]]; then
+      if [[ "$vm" == db && ( "$container" == weather-rabbitmq || "$container" == weather-redis ) ]]; then
+        printf 'Optional container %s/%s is not present; skipping.\n' "$vm" "$container"
+      else
+        warn "required Docker container ${vm}/${container} is missing"
+        failures=1
+      fi
+      continue
+    fi
     if ! collect_container "$vm" "$container"; then
       warn "Docker log collection failed for ${vm}/${container}"
       failures=1
