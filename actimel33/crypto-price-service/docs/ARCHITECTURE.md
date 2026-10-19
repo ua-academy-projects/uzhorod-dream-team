@@ -43,22 +43,31 @@
 ## Networks
 
 ```
- Windows / Wi-Fi
-       │  a route exists only to this network
-       ▼
- crypto-edge     192.168.78.0/24 ── ordinary libvirt network, reachable from outside
-       │                │
-    bastion            ui            ← the only VMs with a second interface (edge_ip)
-       │                │
- crypto-private  192.168.77.0/24 ── isolated: forward_mode none, no route in or out
-       │         │          │          │          │
-    bastion      db      fetcher    history      ui
+       Windows, Wi-Fi: portproxy on the laptop
+            user                                     admin
+              │ http :5173                             │ ssh :22
+              ▼                                        ▼
+┌─ crypto-edge 192.168.78.0/24 · DMZ, reachable from outside ──────────┐
+│    ┌─────────────────┐                      ┌─────────────────┐      │
+│    │ ui       .78.13 │                      │ bastion   .78.5 │      │
+└────┤                 ├──────────────────────┤                 ├──────┘
+┌────┤          .77.13 ├──────────────────────┤           .77.5 ├──────┐
+│    └────────┬────────┘                      └────────┬────────┘      │
+│             │ /api :3001                             │ ssh :22       │
+│             ▼                                        ▼               │
+│    ┌─────────────────┐  ┌────────┐  ┌─────────┐    port 22 of        │
+│    │ history         │─▶│ db     │◀─│ fetcher │    db, fetcher,      │
+│    │ .77.12          │  │ .77.10 │  │ .77.11  │    history, ui       │
+│    └─────────────────┘  └────────┘  └─────────┘                      │
+└─ crypto-private 192.168.77.0/24 · isolated, no route in or out ──────┘
 
  Vagrant management 192.168.121.0/24 (added by Vagrant): provisioning, internet for the VMs
 ```
 
 - **private** — every VM; services talk here (history → db, fetcher → db, ui → history).
 - **edge** — only the bastion (admins come in) and ui (users come in): a DMZ, like a public subnet.
+- ui and the bastion sit on the border: each has an interface in both networks (`edge_ip`) —
+  the only doors from edge into private.
 - One network would not do: a route from Windows to the UI would expose db, history and fetcher too.
 - `private_network` is just Vagrant's name for a host-only network; `forward_mode: "none"` is what makes
   `crypto-private` isolated, so the VMs reach the internet through the management network.

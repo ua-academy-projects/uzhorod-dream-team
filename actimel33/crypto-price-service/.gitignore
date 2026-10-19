@@ -4,3 +4,5 @@ dist/
 logs/
 bin/
 .vagrant/
+docs/presentation-script.pdf
+docs/presentation-script.md
