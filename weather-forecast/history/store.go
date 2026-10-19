@@ -19,7 +19,17 @@ type Repository interface {
 	Ping(context.Context) error
 }
 
-type Store struct{ pool *pgxpool.Pool }
+type Store struct {
+	pool    *pgxpool.Pool
+	backend string
+}
+
+func (s *Store) queueBackend() string {
+	if s.backend == "" {
+		return backendRabbitMQRedis
+	}
+	return s.backend
+}
 
 // Persisted hours are the checkpoint, including gaps after failed requests.
 func (s *Store) MissingTemperatureHours(ctx context.Context, city string, start, end time.Time) ([]time.Time, error) {

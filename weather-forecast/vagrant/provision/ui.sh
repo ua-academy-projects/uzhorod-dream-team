@@ -7,7 +7,7 @@ require_templates nginx.conf
 history_ip=${1:?History IP is required}
 
 install_template nginx.conf "$config/nginx.conf"
-docker build -f "$stage/ui/Dockerfile" -t weather-ui:dev "$stage/ui"
+build_service_image ui
 docker run --rm \
   --mount "type=bind,src=$config/nginx.conf,dst=/etc/nginx/conf.d/default.conf,readonly" \
   weather-ui:dev nginx -t

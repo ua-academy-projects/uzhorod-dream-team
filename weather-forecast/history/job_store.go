@@ -69,10 +69,18 @@ func (s *Store) CreateJob(ctx context.Context, request WeatherRequest) (Job, err
 		return Job{}, err
 	}
 	job, err := scanJob(tx.QueryRow(ctx, `INSERT INTO weather_jobs
- (request_id,type,status,request_payload,expires_at) VALUES ($1,$2,'queued',$3,$4) RETURNING `+jobColumns,
-		request.RequestID, request.Type, payload, request.ExpiresAt))
+ (request_id,type,status,request_payload,expires_at,backend) VALUES ($1,$2,'queued',$3,$4,$5) RETURNING `+jobColumns,
+		request.RequestID, request.Type, payload, request.ExpiresAt, s.queueBackend()))
 	if err != nil {
 		return Job{}, err
+	}
+	if s.queueBackend() == backendPostgres {
+		if _, err = tx.Exec(ctx, "SELECT pgmq.send('weather_requests', $1::jsonb)", payload); err != nil {
+			return Job{}, err
+		}
+		if _, err = tx.Exec(ctx, "UPDATE weather_jobs SET published_at=NOW() WHERE request_id=$1", request.RequestID); err != nil {
+			return Job{}, err
+		}
 	}
 	return job, tx.Commit(ctx)
 }
@@ -81,6 +89,14 @@ func (s *Store) ExpireJobs(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	_, err := s.pool.Exec(ctx, expireSQL)
+	if err == nil && s.queueBackend() == backendPostgres {
+		_, err = s.pool.Exec(ctx, `DELETE FROM pgmq.q_weather_requests q
+ USING weather_jobs j WHERE q.message->>'request_id'=j.request_id::text AND j.expires_at<=NOW()`)
+		if err == nil {
+			_, err = s.pool.Exec(ctx, `DELETE FROM pgmq.q_weather_responses q
+ USING weather_jobs j WHERE q.message->>'request_id'=j.request_id::text AND j.expires_at<=NOW()`)
+		}
+	}
 	return err
 }
 func (s *Store) GetJob(ctx context.Context, id string) (Job, error) {
@@ -94,7 +110,7 @@ func (s *Store) GetJob(ctx context.Context, id string) (Job, error) {
 func (s *Store) UnpublishedJobs(ctx context.Context) ([]WeatherRequest, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	rows, err := s.pool.Query(ctx, "SELECT request_payload FROM weather_jobs WHERE status='queued' AND published_at IS NULL AND expires_at>NOW() ORDER BY created_at")
+	rows, err := s.pool.Query(ctx, "SELECT request_payload FROM weather_jobs WHERE backend='rabbitmq_redis' AND status='queued' AND published_at IS NULL AND expires_at>NOW() ORDER BY created_at")
 	if err != nil {
 		return nil, err
 	}
@@ -131,7 +147,14 @@ func (s *Store) ApplyResponse(ctx context.Context, body []byte) error {
 		return err
 	}
 	defer tx.Rollback(ctx)
-	job, err := scanJob(tx.QueryRow(ctx, "SELECT "+jobColumns+" FROM weather_jobs WHERE request_id=$1 FOR UPDATE", response.RequestID))
+	if err := s.applyResponseTx(ctx, tx, response); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+func (s *Store) applyResponseTx(ctx context.Context, tx pgx.Tx, response WeatherResponse) error {
+	job, err := scanJob(tx.QueryRow(ctx, "SELECT "+jobColumns+" FROM weather_jobs WHERE request_id=$1 AND backend=$2 FOR UPDATE", response.RequestID, s.queueBackend()))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return errInvalidDelivery
 	}
@@ -139,7 +162,7 @@ func (s *Store) ApplyResponse(ctx context.Context, body []byte) error {
 		return err
 	}
 	if job.Status != "queued" {
-		return tx.Commit(ctx)
+		return nil
 	}
 	weather, points, failure := validateResponse(job.Request, response)
 	if !time.Now().UTC().Before(job.ExpiresAt) {
@@ -165,8 +188,5 @@ func (s *Store) ApplyResponse(ctx context.Context, body []byte) error {
 	errorJSON, _ := json.Marshal(failure)
 	_, err = tx.Exec(ctx, `UPDATE weather_jobs SET status=$2, processed_at=NOW(), error=$3, result=$4 WHERE request_id=$1`,
 		job.RequestID, status, errorJSON, resultJSON)
-	if err != nil {
-		return err
-	}
-	return tx.Commit(ctx)
+	return err
 }

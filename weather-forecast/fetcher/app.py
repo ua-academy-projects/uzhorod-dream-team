@@ -11,7 +11,16 @@ from .provider import (number, normalize_weather, normalize_temperature_history,
                        provider_response, fetch_current, fetch_temperature_range, validate_range)
 
 def create_app(config: Settings = settings):
-    if config.rabbitmq_url:
+    if config.backend not in ("rabbitmq_redis", "postgres"):
+        raise ValueError("WEATHER_BACKEND must be rabbitmq_redis or postgres")
+    if config.backend == "postgres":
+        try:
+            database = urlsplit(config.database_url)
+            if database.scheme not in ("postgres", "postgresql") or not database.hostname:
+                raise ValueError("Invalid database URL")
+        except ValueError:
+            raise ValueError("DATABASE_URL must be a PostgreSQL URL") from None
+    elif config.rabbitmq_url:
         try:
             broker = urlsplit(config.rabbitmq_url)
             if broker.scheme not in ("amqp", "amqps") or not broker.hostname:
@@ -25,14 +34,19 @@ def create_app(config: Settings = settings):
     if not config.city_name.strip() or len(config.city_name) > 100:
         raise ValueError("CITY_NAME must contain 1–100 characters")
 
+    queue_enabled = config.backend == "postgres" or bool(config.rabbitmq_url)
+
     @asynccontextmanager
     async def lifespan(app):
         async with httpx.AsyncClient(timeout=config.timeout_seconds) as client:
             app.state.client = client
             app.state.broker_ready = False
             worker = None
-            if config.rabbitmq_url:
-                from .worker import run_worker
+            if queue_enabled:
+                if config.backend == "postgres":
+                    from .postgres_worker import run_worker
+                else:
+                    from .worker import run_worker
                 worker = asyncio.create_task(run_worker(client, config, app.state))
             try:
                 yield
@@ -48,8 +62,8 @@ def create_app(config: Settings = settings):
 
     @app.get("/health")
     async def health(request: Request):
-        if config.rabbitmq_url and not request.app.state.broker_ready:
-            raise HTTPException(503, "RabbitMQ worker is disconnected")
+        if queue_enabled and not request.app.state.broker_ready:
+            raise HTTPException(503, f"{config.backend} queue worker is disconnected")
         return {"status": "ok"}
 
     @app.get("/weather")

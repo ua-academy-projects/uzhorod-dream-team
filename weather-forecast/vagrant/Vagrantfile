@@ -13,6 +13,14 @@ unless ssh_port&.match?(/\A[0-9]+\z/) && (1024..65535).cover?(ssh_port.to_i)
 end
 ssh_port = ssh_port.to_i.to_s
 bootstrap_ssh = ENV["WEATHER_SSH_BOOTSTRAP"] == "1"
+backend_line = File.foreach(secret_source).find { |line| line.start_with?("WEATHER_BACKEND=") }
+backend = backend_line ? backend_line.split("=", 2).last.strip : "rabbitmq_redis"
+unless %w[rabbitmq_redis postgres].include?(backend)
+  raise "WEATHER_BACKEND must be rabbitmq_redis or postgres"
+end
+skip_build = ENV.fetch("WEATHER_SKIP_BUILD", "0")
+raise "WEATHER_SKIP_BUILD must be 0 or 1" unless %w[0 1].include?(skip_build)
+postgres_backend = backend == "postgres"
 
 def filtered_secrets(source, keys, temp_files)
   input = File.readlines(source)
@@ -41,21 +49,16 @@ machines = {
     cpus: 1,
     folder: "migrations",
     exclude: [],
-    secret_keys: [
-        "WEATHER_DB_PASSWORD",
-        "RABBITMQ_URL",
-        "REDIS_PASSWORD"
-    ]
-},
+    secret_keys: ["WEATHER_DB_PASSWORD", "REDIS_PASSWORD"] +
+      (postgres_backend ? ["WEATHER_FETCHER_DB_PASSWORD"] : ["RABBITMQ_URL"])
+  },
   "fetcher" => {
     ip: "192.168.56.12",
     memory: 1024,
     cpus: 1,
     folder: "fetcher",
     exclude: [".env", ".venv*/", "__pycache__/", "*.pyc"],
-    secret_keys: [
-        "RABBITMQ_URL"
-    ]
+    secret_keys: postgres_backend ? ["WEATHER_FETCHER_DB_PASSWORD"] : ["RABBITMQ_URL"]
   },
   "history" => {
     ip: "192.168.56.13",
@@ -63,11 +66,8 @@ machines = {
     cpus: 1,
     folder: "history",
     exclude: ["bin/", ".env", "*.test"],
-    secret_keys: [
-        "WEATHER_DB_PASSWORD",
-        "RABBITMQ_URL",
-        "REDIS_PASSWORD"
-    ]
+    secret_keys: ["WEATHER_DB_PASSWORD", "REDIS_PASSWORD"] +
+      (postgres_backend ? [] : ["RABBITMQ_URL"])
   },
   "ui" => {
     ip: "192.168.56.14",
@@ -88,7 +88,10 @@ machines = {
 Vagrant.configure("2") do |config|
   config.vm.box = "bento/ubuntu-24.04"
   config.vm.synced_folder ".", "/vagrant", disabled: true
-  provision_environment = { "DEBIAN_FRONTEND" => "noninteractive", "WEATHER_SSH_PORT" => ssh_port }
+  provision_environment = {
+    "DEBIAN_FRONTEND" => "noninteractive", "WEATHER_SSH_PORT" => ssh_port,
+    "WEATHER_BACKEND" => backend, "WEATHER_SKIP_BUILD" => skip_build
+  }
 
   config.vm.provider :libvirt do |libvirt|
     libvirt.management_network_name = "default"
@@ -162,6 +165,8 @@ Vagrant.configure("2") do |config|
       end
 
       if name == "db"
+        vm.vm.synced_folder File.join(project_root, "db"),
+          "/home/vagrant/weather-staging/db", type: "rsync"
         backup_files = ["weather_history.auto.dump"]
         if ENV["WEATHER_IMPORT_DB"] == "1"
           backup_files.concat(%w[weather_history.dump weather_history.count])
@@ -206,13 +211,13 @@ Vagrant.configure("2") do |config|
       end
 
       unless settings[:secret_keys].empty?
-      filtered_file = filtered_secrets(
+        filtered_file = filtered_secrets(
           secret_source,
           settings[:secret_keys],
           secret_temp_files
-      )
+        )
 
-      vm.vm.provision "file",
+        vm.vm.provision "file",
           source: filtered_file,
           destination: "/home/vagrant/weather-staging/secrets.env"
       end
@@ -220,8 +225,10 @@ Vagrant.configure("2") do |config|
 
       case name
       when "db"
-        arguments = [settings[:ip], machines["history"][:ip]]
+        arguments = [settings[:ip], machines["history"][:ip], machines["fetcher"][:ip]]
         arguments << "import-db" if ENV["WEATHER_IMPORT_DB"] == "1"
+      when "fetcher"
+        arguments = [machines["db"][:ip]]
       when "history"
         arguments = [machines["db"][:ip], settings[:ip]]
       when "ui"

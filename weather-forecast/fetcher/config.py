@@ -4,6 +4,8 @@ from dataclasses import dataclass
 @dataclass(frozen=True)
 class Settings:
     """Fetcher service settings."""
+    backend: str = os.getenv("WEATHER_BACKEND", "rabbitmq_redis")
+    database_url: str = os.getenv("DATABASE_URL", "")
     rabbitmq_url: str = os.getenv("RABBITMQ_URL", "")
     host: str = os.getenv("FETCHER_HOST", "127.0.0.1")
     port: int = int(os.getenv("FETCHER_PORT", "8001"))

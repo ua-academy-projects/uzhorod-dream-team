@@ -24,7 +24,7 @@ func TestStoreUpdatesMatchingWeatherTime(t *testing.T) {
 		t.Fatal(err)
 	}
 	schema := fmt.Sprintf("weather_test_%d", time.Now().UnixNano())
-	config.ConnConfig.RuntimeParams["search_path"] = schema
+	config.ConnConfig.RuntimeParams["search_path"] = schema + ",public"
 	pool, err := pgxpool.NewWithConfig(ctx, config)
 	if err != nil {
 		t.Fatal(err)
@@ -62,6 +62,8 @@ func TestStoreUpdatesMatchingWeatherTime(t *testing.T) {
 	apply("003_temperature_history.sql")
 	apply("004_weather_jobs.sql")
 	apply("004_weather_jobs.sql")
+	apply("005_postgres_queue.sql")
+	apply("005_postgres_queue.sql")
 	_, err = pool.Exec(ctx, `INSERT INTO weather_snapshots
  (city, latitude, longitude, temperature_c, humidity_percent, wind_speed_kmh, weather_time, fetched_at)
  VALUES ('Uzhhorod', 48.6167, 22.3, 10, 60, 4, '2026-09-30T09:15:00Z', '2026-09-30T09:16:00Z'),
