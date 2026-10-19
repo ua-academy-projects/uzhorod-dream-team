@@ -104,11 +104,11 @@ are documented in [BACKENDS.md](BACKENDS.md).
 
 ## Provisioning
 
-`vagrant/Vagrantfile` defines the five VMs, private addresses, resources,
+`infra/vagrant/Vagrantfile` defines the five VMs, private addresses, resources,
 rsync folders, filtered secret files, templates, and role-specific scripts.
 
 The shared Vagrant provisioner prepares base packages and staging directories.
-`vagrant/provision/docker.sh` installs Docker Engine and enables its systemd
+`infra/vagrant/provision/docker.sh` installs Docker Engine and enables its systemd
 service on the four service VMs. Bastion has no Docker provisioning, application
 rsync folder, or service credentials. Vagrant uses its own `vagrant` SSH account
 and generated per-VM key to provision Bastion. `bastion.sh` configures the
@@ -117,9 +117,9 @@ A readiness marker is written only after the gateway services are active;
 service VM startup requires this marker and active gateway services.
 No QEMU Guest Agent, custom base box, or experimental communicator is required.
 
-`vagrant/provision/common.sh` renders configuration, manages container replacement,
+`infra/vagrant/provision/common.sh` renders configuration, manages container replacement,
 waits for database dependencies, and configures SSH. Role scripts in
-`vagrant/provision/` then:
+`infra/vagrant/provision/` then:
 
 - `db.sh` builds PostgreSQL 18 Alpine with PGMQ 1.13.0 and hstore and, in the default mode, runs RabbitMQ 4.3 and
   Redis 7.4 Alpine. It configures secrets and volumes, restores a dump into an
@@ -145,8 +145,8 @@ RabbitMQ messages and Redis preferences are not imported into the new volumes.
 
 Named volumes preserve PostgreSQL, RabbitMQ, and Redis state when containers
 are replaced. Before `vagrant destroy db`, a Vagrant trigger runs
-`vagrant/scripts/backup-db.sh` on the DB VM and saves a consistent PostgreSQL dump
-to the host's ignored `weather-deploy-input/weather_history.auto.dump`.
+`operations/database/backup.sh` on the DB VM and saves a consistent PostgreSQL dump
+to the host's ignored `var/deploy/weather_history.auto.dump`.
 It boots a stopped DB VM without provisioning if needed. If backup or download
 fails, destruction is aborted. A new DB VM automatically receives and restores
 this dump before migrations. RabbitMQ messages and Redis preferences are not
@@ -155,7 +155,7 @@ are included in the database dump. The dump represents the database at snapshot
 time; later writes during destruction are outside that snapshot.
 
 Explicit external import is still available with `WEATHER_IMPORT_DB=1` and
-`weather_history.dump` plus `weather_history.count` in `weather-deploy-input/`.
+`weather_history.dump` plus `weather_history.count` in `var/deploy/`.
 It refuses an existing database.
 
 ## Network and access
@@ -234,7 +234,7 @@ aliases point to their `.56.*` addresses, and services use `ProxyJump bastion`.
 Bastion's alias must use `User jump`; the service aliases keep `User vagrant`.
 They use the configured SSH port and `~/.ssh/weather_vm` as before. Vagrant's
 proxy specifies Bastion's address and the host identity explicitly, so it does
-not depend on those aliases. Its separate `vagrant/.vagrant/known_hosts` file
+not depend on those aliases. Its separate `infra/vagrant/.vagrant/known_hosts` file
 uses accept-new checking; before a replacement VM is created, only that VM's
 old entry is removed. Configure normal SSH to use the same file if you want
 this host-key reset to apply to the aliases too.
@@ -247,14 +247,10 @@ Bastion starts first and stops/destroys last, preserving the DB backup path.
 
 ### Transition and verification
 
-The source changes do not rewire existing VM interfaces. An ignored
-`vagrant/Vagrantfile.previous` keeps the previous configuration for this one-time
-transition. The pinned stock Bento box is used without a guest-agent dependency.
-When deliberately ready to recreate the environment, destroy old VMs with
-`VAGRANT_VAGRANTFILE=Vagrantfile.previous vagrant destroy` and confirm that the
-DB trigger saved `weather-deploy-input/weather_history.auto.dump`. This is a
-manual, destructive transition, not an automatic action. Keep host log archives
-and the database dump. RabbitMQ/Redis VM-local state is not included in that dump.
+Moving the source tree does not change VM interfaces or recreate domains.
+Keep the existing `infra/vagrant/.vagrant/` state and host deployment inputs.
+The ignored `Vagrantfile.previous` is a historical migration copy; it uses the
+old layout and must not be used against the current environment.
 
 Retire old `default`/`vagrant0` networks manually only after verifying that no
 other live or persistent VM uses them, including powered-off VMs. Save their
@@ -313,13 +309,7 @@ shutdown handling. Halting or destroying only Bastion while dependent service
 VMs remain running/defined is refused. A full destroy/up backup/restore check is still a
 deployment verification, not something local syntax validation can prove.
 
-For rollback before creating new domains, restore old network definitions and
-use `Vagrantfile.previous`. If new domains already exist, back them up and remove
-them using the new configuration first, preserving Bastion until DB backup
-finishes. Then restore the old networks/configuration. Remove the temporary
-previous Vagrantfile after the migration is verified.
-
-Secrets stay in the local `weather-deploy-input/secrets.env`. Vagrant creates
+Secrets stay in the local `var/deploy/secrets.env`. Vagrant creates
 temporary per-role files and transfers only the variables required by each
 VM. Service environment files are stored under `/etc/weather-forecast/` with
 restricted permissions.
@@ -330,18 +320,47 @@ only its separate database password. UI and Bastion receive no service secrets.
 ## Source layout
 
 ```text
-fetcher/       Python provider client, worker, tests, requirements
-history/       Go API, queue handling, storage, timers, tests
-ui/            Static web page and browser JavaScript
-db/            Multi-stage PostgreSQL image with PGMQ and hstore
-migrations/    PostgreSQL schema migrations
-vagrant/       Vagrantfile and configuration templates
-vagrant/provision/  Role-specific provisioning scripts and shared helpers
-vagrant/scripts/    VM maintenance scripts, including PostgreSQL backup
-scripts/       Host-side VM log collection
-cron/          Cron template for the host
-docs/          Architecture documentation
+services/
+  fetcher/                Python Fetcher package and Docker build context
+    app.py                HTTP app
+    config.py             Environment configuration
+    provider.py           Open-Meteo client
+    worker.py             Shared job execution and RabbitMQ worker
+    postgres_worker.py    PGMQ worker
+    tests/                Python tests
+  history/                Go main package and Docker build context
+    main.go               Startup and schedulers
+    server.go             HTTP API
+    broker.go             RabbitMQ messaging
+    store.go              PostgreSQL weather storage
+    postgres_queue.go     PGMQ consumer
+    *_test.go             Tests beside the implementation
+  ui/public/              Static HTML and CSS/JavaScript assets
+infra/
+  postgres/               PostgreSQL Dockerfile and migrations/
+  vagrant/                Vagrantfile, provision/, templates/
+operations/
+  database/               PostgreSQL backup script executed on the DB VM
+  logs/                   Host collector and cron template
+docs/                     Project documentation
+var/                      Ignored local deployment inputs and log archives
 ```
+
+Docker build contexts are `services/fetcher`, `services/history`, `services/ui`,
+and `infra/postgres`. Provisioning maps these host paths to the existing VM
+staging directories. SQL migrations remain a separate rsync folder on DB;
+they are not included in its image build context. Commands using Vagrant run
+from `infra/vagrant/`. VM state and Vagrant's generated keys are kept in that
+directory's ignored `.vagrant/` folder.
+
+From the project root, run Python tests with
+`.venv/bin/python -m pytest services/fetcher/tests`. For Go, change to
+`services/history/`, then run `go test ./...` and
+`go build -o bin/history .`. Local startup uses
+`python -m fetcher` from `services/` and `go run .` from
+`services/history/`, with the chosen backend environment configured. History's
+default local UI directory is `../ui/public`; deployed History containers keep
+`HISTORY_SERVE_UI=false` and use the separate Nginx VM.
 
 ## Logs
 
@@ -349,7 +368,7 @@ All service containers use Docker's `local` log driver with `max-size=10m` and
 `max-file=3`. Docker rotates container stdout/stderr logs on each VM.
 `docker logs` reads them. Container replacement removes those local logs.
 
-`scripts/collect-vm-logs.sh` collects logs onto the host from `db`,
+`operations/logs/collect.sh` collects logs onto the host from `db`,
 `fetcher`, `history`, and `ui`. Bastion is not currently included. The script
 uses the host's SSH aliases, so service VM connections follow `ProxyJump`
 when configured. `BatchMode=yes` and `sudo -n` require access without
@@ -369,18 +388,18 @@ log stream a second time. Files written only to other paths, such as
 application-specific files under `/var/log`, are not collected automatically.
 
 The first collection requests up to 14 days of available logs. Later runs use
-journal cursors and Docker timestamps saved under `logs/.state/`. Checkpoints
+journal cursors and Docker timestamps saved under `var/logs/current/.state/`. Checkpoints
 advance after a successful transfer and local save; an unavailable VM is
 skipped without advancing its checkpoints. A lock prevents overlapping runs.
 Logs already removed by local rotation cannot be recovered by the collector.
 
-Files are grouped under `logs/<vm>/system/` and
-`logs/<vm>/containers/<container>/`. Directories are created with mode `700`
+Files are grouped under `var/logs/current/<vm>/system/` and
+`var/logs/current/<vm>/containers/<container>/`. Directories are created with mode `700`
 and files with mode `600`; logs and checkpoint files are ignored by Git.
 
-`cron/weather-log-collector.cron` is a template for the host user's crontab.
+`operations/logs/collector.cron` is a template for the host user's crontab.
 It schedules collection every 15 minutes using absolute paths and writes
-collector diagnostics to daily `logs/collector-<UTC-date>.log` files. Keeping
+collector diagnostics to daily `var/logs/current/collector-<UTC-date>.log` files. Keeping
 the template in the repository does not install or activate the schedule.
 
 Each run compresses `.log` files older than one day with gzip and removes
@@ -388,8 +407,8 @@ Each run compresses `.log` files older than one day with gzip and removes
 time on the host, not the timestamp of individual log messages; gzip preserves
 that modification time. This also applies to collector diagnostic logs.
 
-After destroying a VM environment, manually rename `logs/` to
-`logs-<timestamp>.old/` before collecting from replacement VMs. The collector
-does not detect VM replacement or rename directories automatically. New runs
-create a fresh `logs/` tree and checkpoints; compression and retention also
-cover `logs-*.old/` archives.
+After destroying a VM environment, manually move `var/logs/current/` to
+`var/logs/archive/logs-<timestamp>.old/` before collecting from replacement VMs.
+The collector does not detect VM replacement or rename directories automatically.
+New runs create a fresh `var/logs/current/` tree and checkpoints; compression
+and retention also cover `var/logs/archive/logs-*.old/` archives.

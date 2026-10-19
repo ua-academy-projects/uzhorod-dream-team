@@ -1,0 +1,4 @@
+SHELL=/usr/bin/bash
+PATH=/usr/bin:/bin
+
+*/15 * * * * umask 077; /usr/bin/mkdir -p /home/oleksiy/uzhorod-dream-team/weather-forecast/var/logs/current && /usr/bin/bash /home/oleksiy/uzhorod-dream-team/weather-forecast/operations/logs/collect.sh >> /home/oleksiy/uzhorod-dream-team/weather-forecast/var/logs/current/collector-$(/usr/bin/date -u +\%F).log 2>&1

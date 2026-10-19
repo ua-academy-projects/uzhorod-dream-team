@@ -7,6 +7,4 @@ secrets.env
 /.tools/
 /.pytest_cache/
 
-/logs/
-/logs-*.old/
-/weather-deploy-input/
+/var/

@@ -1,0 +1,387 @@
+require "tempfile"
+require "fileutils"
+require "rexml/document"
+require "shellwords"
+require "ipaddr"
+
+# vagrant-libvirt 0.12.2 queries its own DHCP server even with ssh.host set.
+# Service DHCP runs on Bastion, so honor the configured fixed address instead.
+module WeatherStaticSSHHost
+  def get_ipaddress(domain = nil)
+    @machine.config.ssh.host || super
+  end
+end
+
+if defined?(VagrantPlugins::ProviderLibvirt::Plugin)
+  require "vagrant-libvirt/driver"
+  VagrantPlugins::ProviderLibvirt::Driver.prepend(WeatherStaticSSHHost)
+end
+
+# Dependencies must start in definition order and stop/destroy in reverse order.
+ENV["VAGRANT_NO_PARALLEL"] = "1"
+
+project_root = File.expand_path("../..", __dir__)
+deploy_input = File.expand_path("../../var/deploy", __dir__)
+
+secret_source = File.join(deploy_input, "secrets.env")
+secret_temp_files = []
+ssh_port_line = File.foreach(secret_source).find { |line| line.start_with?("WEATHER_SSH_PORT=") }
+ssh_port = ssh_port_line&.split("=", 2)&.last&.strip
+unless ssh_port&.match?(/\A[0-9]+\z/) && (1024..65535).cover?(ssh_port.to_i)
+  raise "Set WEATHER_SSH_PORT=1024..65535 in var/deploy/secrets.env"
+end
+ssh_port = ssh_port.to_i.to_s
+bootstrap_ssh = ENV["WEATHER_SSH_BOOTSTRAP"] == "1"
+backend_line = File.foreach(secret_source).find { |line| line.start_with?("WEATHER_BACKEND=") }
+backend = backend_line ? backend_line.split("=", 2).last.strip : "rabbitmq_redis"
+unless %w[rabbitmq_redis postgres].include?(backend)
+  raise "WEATHER_BACKEND must be rabbitmq_redis or postgres"
+end
+skip_build = ENV.fetch("WEATHER_SKIP_BUILD", "0")
+raise "WEATHER_SKIP_BUILD must be 0 or 1" unless %w[0 1].include?(skip_build)
+postgres_backend = backend == "postgres"
+
+def filtered_secrets(source, keys, temp_files)
+  input = File.readlines(source)
+  allowed = input.select do |line|
+    key = line[/\A([A-Z0-9_]+)=/, 1]
+    key && keys.include?(key)
+  end
+
+  file = Tempfile.new(["weather-secrets-", ".env"])
+  file.write(allowed.join)
+  file.close
+  File.chmod(0600, file.path)
+
+  temp_files << file
+  file.path
+end
+
+def check_weather_networks(machine)
+  machine.provider.driver.connection.client.list_all_networks.each do |network|
+    xml = REXML::Document.new(network.xml_desc)
+    name = xml.root.elements["name"].text
+    addresses = REXML::XPath.match(xml, "/network/ip")
+    if name == "weather-internal"
+      unless addresses.empty? && !xml.root.elements["forward"] && xml.root.attributes["ipv6"] != "yes"
+        raise "weather-internal must have no host IP, forwarding or IPv6; follow docs/ARCHITECTURE.md"
+      end
+    elsif name == "weather-external"
+      range = xml.root.elements["ip/dhcp/range"]
+      unless addresses.size == 1 && addresses.first.attributes["address"] == "192.168.122.1" &&
+          xml.root.elements["forward"]&.attributes&.[]("mode") == "nat" &&
+          range && range.attributes["start"] == "192.168.122.10" && range.attributes["end"] == "192.168.122.10"
+        raise "weather-external differs from the configured NAT network; follow docs/ARCHITECTURE.md"
+      end
+    else
+      addresses.reject { |ip| ip.attributes["family"] == "ipv6" }.each do |ip|
+        subnet = IPAddr.new("#{ip.attributes['address']}/#{ip.attributes['netmask'] || ip.attributes['prefix']}")
+        if subnet.include?("192.168.122.10") || subnet.include?("192.168.56.10")
+          raise "Network #{name} overlaps the project. Back up and retire unused old networks manually; see docs/ARCHITECTURE.md"
+        end
+      end
+    end
+  end
+end
+
+at_exit do
+  secret_temp_files.each(&:unlink)
+end
+
+machines = {
+  "bastion" => {
+    ip: "192.168.56.10",
+    memory: 512,
+    cpus: 1,
+    secret_keys: []
+  },
+  "db" => {
+    ip: "192.168.56.11",
+    memory: 1024,
+    cpus: 1,
+    folder: "infra/postgres/migrations",
+    exclude: [],
+    secret_keys: ["WEATHER_DB_PASSWORD"] +
+      (postgres_backend ? ["WEATHER_FETCHER_DB_PASSWORD"] : ["RABBITMQ_URL", "REDIS_PASSWORD"])
+  },
+  "fetcher" => {
+    ip: "192.168.56.12",
+    memory: 1024,
+    cpus: 1,
+    folder: "services/fetcher",
+    exclude: [".env", ".venv*/", "__pycache__/", "*.pyc"],
+    secret_keys: postgres_backend ? ["WEATHER_FETCHER_DB_PASSWORD"] : ["RABBITMQ_URL"]
+  },
+  "history" => {
+    ip: "192.168.56.13",
+    memory: 1024,
+    cpus: 1,
+    folder: "services/history",
+    exclude: ["bin/", ".env", "*.test"],
+    secret_keys: ["WEATHER_DB_PASSWORD"] +
+      (postgres_backend ? [] : ["RABBITMQ_URL", "REDIS_PASSWORD"])
+  },
+  "ui" => {
+    ip: "192.168.56.14",
+    memory: 1024,
+    cpus: 1,
+    folder: "services/ui",
+    exclude: [".env", "node_modules/"],
+    secret_keys: []
+  }
+}
+
+known_hosts = File.join(__dir__, ".vagrant", "known_hosts")
+bastion_ssh = ["ssh", "-F", "/dev/null", "-i", File.expand_path("~/.ssh/weather_vm"),
+  "-p", ssh_port, "-o", "BatchMode=yes", "-o", "IdentitiesOnly=yes",
+  "-o", "ConnectTimeout=5", "-o", "StrictHostKeyChecking=accept-new",
+  "-o", "UserKnownHostsFile=#{known_hosts}"]
+proxy_command = Shellwords.join(bastion_ssh + ["-W", "%h:%p", "jump@192.168.122.10"])
+
+ensure_bastion = lambda do |env|
+  bastion = env.machine(:bastion, :libvirt)
+  bastion.action(:up, destroy_on_error: false) unless bastion.state.id == :running
+  unless bastion.communicate.test("test -f /etc/weather-forecast/gateway-ready && systemctl is-active --quiet ssh.service dnsmasq.service nftables.service", sudo: true)
+    raise "Provision Bastion successfully before starting service VMs: vagrant provision bastion"
+  end
+end
+
+Vagrant.configure("2") do |config|
+  config.vm.box = "bento/ubuntu-24.04"
+  config.vm.box_version = "202508.03.0"
+  config.vm.synced_folder ".", "/vagrant", disabled: true
+  provision_environment = {
+    "DEBIAN_FRONTEND" => "noninteractive", "WEATHER_SSH_PORT" => ssh_port,
+    "WEATHER_BACKEND" => backend, "WEATHER_SKIP_BUILD" => skip_build
+  }
+
+  config.vm.provider :libvirt do |libvirt|
+    libvirt.mgmt_attach = false
+  end
+
+  machines.each do |name, settings|
+    config.vm.define name do |vm|
+      vm.vm.hostname = "weather-#{name}"
+      if name == "bastion"
+        # Only Bastion joins this NAT network. A one-address DHCP pool gives
+        # its stock first NIC a stable address without a separate network XML.
+        vm.vm.network "private_network", ip: "192.168.122.10", auto_config: false,
+          mac: "52:54:00:12:20:10", libvirt__network_name: "weather-external",
+          libvirt__dhcp_start: "192.168.122.10", libvirt__dhcp_stop: "192.168.122.10",
+          libvirt__guest_ipv6: "no", libvirt__autostart: true,
+          libvirt__always_destroy: false
+        vm.vm.network "private_network", ip: settings[:ip],
+          mac: "52:54:00:56:00:10",
+          libvirt__network_name: "weather-internal",
+          libvirt__forward_mode: "veryisolated", libvirt__dhcp_enabled: false,
+          libvirt__guest_ipv6: "no", libvirt__autostart: true,
+          libvirt__always_destroy: false
+      else
+        # The stock box requests DHCP on its first NIC; Bastion reserves its IP.
+        vm.vm.network "private_network", auto_config: false,
+          mac: "52:54:00:56:00:#{settings[:ip].split('.').last}",
+          libvirt__network_name: "weather-internal",
+          libvirt__forward_mode: "veryisolated", libvirt__dhcp_enabled: false,
+          libvirt__guest_ipv6: "no", libvirt__autostart: true,
+          libvirt__always_destroy: false
+        vm.ssh.host = settings[:ip]
+        vm.ssh.proxy_command = proxy_command
+
+      end
+      # A new stock box starts on 22; after provisioning Vagrant uses our configured port.
+      machine_id = File.join(__dir__, ".vagrant", "machines", name, "libvirt", "id")
+      vm.ssh.port = bootstrap_ssh || !File.exist?(machine_id) ? 22 : ssh_port.to_i
+      vm.ssh.guest_port = vm.ssh.port
+
+      if name == "bastion"
+        vm.vm.network "forwarded_port",
+            guest: 80,
+            guest_ip: machines["ui"][:ip],
+            host: 8080,
+            host_ip: "0.0.0.0",
+            gateway_ports: true
+      end
+
+      vm.vm.provider :libvirt do |libvirt|
+        libvirt.memory = settings[:memory]
+        libvirt.cpus = settings[:cpus]
+        libvirt.qemu_use_agent = false
+      end
+
+      vm.trigger.before [:up, :reload, :provision] do |trigger|
+        trigger.ruby do |env, machine|
+          check_weather_networks(machine) if name == "bastion"
+          if machine.id
+            xml = REXML::Document.new(machine.provider.driver.connection.client
+              .lookup_domain_by_uuid(machine.id).xml_desc(1))
+            actual = REXML::XPath.match(xml, "/domain/devices/interface").map do |nic|
+              nic.elements["source"]&.attributes&.[]("network")
+            end
+            expected = name == "bastion" ? %w[weather-external weather-internal] : %w[weather-internal]
+            unless actual.all? && actual.sort == expected.sort
+              raise "#{name} still uses the old networks; follow the transition in docs/ARCHITECTURE.md"
+            end
+          elsif File.file?(known_hosts)
+            address = name == "bastion" ? "192.168.122.10" : settings[:ip]
+            system("ssh-keygen", "-q", "-R", "[#{address}]:#{ssh_port}", "-f", known_hosts,
+              out: File::NULL, err: File::NULL) || raise("Cannot reset the retired VM's host key")
+          end
+          ensure_bastion.call(env) unless name == "bastion"
+        end
+      end
+
+      if name == "bastion"
+        vm.trigger.after [:up, :reload, :provision] do |trigger|
+          trigger.ruby do |_env, machine|
+            next unless machine.state.id == :running
+
+            # Provisioning changes SSH from the stock port to WEATHER_SSH_PORT.
+            machine.config.ssh.port = ssh_port.to_i
+            machine.config.ssh.guest_port = ssh_port.to_i
+            machine.communicate.reset!
+            # Recreate the UI tunnel with the configured port and Vagrant key.
+            Vagrant::Action::Builder.new
+              .use(VagrantPlugins::ProviderLibvirt::Action::ClearForwardedPorts)
+              .use(VagrantPlugins::ProviderLibvirt::Action::ForwardPorts)
+              .call(machine: machine, ui: machine.ui)
+          end
+        end
+        [:halt, :destroy].each do |action|
+          vm.trigger.before action do |trigger|
+            trigger.ruby do |env, machine|
+              active = machines.keys.reject { |role| role == "bastion" }.select do |role|
+                state = env.machine(role.to_sym, :libvirt).state.id
+                action == :destroy ? state != :not_created : state == :running
+              end
+              raise "#{action} service VMs first: #{active.join(', ')}" unless active.empty?
+            end
+          end
+        end
+      end
+
+      if settings[:folder]
+        vm.vm.synced_folder File.join(project_root, settings[:folder]),
+          "/home/vagrant/weather-staging/#{File.basename(settings[:folder])}",
+          type: "rsync", rsync__exclude: settings[:exclude]
+      end
+
+      vm.vm.provision "shell", name: "weather-common", privileged: true,
+        env: provision_environment, inline: <<~'SHELL'
+        set -euo pipefail
+        umask 022
+        source /etc/os-release
+        [[ "$ID" == ubuntu && "$VERSION_ID" == 24.04 ]] || { echo 'Ubuntu 24.04 is required'; exit 1; }
+        echo 'Preparing common packages and directories'
+        apt-get update
+        apt-get install -y ca-certificates curl rsync
+        install -d -m 755 /opt/weather-forecast /etc/weather-forecast
+        install -d -m 755 -o vagrant -g vagrant /home/vagrant/weather-staging
+        install -d -m 755 -o vagrant -g vagrant /home/vagrant/weather-staging/templates/{ssh,nginx,postgres,rabbitmq}
+      SHELL
+
+      vm.vm.provision "file",
+        source: File.join(__dir__, "provision", "common.sh"),
+        destination: "/home/vagrant/weather-staging/common.sh"
+
+      vm.vm.provision "file",
+        source: File.expand_path("~/.ssh/weather_vm.pub"),
+        destination: "/home/vagrant/weather-staging/host-key.pub"
+
+      # Upload templates on every provision, including existing VMs.
+      template_names = name == "bastion" ? %w[ssh/bastion.conf ssh/socket.conf] :
+        %w[nginx/default.conf postgres/pg_hba.conf rabbitmq/rabbitmq.conf ssh/services.conf ssh/socket.conf]
+      template_names.each do |filename|
+        vm.vm.provision "file",
+          source: File.join(__dir__, "templates", filename),
+          destination: "/home/vagrant/weather-staging/templates/#{filename}"
+      end
+
+      unless name == "bastion"
+        vm.vm.provision "shell", name: "weather-docker",
+          privileged: true,
+          env: provision_environment,
+          path: File.join(__dir__, "provision", "docker.sh")
+      end
+
+      if name == "db"
+        vm.vm.synced_folder File.join(project_root, "infra", "postgres"),
+          "/home/vagrant/weather-staging/db", type: "rsync", rsync__exclude: ["migrations/"]
+        backup_files = ["weather_history.auto.dump"]
+        if ENV["WEATHER_IMPORT_DB"] == "1"
+          backup_files.concat(%w[weather_history.dump weather_history.count])
+        end
+        backup_files.each do |filename|
+          source = File.join(deploy_input, filename)
+          next unless File.file?(source)
+
+          vm.vm.provision "file", source: source,
+            destination: "/home/vagrant/weather-staging/#{filename}"
+        end
+
+        vm.trigger.before :destroy do |trigger|
+          trigger.name = "Back up weather_history to the host"
+          trigger.ruby do |env, machine|
+            next unless machine.id
+
+            ensure_bastion.call(env)
+
+            unless machine.state.id == :running
+              machine.action(:up, provision_enabled: false, destroy_on_error: false)
+            end
+
+            remote_script = "/home/vagrant/weather-staging/backup-db.sh"
+            remote_dump = "/home/vagrant/weather-staging/weather_history.auto.dump"
+            machine.communicate.upload(File.join(project_root, "operations", "database", "backup.sh"), remote_script)
+            machine.communicate.sudo("bash #{remote_script}", error_check: true)
+            next unless machine.communicate.test("test -s #{remote_dump}")
+
+            FileUtils.mkdir_p(deploy_input, mode: 0700)
+            temporary = Tempfile.new(["weather-db-", ".dump"], deploy_input)
+            begin
+              temporary.close
+              machine.communicate.download(remote_dump, temporary.path)
+              File.chmod(0600, temporary.path)
+              File.rename(temporary.path, File.join(deploy_input, "weather_history.auto.dump"))
+            ensure
+              temporary.close!
+            end
+            machine.communicate.sudo("rm -f -- #{remote_dump}", error_check: true)
+            machine.ui.info("PostgreSQL backup saved in var/deploy/weather_history.auto.dump")
+          end
+        end
+      end
+
+      unless settings[:secret_keys].empty?
+        filtered_file = filtered_secrets(
+          secret_source,
+          settings[:secret_keys],
+          secret_temp_files
+        )
+
+        vm.vm.provision "file",
+          source: filtered_file,
+          destination: "/home/vagrant/weather-staging/secrets.env"
+      end
+
+
+      case name
+      when "db"
+        arguments = [settings[:ip], machines["history"][:ip], machines["fetcher"][:ip]]
+        arguments << "import-db" if ENV["WEATHER_IMPORT_DB"] == "1"
+      when "fetcher"
+        arguments = [machines["db"][:ip]]
+      when "history"
+        arguments = [machines["db"][:ip], settings[:ip]]
+      when "ui"
+        arguments = [machines["history"][:ip]]
+      else
+        arguments = []
+      end
+
+      vm.vm.provision "shell", name: "weather-#{name}",
+        privileged: true,
+        env: provision_environment,
+        path: File.join(__dir__, "provision", "#{name}.sh"), args: arguments
+    end
+  end
+end
