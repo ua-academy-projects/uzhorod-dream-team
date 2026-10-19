@@ -113,21 +113,21 @@ configure_ssh() {
     echo 'WEATHER_SSH_PORT must be between 1024 and 65535'; return 1;
   }
 
-  [[ -s /home/vagrant/weather-staging/arch-key.pub ]] || {
-    echo 'Arch public key is missing'; return 1;
+  [[ -s /home/vagrant/weather-staging/host-key.pub ]] || {
+    echo 'Host public key is missing'; return 1;
   }
 
   install -d -m 700 -o vagrant -g vagrant /home/vagrant/.ssh
 
   install -m 600 -o vagrant -g vagrant \
-    /home/vagrant/weather-staging/arch-key.pub \
-    /home/vagrant/.ssh/arch-key.pub
+    /home/vagrant/weather-staging/host-key.pub \
+    /home/vagrant/.ssh/host-key.pub
 
   touch /home/vagrant/.ssh/authorized_keys
 
-  if ! grep -qxF "$(cat /home/vagrant/.ssh/arch-key.pub)" \
+  if ! grep -qxF "$(cat /home/vagrant/.ssh/host-key.pub)" \
     /home/vagrant/.ssh/authorized_keys; then
-    cat /home/vagrant/.ssh/arch-key.pub >> /home/vagrant/.ssh/authorized_keys
+    cat /home/vagrant/.ssh/host-key.pub >> /home/vagrant/.ssh/authorized_keys
   fi
 
   chown vagrant:vagrant /home/vagrant/.ssh/authorized_keys
