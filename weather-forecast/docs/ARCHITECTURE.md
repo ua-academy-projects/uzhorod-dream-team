@@ -328,13 +328,18 @@ services/
     worker.py             Shared job execution and RabbitMQ worker
     postgres_worker.py    PGMQ worker
     tests/                Python tests
-  history/                Go main package and Docker build context
-    main.go               Startup and schedulers
-    server.go             HTTP API
-    broker.go             RabbitMQ messaging
-    store.go              PostgreSQL weather storage
-    postgres_queue.go     PGMQ consumer
-    *_test.go             Tests beside the implementation
+  history/
+    cmd/history/          Process startup and dependency wiring
+    internal/
+      app/                Collection and scheduled jobs
+      api/                HTTP routes and preferences cookie handling
+      config/             Environment configuration
+      domain/             Weather, jobs, preferences, repository interfaces
+      messaging/rabbitmq/ Durable messaging and acknowledgements
+      storage/postgres/   Weather, job state, PGMQ, hstore preferences
+      storage/redis/      Redis preferences
+      retry/              Cancellable retry delay
+      testutil/           Shared test fixtures
   ui/public/              Static HTML and CSS/JavaScript assets
 infra/
   postgres/               PostgreSQL Dockerfile and migrations/
@@ -356,8 +361,8 @@ directory's ignored `.vagrant/` folder.
 From the project root, run Python tests with
 `.venv/bin/python -m pytest services/fetcher/tests`. For Go, change to
 `services/history/`, then run `go test ./...` and
-`go build -o bin/history .`. Local startup uses
-`python -m fetcher` from `services/` and `go run .` from
+`go build -o bin/history ./cmd/history`. Local startup uses
+`python -m fetcher` from `services/` and `go run ./cmd/history` from
 `services/history/`, with the chosen backend environment configured. History's
 default local UI directory is `../ui/public`; deployed History containers keep
 `HISTORY_SERVE_UI=false` and use the separate Nginx VM.
