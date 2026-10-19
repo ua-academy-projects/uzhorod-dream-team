@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Weather History — Uzhhorod</title>
+  <link rel="stylesheet" href="/assets/css/style.css">
+  <script src="/assets/js/app.js?v=6" defer></script>
+</head>
+<body>
+  <main>
+    <header>
+      <div><p class="eyebrow">WEATHER HISTORY</p><h1>Weather in Uzhhorod</h1>
+        <p>Current weather snapshots and their collection history.</p></div>
+      <div class="header-controls">
+        <label for="theme">Theme <select id="theme" disabled><option value="light">Light</option><option value="dark">Dark</option></select></label>
+        <button id="collect" type="button" disabled>Collect now</button>
+      </div>
+    </header>
+    <p id="preferences-status" role="status" aria-live="polite" hidden></p>
+    <p id="status" role="status" aria-live="polite">Loading history…</p>
+    <section aria-label="Latest measurements" class="cards">
+      <article><h2>Temperature</h2><p id="temperature" class="value">—</p></article>
+      <article><h2>Humidity</h2><p id="humidity" class="value">—</p></article>
+      <article><h2>Wind</h2><p id="wind" class="value">—</p></article>
+    </section>
+    <dl class="times">
+      <div><dt>Weather data time (UTC)</dt><dd id="weather-time">—</dd></div>
+      <div><dt>Collected by History (UTC)</dt><dd id="fetched-at">—</dd></div>
+    </dl>
+    <section class="panel">
+      <div class="chart-heading">
+        <h2>Temperature over time</h2>
+        <label for="chart-period">Period
+          <select id="chart-period" disabled>
+            <option value="24h">Last 24 hours</option>
+            <option value="7d">Last 7 days</option>
+            <option value="30d">Last 30 days</option>
+          </select>
+        </label>
+      </div>
+      <p class="hint">Past hourly temperatures from Open-Meteo for the current city. History syncs on startup and every hour. All times are UTC.</p>
+      <p id="chart-status" role="status" aria-live="polite">Loading chart…</p>
+      <p id="chart-empty" hidden>No temperature data yet. History may still be downloading past weather.</p>
+      <svg id="chart" viewBox="0 0 900 280" role="img" aria-label="Temperature chart in degrees Celsius" hidden></svg>
+    </section>
+    <section class="panel">
+      <h2>Collection history</h2>
+      <p id="history-empty" hidden>History is empty. Click “Collect now” or wait for the timer.</p>
+      <div class="table-wrap">
+        <table>
+          <caption>Latest 100 snapshots; most recently collected first. All times are UTC.</caption>
+          <thead><tr><th scope="col">ID</th><th scope="col">Weather data time</th><th scope="col">Collected at</th>
+            <th scope="col">°C</th><th scope="col">Humidity, %</th><th scope="col">Wind, km/h</th></tr></thead>
+          <tbody id="history"></tbody>
+        </table>
+      </div>
+    </section>
+    <footer>Source: <a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">Open-Meteo</a>
+      · Measurements are based on weather models.</footer>
+  </main>
+</body>
+</html>

@@ -1,7 +1,7 @@
 # Selecting the queue and preferences backend
 
 `WEATHER_BACKEND` is read from the host's ignored
-`weather-deploy-input/secrets.env`. It is configuration, not a secret.
+`var/deploy/secrets.env`. It is configuration, not a secret.
 
 | Value | Queue | Preferences | Running DB VM containers |
 | --- | --- | --- | --- |
@@ -21,8 +21,8 @@ characters. If this key does not exist yet, run this once from the project root
 on the host to append a random value without displaying it:
 
 ```bash
-printf '\nWEATHER_FETCHER_DB_PASSWORD=%s\n' "$(openssl rand -hex 24)" >> weather-deploy-input/secrets.env
-chmod 600 weather-deploy-input/secrets.env
+printf '\nWEATHER_FETCHER_DB_PASSWORD=%s\n' "$(openssl rand -hex 24)" >> var/deploy/secrets.env
+chmod 600 var/deploy/secrets.env
 ```
 
 Add or update one selector line in the same file:
@@ -65,7 +65,7 @@ so switching does not require a different PostgreSQL image.
 ## First deployment of this implementation
 
 For new VMs, `vagrant up` provisions the selected mode and builds the service
-images. For existing VMs, run the following on the host from `vagrant/`, after
+images. For existing VMs, run the following on the host from `infra/vagrant/`, after
 preparing the configuration above and letting active jobs finish:
 
 ```bash
@@ -87,7 +87,7 @@ images; do not skip the build yet.
 ## Switching modes with existing images
 
 Let active jobs finish, stop History and Fetcher as above, and change
-`WEATHER_BACKEND` in the host file. Then, from `vagrant/`, run:
+`WEATHER_BACKEND` in the host file. Then, from `infra/vagrant/`, run:
 
 ```bash
 WEATHER_SKIP_BUILD=1 vagrant provision db
