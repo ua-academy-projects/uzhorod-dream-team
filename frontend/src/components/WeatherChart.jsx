@@ -10,8 +10,34 @@ import {
 } from 'recharts';
 import { formatDateTime } from '../format.js';
 
-const formatTick = (ts) =>
-  new Date(ts).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+const HOUR_MS = 3_600_000;
+const TICK_STEP_HOURS = [1, 3, 6, 12, 24, 48, 7 * 24, 14 * 24];
+const MAX_TICKS = 8;
+
+/**
+ * Ticks on round local times (midnights, or every N hours from midnight) instead of
+ * recharts' even split of the data range, which starts at the first point's odd hour.
+ */
+function timeTicks(min, max) {
+  const step = TICK_STEP_HOURS.find((h) => (max - min) / (h * HOUR_MS) <= MAX_TICKS) ?? TICK_STEP_HOURS.at(-1);
+  const t = new Date(min);
+  t.setHours(0, 0, 0, 0);
+  const ticks = [];
+  while (t.getTime() <= max) {
+    if (t.getTime() >= min) ticks.push(t.getTime());
+    if (step < 24) t.setHours(t.getHours() + step);
+    else t.setDate(t.getDate() + step / 24);
+  }
+  return ticks;
+}
+
+// Midnight shows the date, other ticks the time of day
+function formatTick(ts) {
+  const date = new Date(ts);
+  return date.getHours() === 0 && date.getMinutes() === 0
+    ? date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+    : date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+}
 
 /**
  * One line chart with a single y-axis. Temperature and humidity use different
@@ -27,6 +53,7 @@ function TimeSeriesChart({ data, series, unit, domain }) {
           type="number"
           scale="time"
           domain={['dataMin', 'dataMax']}
+          ticks={timeTicks(data[0].ts, data.at(-1).ts)}
           tickFormatter={formatTick}
           stroke="var(--text-muted)"
           tick={{ fontSize: 12 }}

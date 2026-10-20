@@ -106,10 +106,10 @@ is loaded (`history/src/broker/index.js`, `history/src/cache/index.js`, `fetcher
 | | `true` | `false` |
 |---|---|---|
 | Queues History ↔ Fetcher | RabbitMQ, `weather.fetch.requests` / `.replies` | pgmq, `weather_fetch_requests` / `_replies` (tables `pgmq.q_*` in the app database) |
-| Cache (UI preferences) | Redis, `SET key <json> EX ttl` | `cache_entries`, an UNLOGGED table, cleaned by pg_cron |
+| Cache (UI preferences) | Redis, `SET key <json> EX ttl` | `cache_entries`, a table with hstore values, cleaned by pg_cron |
 | Fetcher needs | `AMQP_URL` | `DATABASE_URL` (on Vagrant the role `fetcher`, which may only touch the two queue tables) |
 | History needs | `DATABASE_URL`, `AMQP_URL`, `REDIS_URL` | `DATABASE_URL` only |
-| PostgreSQL | plain `postgres:16-alpine`, no extensions | `weather/postgres` with pgmq and pg_cron |
+| PostgreSQL | plain `postgres:16-alpine`, no extensions | `weather/postgres` with pgmq and pg_cron, plus the built-in hstore |
 | Redis, RabbitMQ containers | running | not started |
 
 The messages are the same JSON in both cases (see [Fetcher messages](#fetcher-messages-rabbitmq)), and
@@ -139,17 +139,20 @@ row, `read` hides it for a visibility timeout (vt) instead of locking it, `delet
 ### Cache in PostgreSQL
 
 ```sql
-CREATE UNLOGGED TABLE cache_entries (key text PRIMARY KEY, value jsonb NOT NULL, expires_at timestamptz);
+CREATE EXTENSION IF NOT EXISTS hstore;
+CREATE TABLE cache_entries (key text PRIMARY KEY, value hstore NOT NULL, expires_at timestamptz);
 ```
 
-The same keys and JSON values as in Redis (`preferences:<uid>` → `{"theme":"dark"}`), with the TTL as `expires_at`.
+The same keys as in Redis (`preferences:<uid>` → `"theme"=>"dark"`), with the TTL as `expires_at`.
 
-- **UNLOGGED**: no WAL, so a write costs no WAL flush; the table is emptied after a crash (not after a clean
-  restart), which is what a cache may do. A small hot table is served from `shared_buffers` (RAM) either way; Redis
-  is still faster per operation, but every call crosses the network between the VMs, so for UI preferences the
-  difference does not show.
+- **hstore**: a contrib extension that ships with PostgreSQL (in both images), a set of flat text pairs. `set`
+  accepts only objects of strings and writes `hstore(keys[], values[])`; `get` reads `hstore_to_json(value)`, so
+  callers get the same object as from Redis. The table is a regular (logged) one, so preferences survive a crash.
+  An UNLOGGED `cache_entries` with jsonb values from earlier versions is dropped on start and created again.
+  A small hot table is served from `shared_buffers` (RAM); Redis is still faster per operation, but every call
+  crosses the network between the VMs, so for UI preferences the difference does not show.
 - **TTL**: a read ignores expired rows; the pg_cron job `weather-cache-ttl` deletes them every minute
-  (`DELETE FROM cache_entries WHERE expires_at < now()`). History creates the table, the extension and the job on
+  (`DELETE FROM cache_entries WHERE expires_at < now()`). History creates hstore, the table, pg_cron and the job on
   start (`cron.schedule` with the same name updates the job). pg_cron needs `shared_preload_libraries=pg_cron` and
   runs jobs only in `cron.database_name`, so that must be the app database; it connects for each run over
   `cron.host` (here the Unix socket, see [infrastructure.md#postgresql](infrastructure.md#postgresql)).

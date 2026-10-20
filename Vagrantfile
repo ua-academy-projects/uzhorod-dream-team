@@ -35,21 +35,25 @@ NET = "192.168.56"
 VMS = {
   "weather-postgres-db" => {
     ip: "#{NET}.10", memory: 1536, script: "db.sh", sync: %w[postgres],
-    env: %w[USE_REDIS_RABBITMQ DB_IP HISTORY_IP FETCHER_IP POSTGRES_PASSWORD POSTGRES_DB POSTGRES_PORT FETCHER_DB_PASSWORD
+    env: %w[BASTION_IP USE_REDIS_RABBITMQ DB_IP HISTORY_IP FETCHER_IP POSTGRES_PASSWORD POSTGRES_DB POSTGRES_PORT FETCHER_DB_PASSWORD
             REDIS_PASSWORD REDIS_PORT RABBITMQ_PASSWORD RABBITMQ_PORT RABBITMQ_UI_PORT],
   },
   "weather-fetcher" => {
     ip: "#{NET}.11", memory: 1024, script: "fetcher.sh", sync: %w[fetcher],
-    env: %w[USE_REDIS_RABBITMQ DB_IP RABBITMQ_PASSWORD RABBITMQ_PORT POSTGRES_DB POSTGRES_PORT FETCHER_DB_PASSWORD],
+    env: %w[BASTION_IP USE_REDIS_RABBITMQ DB_IP RABBITMQ_PASSWORD RABBITMQ_PORT POSTGRES_DB POSTGRES_PORT FETCHER_DB_PASSWORD],
   },
   "weather-history" => {
     ip: "#{NET}.12", memory: 1024, script: "history.sh", sync: %w[history scheduler],
-    env: %w[USE_REDIS_RABBITMQ DB_IP HISTORY_IP HISTORY_PORT POSTGRES_PASSWORD POSTGRES_DB POSTGRES_PORT REDIS_PASSWORD REDIS_PORT
+    env: %w[BASTION_IP USE_REDIS_RABBITMQ DB_IP HISTORY_IP HISTORY_PORT POSTGRES_PASSWORD POSTGRES_DB POSTGRES_PORT REDIS_PASSWORD REDIS_PORT
             RABBITMQ_PASSWORD RABBITMQ_PORT TRIGGER_TOKEN CRON_SCHEDULE LOGPULL_KEY_B64 LOG_SOURCES],
   },
   "weather-frontend" => {
-    ip: "#{NET}.13", memory: 1024, script: "frontend.sh", sync: %w[frontend], lan: true,
-    env: %w[HISTORY_IP HISTORY_PORT FRONTEND_PORT],
+    ip: "#{NET}.13", memory: 1024, script: "frontend.sh", sync: %w[frontend],
+    env: %w[BASTION_IP HISTORY_IP HISTORY_PORT FRONTEND_PORT CLOUDFLARED_TOKEN],
+  },
+  "weather-bastion" => {
+    ip: "#{NET}.14", memory: 512, script: "bastion.sh", sync: [], lan: true, bastion: true,
+    env: [],
   },
 }
 
@@ -58,10 +62,11 @@ PROVISION_ENV = {
   "DB_IP"               => VMS["weather-postgres-db"][:ip],
   "FETCHER_IP"          => VMS["weather-fetcher"][:ip],
   "HISTORY_IP"          => VMS["weather-history"][:ip],
+  "BASTION_IP"          => VMS["weather-bastion"][:ip],
   "SSH_PUBKEY"          => File.read("id_ed25519.pub").strip,
   "LOGPULL_PUBKEY"      => File.read("#{LOGPULL_KEY}.pub").strip,
   "LOGPULL_KEY_B64"     => [File.read(LOGPULL_KEY)].pack("m0"),
-  "LOG_SOURCES"         => VMS.reject { |name, _| name == "weather-history" }.map { |name, vm| "#{name}=#{vm[:ip]}" }.join(" "),
+  "LOG_SOURCES"         => VMS.reject { |name, vm| name == "weather-history" || vm[:bastion] }.map { |name, vm| "#{name}=#{vm[:ip]}" }.join(" "),
   "LOG_RETENTION_DAYS"  => setting.("LOG_RETENTION_DAYS", "7"),
   "POSTGRES_PASSWORD"   => host_env["POSTGRES_PASSWORD"],
   "POSTGRES_DB"         => setting.("POSTGRES_DB", "weather"),
@@ -69,6 +74,7 @@ PROVISION_ENV = {
   "REDIS_PASSWORD"      => host_env["REDIS_PASSWORD"].to_s,
   "RABBITMQ_PASSWORD"   => host_env["RABBITMQ_PASSWORD"].to_s,
   "TRIGGER_TOKEN"       => host_env.fetch("TRIGGER_TOKEN", ""),
+  "CLOUDFLARED_TOKEN"   => host_env.fetch("CLOUDFLARED_TOKEN", ""),
   "CRON_SCHEDULE"       => setting.("CRON_SCHEDULE", "0 * * * *"),
   "HISTORY_PORT"        => setting.("HISTORY_PORT", "3001"),
   "FRONTEND_PORT"       => setting.("FRONTEND_PORT", "4173"),
@@ -91,7 +97,7 @@ Vagrant.configure("2") do |config|
         node.vm.synced_folder dir, "/vagrant/#{dir}", type: "virtualbox", mount_options: ["ro"]
       end
 
-      node.vm.network "private_network", ip: vm[:ip]
+      node.vm.network "private_network", ip: vm[:ip], virtualbox__intnet: true
 
       if vm[:lan]
         node.vm.network "public_network", bridge: host_env["BRIDGE_IF"]
@@ -108,9 +114,11 @@ Vagrant.configure("2") do |config|
 
       if vm[:lan]
         node.vm.provision "shell", name: "show-lan-ip", run: "always",
-          env: { "VM_NAME" => name, "PORT" => PROVISION_ENV["FRONTEND_PORT"], "SKIP" => "^(10\\.0\\.2|#{Regexp.escape(NET)})\\." },
+          env: { "VM_NAME" => name, "SKIP" => "^(10\\.0\\.2|#{Regexp.escape(NET)})\\.",
+                 "PREFIX" => vm[:bastion] ? "LAN SSH: ssh vagrant@" : "LAN URL: http://",
+                 "SUFFIX" => vm[:bastion] ? "" : ":#{PROVISION_ENV["FRONTEND_PORT"]}" },
           inline: 'ip=$(hostname -I | tr " " "\n" | grep -Ev "$SKIP" | head -n1); ' \
-                  'echo "$VM_NAME LAN URL: http://${ip:-<no LAN address>}:$PORT"'
+                  'echo "$VM_NAME $PREFIX${ip:-<no LAN address>}$SUFFIX"'
       end
     end
   end

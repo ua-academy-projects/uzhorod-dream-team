@@ -54,6 +54,7 @@ write_conf sql/pgmq-setup.sql 0640 <<SQL
 SELECT 'CREATE ROLE fetcher' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'fetcher')\gexec
 ALTER ROLE fetcher WITH LOGIN PASSWORD '${FETCHER_DB_PASSWORD}';
 CREATE EXTENSION IF NOT EXISTS pgmq;
+CREATE EXTENSION IF NOT EXISTS hstore;
 SELECT pgmq.create('weather_fetch_requests');
 SELECT pgmq.create('weather_fetch_replies');
 REVOKE ALL ON SCHEMA public FROM fetcher;
@@ -67,6 +68,8 @@ DROP EXTENSION IF EXISTS pgmq CASCADE;
 -- the queue tables come from pgmq.create(), not from the extension, so DROP EXTENSION leaves them
 DROP SCHEMA IF EXISTS pgmq, cron CASCADE;
 DROP TABLE IF EXISTS cache_entries;
+-- no CASCADE: anything else that still uses hstore stops the cleanup instead of being dropped with it
+DROP EXTENSION IF EXISTS hstore;
 DO $$
 BEGIN
   IF EXISTS (SELECT FROM pg_roles WHERE rolname = 'fetcher') THEN
@@ -143,7 +146,7 @@ if [ "$value" = true ]; then
   if [ "$prev" != true ]; then
     wait_healthy postgres
     psql_as_postgres "$db" < "$ENV_DIR/sql/pgmq-cleanup.sql"
-    echo "PostgreSQL: pgmq, pg_cron, cache_entries and the role fetcher removed"
+    echo "PostgreSQL: pgmq, pg_cron, hstore, cache_entries and the role fetcher removed"
   fi
   start_saved redis redis
   start_saved rabbitmq rabbitmq

@@ -12,7 +12,7 @@ React UI ◀──── GET /api/weather/* ───────────┤
 ```
 
 `USE_REDIS_RABBITMQ=false` swaps Redis and RabbitMQ for PostgreSQL itself: the queues become
-[pgmq](https://github.com/pgmq/pgmq) queues and the cache an UNLOGGED table cleaned by [pg_cron](https://github.com/citusdata/pg_cron).
+[pgmq](https://github.com/pgmq/pgmq) queues and the cache a table with [hstore](https://www.postgresql.org/docs/16/hstore.html) values cleaned by [pg_cron](https://github.com/citusdata/pg_cron).
 The images contain both clients; the variable only picks one at run time (see [docs/architecture.md#backends](docs/architecture.md#backends)).
 
 - [docs/architecture.md](docs/architecture.md): components, request flow, data model and HTTP API
@@ -132,7 +132,7 @@ Notes:
 
 ## Run on Vagrant VMs (Docker)
 
-Four VMs, every service in its own Docker container. Provisioning installs Docker, writes the env/config files with
+Four VMs, every service in its own Docker container, plus an SSH bastion. Provisioning installs Docker, writes the env/config files with
 the secrets from the root `.env` into `/etc/weather/`, builds the images on the VM and starts the containers with
 `--restart unless-stopped`, so the Docker daemon starts them again after a reboot. Details, flags and image
 optimizations: [docs/infrastructure.md](docs/infrastructure.md).
@@ -140,7 +140,7 @@ optimizations: [docs/infrastructure.md](docs/infrastructure.md).
 ```bash
 cp .env.example .env   # set POSTGRES_PASSWORD, REDIS_PASSWORD, RABBITMQ_PASSWORD, FETCHER_DB_PASSWORD, BRIDGE_IF
 cp ~/.ssh/id_ed25519.pub .   # your SSH public key, added to authorized_keys on every VM
-vagrant up             # weather-postgres-db .10, weather-fetcher .11, weather-history .12, weather-frontend .13
+vagrant up             # weather-postgres-db .10, weather-fetcher .11, weather-history .12, weather-frontend .13, weather-bastion .14
 ```
 
 | VM | Containers |
@@ -149,17 +149,22 @@ vagrant up             # weather-postgres-db .10, weather-fetcher .11, weather-h
 | `weather-fetcher` | `fetcher` |
 | `weather-history` | `history`, `scheduler` |
 | `weather-frontend` | `frontend` (nginx: UI + `/api` proxy) |
+| `weather-bastion` | none: SSH jump host, in the LAN |
 
 Check and open:
 
 ```bash
 vagrant ssh <vm> -c "docker ps"               # every container Up; postgres, redis, rabbitmq, frontend (healthy)
-curl http://192.168.56.12:3001/api/health     # {"status":"ok","database":"up","cache":"up","broker":"up","backend":"redis-rabbitmq"}
+vagrant ssh weather-history -c "curl -s http://192.168.56.12:3001/api/health"   # {"status":"ok","database":"up","cache":"up","broker":"up","backend":"redis-rabbitmq"}
 vagrant reload weather-frontend --provision   # prints "weather-frontend LAN URL: http://<ip>:4173"
 ```
 
-The UI is at http://192.168.56.13:4173 from the host, or at the printed LAN URL from other devices; the RabbitMQ
-management UI at http://192.168.56.10:15672 (`weather` / `RABBITMQ_PASSWORD`).
+The VMs are on a VirtualBox internal network (192.168.56.x) that the host cannot reach. The UI is at the printed LAN
+URL; the RabbitMQ management UI through a tunnel over the bastion: `ssh -N -L 15672:192.168.56.10:15672 weather-bastion`,
+then http://localhost:15672 (`weather` / `RABBITMQ_PASSWORD`).
+
+SSH with your key goes through the bastion (`ProxyJump`); the other VMs accept that key only from it. `vagrant ssh`
+works as before. Example `~/.ssh/config`: [docs/infrastructure.md#bastion](docs/infrastructure.md#bastion).
 
 After a code or `.env` change: `vagrant provision <vm>` rebuilds the images and recreates that VM's containers
 (each VM mounts only its own service folders, read-only).
@@ -174,7 +179,7 @@ done
 ```
 
 On the DB VM it starts the other PostgreSQL image and starts or removes Redis and RabbitMQ; switching to `true`
-also removes pgmq, pg_cron and their tables, so the database is plain again (the weather data stays). On the
+also removes pgmq, pg_cron, hstore and their tables, so the database is plain again (the weather data stays). On the
 Fetcher and History VMs it recreates the container from the same image with the other value
 ([details](docs/infrastructure.md#switching-the-backend-at-run-time)). `USE_REDIS_RABBITMQ` in `.env` is only the
 value a provisioning starts with. Saved themes start empty after a switch.

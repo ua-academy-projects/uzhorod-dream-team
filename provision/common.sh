@@ -8,9 +8,18 @@ base_setup() {
   apt-get update -qq
   apt-get install -y -qq ca-certificates curl
 
+  local keys=/home/vagrant/.ssh/authorized_keys others
   install -d -m 0700 -o vagrant -g vagrant /home/vagrant/.ssh
-  grep -qxF "${SSH_PUBKEY:?}" /home/vagrant/.ssh/authorized_keys 2>/dev/null \
-    || echo "$SSH_PUBKEY" >> /home/vagrant/.ssh/authorized_keys
+  others=$(grep -vF "${SSH_PUBKEY:?}" "$keys" 2>/dev/null || true)
+  { [ -n "$others" ] && echo "$others"; echo "${BASTION_IP:+from=\"$BASTION_IP\" }$SSH_PUBKEY"; } \
+    | install -m 0600 -o vagrant -g vagrant /dev/stdin "$keys"
+
+  # After the host sleeps, the VM clock is hours behind; chrony's default (makestep 1 3) only steps
+  # at boot and then slews at ~0.5 ms/s, so it would stay wrong for days. Always step instead.
+  if ! grep -qx 'makestep 1 -1' /etc/chrony/chrony.conf; then
+    sed -i 's/^makestep .*/makestep 1 -1/' /etc/chrony/chrony.conf
+    systemctl restart chrony
+  fi
 }
 
 install_docker() {

@@ -1,6 +1,6 @@
 /**
  * Key-value cache in PostgreSQL, the counterpart of the Redis one.
- * cache_entries is UNLOGGED: no WAL, so writes are cheap, and like a cache it is emptied after a crash.
+ * cache_entries is a regular (logged) table with hstore values, so values are flat string pairs that survive a crash.
  * pg_cron deletes expired rows every minute; reads skip them meanwhile.
  */
 import { sequelize } from '../db/index.js';
@@ -8,16 +8,25 @@ import { MAX_RECONNECT_DELAY_MS } from '../broker/pending.js';
 
 const TTL_JOB = 'weather-cache-ttl';
 
-let ready = false; // true once the table and the cleanup job exist
+let ready = false; // true once hstore, the table and the cleanup job exist
 let retryDelay = 1000;
 
 export const isReady = () => ready;
 
 async function declare() {
+  await sequelize.query('CREATE EXTENSION IF NOT EXISTS hstore');
+
   await sequelize.query(`
-    CREATE UNLOGGED TABLE IF NOT EXISTS cache_entries (
+    DO $$ BEGIN
+      IF EXISTS (SELECT FROM pg_class WHERE relname = 'cache_entries' AND relnamespace = 'public'::regnamespace
+                 AND relpersistence = 'u') THEN
+        DROP TABLE cache_entries;
+      END IF;
+    END $$`);
+  await sequelize.query(`
+    CREATE TABLE IF NOT EXISTS cache_entries (
       key text PRIMARY KEY,
-      value jsonb NOT NULL,
+      value hstore NOT NULL,
       expires_at timestamptz
     )`);
   await sequelize.query('CREATE EXTENSION IF NOT EXISTS pg_cron');
@@ -33,7 +42,7 @@ async function declare() {
   );
 }
 
-/** Creates the table and the cleanup job in the background, retrying until the database is there. */
+/** Creates hstore, the table and the cleanup job in the background, retrying until the database is there. */
 export function connectCache() {
   declare()
     .then(() => {
@@ -49,16 +58,21 @@ export function connectCache() {
 
 export async function get(key) {
   const [rows] = await sequelize.query(
-    'SELECT value FROM cache_entries WHERE key = $1 AND (expires_at IS NULL OR expires_at > now())',
+    'SELECT hstore_to_json(value) AS value FROM cache_entries WHERE key = $1 AND (expires_at IS NULL OR expires_at > now())',
     { bind: [key] },
   );
   return rows[0]?.value ?? null;
 }
 
+// hstore holds only flat text pairs, so the value must be an object of strings
 export async function set(key, value, ttlSeconds) {
+  if (!Object.values(value).every((v) => typeof v === 'string')) {
+    throw new TypeError(`cache value for "${key}" must be an object of strings`);
+  }
   await sequelize.query(
-    `INSERT INTO cache_entries (key, value, expires_at) VALUES ($1, $2::jsonb, now() + make_interval(secs => $3))
+    `INSERT INTO cache_entries (key, value, expires_at)
+     VALUES ($1, hstore($2::text[], $3::text[]), now() + make_interval(secs => $4))
      ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, expires_at = EXCLUDED.expires_at`,
-    { bind: [key, JSON.stringify(value), ttlSeconds] },
+    { bind: [key, Object.keys(value), Object.values(value), ttlSeconds] },
   );
 }
