@@ -1,0 +1,8 @@
+.env
+__pycache__/
+.pytest_cache/
+.gocache/
+.gomodcache/
+*.py[cod]
+*.test
+coverage.out

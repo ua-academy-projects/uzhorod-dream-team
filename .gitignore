@@ -1,0 +1,42 @@
+# Local environment and credentials
+.env
+.env.*
+!.env.example
+!**/.env.example
+key
+key.pub
+*.pem
+*.key
+
+# Vagrant local state
+.vagrant/
+.vagrant-home/
+.presentation_deps/
+
+# Local database backups and volumes
+**/postgres_data/
+*.dump
+*.sql.backup
+
+# Go caches and binaries
+**/.gocache/
+**/.gomodcache/
+**/vendor/
+*.test
+*.out
+*.exe
+
+# Python environments and generated files
+**/.venv/
+**/venv/
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Editors and operating systems
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

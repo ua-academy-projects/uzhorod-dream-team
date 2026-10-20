@@ -1,0 +1,100 @@
+﻿<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Data Monitor</title>
+  <link rel="stylesheet" href="/static/css/style.css?v=7" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+<main class="dashboard">
+  <header>
+    <div>
+      <p class="eyebrow" id="eyebrow">Live snapshots</p>
+      <h1 id="app-title">Data Monitor</h1>
+    </div>
+    <div class="header-controls">
+      <button
+        id="theme-toggle"
+        type="button"
+        aria-label="Switch theme"
+      >
+        <span class="theme-icon"></span>
+        <span class="theme-text"></span>
+      </button>
+      <select
+        id="source-select"
+        aria-label="Data source"
+      ></select>
+        <select id="language-select" aria-label="Language" style="-webkit-appearance: none; -moz-appearance: none; appearance: none; min-height: 40px; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--border); background-color: var(--surface); color: var(--text); font: inherit; font-weight: 600; cursor: pointer;">
+        <option value="en">EN</option>
+        <option value="ua">UA</option>
+      </select>
+
+      <select id="font-select" aria-label="Font" style="-webkit-appearance: none; -moz-appearance: none; appearance: none; min-height: 40px; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--border); background-color: var(--surface); color: var(--text); font: inherit; font-weight: 600; cursor: pointer;">
+        <option value="system">System</option>
+        <option value="serif">Serif</option>
+        <option value="mono">Mono</option>
+      </select>
+      <span
+        id="connection"
+        class="status"
+      >
+        Connecting…
+      </span>
+    </div>
+  </header>
+  <section class="summary">
+    <div>
+      <p class="label" id="current-label">Current value · USD</p>
+      <p id="current-value" class="value">—</p>
+    </div>
+    <div>
+      <p class="label" id="update-label">Last update</p>
+      <p id="last-update" class="timestamp">
+        Waiting for data
+      </p>
+    </div>
+  </section>
+  <section class="panel">
+    <div class="panel-heading">
+      <h2 id="chart-title">Value over time</h2>
+      <span>Auto refresh · 10 sec</span>
+    </div>
+    <div class="chart-wrap">
+      <canvas
+        id="history-chart"
+        aria-label="Historical values line chart"
+      ></canvas>
+    </div>
+  </section>
+  <section class="panel">
+    <div class="panel-heading">
+      <h2 id="history-title">History</h2>
+      <span id="record-count">0 records</span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+        <tr>
+          <th>Time</th>
+          <th>Value (USD)</th>
+        </tr>
+        </thead>
+        <tbody id="history-rows"></tbody>
+      </table>
+    </div>
+  </section>
+  <p
+    id="error-message"
+    class="error"
+    role="status"
+    hidden
+  >
+    Unable to load historical data. Please try again later.
+  </p>
+</main>
+<script src="/static/js/app.js?v=7"></script>
+</body>
+</html>

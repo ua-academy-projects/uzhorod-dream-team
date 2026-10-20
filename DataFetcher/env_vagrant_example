@@ -1,0 +1,47 @@
+# =============================================================================
+# Vagrant Configuration
+# =============================================================================
+# Copy this to .env to configure broker mode for Vagrant deployments
+# =============================================================================
+
+APP_BACKEND=hybrid
+
+# =============================================================================
+# PostgreSQL Connection (Common to both modes)
+# =============================================================================
+POSTGRES_HOST=192.168.56.13
+POSTGRES_PORT=5432
+POSTGRES_DB=history
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=postgres
+
+# Fetcher Worker (common to both modes)
+FETCHER_POSTGRES_USER=fetcher_worker
+FETCHER_POSTGRES_PASSWORD=fetcher
+FETCHER_POSTGRES_HOST=192.168.56.13
+FETCHER_POSTGRES_PORT=5432
+FETCHER_POSTGRES_DB=history
+
+# =============================================================================
+# RabbitMQ (Required only for hybrid mode)
+# =============================================================================
+# Used only when APP_BACKEND=hybrid
+RABBITMQ_URL=amqp://datamonitor:datamonitor@192.168.56.13:5672/
+
+# =============================================================================
+# Redis (Required only for hybrid mode)
+# =============================================================================
+# Used only when APP_BACKEND=hybrid
+REDIS_URL=redis://192.168.56.13:6379/0
+
+# =============================================================================
+# Service Configuration
+# =============================================================================
+SOURCES=btc=https://api.coinbase.com/v2/prices/BTC-USD/spot,eth=https://api.coinbase.com/v2/prices/ETH-USD/spot
+
+# Fetching interval (seconds)
+HISTORY_INTERVAL_SECONDS=10
+
+# UI settings
+HISTORY_SERVICE_URL=http://192.168.56.12:8000
+COOKIE_SECURE=false
