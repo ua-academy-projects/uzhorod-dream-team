@@ -186,7 +186,7 @@ start_databases() {
   docker pull "$REDIS_IMAGE"
   docker pull "$RABBITMQ_IMAGE"
   for component in postgres redis rabbitmq; do docker volume create "kyiv-air-$component-data" >/dev/null; done
-  replace_container kyiv-air-postgres --user root "${pg_ports[@]}" --env-file "$CONFIG/db.env" \
+  replace_container kyiv-air-postgres "${pg_ports[@]}" --env-file "$CONFIG/db.env" \
     -v kyiv-air-postgres-data:/var/lib/postgresql/data "$POSTGRES_IMAGE" postgres -c shared_preload_libraries=
   wait_command PostgreSQL docker exec kyiv-air-postgres pg_isready -h 127.0.0.1 -U kyiv_air -d "$DB_NAME"
   wait_command "PostgreSQL database" docker exec kyiv-air-postgres psql -U kyiv_air -d "$DB_NAME" -v ON_ERROR_STOP=1 -c 'SELECT 1'

@@ -20,7 +20,7 @@ sed -i '/^REDIS_PASSWORD=/d' "$CONFIG/db.env"
 pg_ports=(-p "$PRIVATE_IP:5432:5432" -p 127.0.0.1:5432:5432)
 docker pull "$POSTGRES_IMAGE"
 docker volume create kyiv-air-postgres-data >/dev/null
-replace_container kyiv-air-postgres --user root "${pg_ports[@]}" --env-file "$CONFIG/db.env" \
+replace_container kyiv-air-postgres "${pg_ports[@]}" --env-file "$CONFIG/db.env" \
   -v kyiv-air-postgres-data:/var/lib/postgresql/data "$POSTGRES_IMAGE" postgres -c shared_preload_libraries=
 wait_command PostgreSQL docker exec kyiv-air-postgres pg_isready -h 127.0.0.1 -U kyiv_air -d "$DB_NAME"
 wait_command "PostgreSQL database" docker exec kyiv-air-postgres psql -U kyiv_air -d "$DB_NAME" -v ON_ERROR_STOP=1 -c 'SELECT 1'

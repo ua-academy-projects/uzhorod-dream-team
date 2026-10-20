@@ -34,7 +34,7 @@ migrate-down:
 	goose -dir internal/db/migrations postgres "${DATABASE_URL}" down
 
 db-up:
-	docker run --user root --env-file ../env/db.development.env -p 5432:5432 -v history_service_db_data:/var/lib/postgresql/data --name history-service-db --rm -d $(POSTGRES_IMAGE) postgres -c shared_preload_libraries=
+	docker run --env-file ../env/db.development.env -p 5432:5432 -v history_service_db_data:/var/lib/postgresql/data --name history-service-db --rm -d $(POSTGRES_IMAGE) postgres -c shared_preload_libraries=
 	@echo "Started the DB container."
 
 db-down:
