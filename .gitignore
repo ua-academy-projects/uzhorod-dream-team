@@ -1,0 +1,47 @@
+# Operating System Files
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# IDE and Editor Configurations
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+*.swo
+
+# Environment Variables and Secrets
+.env
+.env.local
+.env.*.local
+secrets.json
+
+# Logs and Runtime Data
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.pid
+*.seed
+*.pid.lock
+
+# Build Outputs and Dependencies
+node_modules/
+dist/
+build/
+target/
+bin/
+obj/
+.venv/
+env/
+
+.vagrant/
+/database/snapshots/

@@ -1,0 +1,237 @@
+.app {
+  /* --app-background: #f6f6f8; */
+  --surface: #ffffff;
+  --surface-hover: #f0eff4;
+  --text-primary: #1a1a1f;
+  --text-secondary: #85858f;
+  --text-muted: #777783;
+  --border-color: #e5e5ea;
+  --card-border: #e3e3e8;
+  --hover-surface: #faf9ff;
+  --active-surface: #f4f1ff;
+
+  min-height: 100vh;
+  background: var(--app-background);
+  color: var(--text-primary);
+}
+
+.dark .app {
+  /* --app-background: #111116; */
+
+  --surface: #18181f;
+  --surface-hover: #22222b;
+
+  --text-primary: #f2f2f5;
+  --text-secondary: #a1a1ad;
+  --text-muted: #777783;
+
+  --border-color: #2a2a34;
+  --card-border: #2d2d38;
+
+  --hover-surface: #20202a;
+  --active-surface: #282238;
+}
+
+.header {
+  height: 72px;
+  padding: 0 28px;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  border-bottom: 1px solid var(--border-color);
+  background: var(--surface);
+}
+
+.header-end {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  justify-self: end;
+}
+
+.symbol {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.symbol-icon {
+  width: 38px;
+  height: 38px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  border-radius: 10px;
+
+  background: #6d4aff;
+  color: #ffffff;
+
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.symbol-icon img {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+}
+
+.symbol-info {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+}
+
+.symbol-name {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.1;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+}
+
+.symbol-description {
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.1;
+  color: var(--text-secondary);
+}
+
+.timeframes {
+  display: flex;
+  gap: 4px;
+}
+
+.timeframes button {
+  border: 0;
+  border-radius: 6px;
+
+  padding: 7px 11px;
+
+  background: transparent;
+  color: var(--text-muted);
+
+  font-size: 13px;
+  cursor: pointer;
+
+  transition: 0.15s;
+}
+
+.timeframes button:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.timeframes button.active {
+  background: #6d4aff;
+  color: #ffffff;
+}
+
+.content {
+  padding: 24px 0;
+}
+
+.chart-card {
+  overflow: hidden;
+
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+
+  background: var(--surface);
+}
+
+.chart-header {
+  height: 48px;
+  padding: 0 16px;
+
+  display: flex;
+  align-items: center;
+  gap: 12px;
+
+  border-bottom: 1px solid var(--border-color);
+
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.live {
+  color: #6d4aff;
+  font-size: 12px;
+}
+
+.chart {
+  width: 100%;
+  height: fit-content;
+}
+
+.date-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+
+  height: 38px;
+  padding: 0 12px;
+
+  border: 1px solid var(--card-border);
+  border-radius: 9px;
+
+  background: var(--surface);
+  color: var(--text-primary);
+
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1;
+
+  cursor: pointer;
+
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.date-button svg:first-child {
+  color: #6d4aff;
+}
+
+.date-button svg:last-child {
+  margin-left: 2px;
+  color: var(--text-secondary);
+}
+
+.date-button:hover {
+  background: var(--hover-surface);
+  border-color: #d5cffc;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.06);
+}
+
+.date-button:focus-visible {
+  outline: none;
+  border-color: #6d4aff;
+  box-shadow: 0 0 0 3px rgba(109, 74, 255, 0.15);
+}
+
+.date-button:active {
+  background: var(--active-surface);
+}
+
+.date-dialog {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.calendar-wrapper {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+}
