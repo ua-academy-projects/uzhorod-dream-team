@@ -1,0 +1,8 @@
+.env
+*.log
+.vagrant/
+__pycache__/
+node_modules/
+dist/
+ssh_config
+.ssh_known_hosts
