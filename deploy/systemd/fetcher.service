@@ -1,0 +1,19 @@
+[Unit]
+Description=POI fetcher (Overpass -> queue)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+EnvironmentFile=/etc/queue.env
+EnvironmentFile=/etc/fetcher.env
+ExecStart=/usr/local/bin/fetcher
+Restart=on-failure
+RestartSec=3
+DynamicUser=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

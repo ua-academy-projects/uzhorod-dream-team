@@ -1,0 +1,14 @@
+# Кафе біля Майдану, Київ, 500 м
+curl 'localhost:8080/pois?lat=50.4501&lon=30.5234&radius=500&type=cafe'
+
+# Аптеки біля Контрактової площі, 1 км
+curl 'localhost:8080/pois?lat=50.4651&lon=30.5156&radius=1000&type=pharmacy'
+
+# Банкомати біля площі Ринок, Львів, 300 м
+curl 'localhost:8080/pois?lat=49.8419&lon=24.0315&radius=300&type=atm'
+
+# АЗС у Дніпрі, 3 км
+curl 'localhost:8080/pois?lat=48.4647&lon=35.0462&radius=3000&type=fuel'
+
+# Супермаркети в Одесі біля Дерибасівської, 2 км
+curl 'localhost:8080/pois?lat=46.4846&lon=30.7326&radius=2000&type=supermarket'

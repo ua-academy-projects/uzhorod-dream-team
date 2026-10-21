@@ -1,0 +1,7 @@
+deploy/queue.env
+deploy/env/history.env
+deploy/env/fetcher.env
+deploy/logpull_key
+deploy/logpull_key.pub
+.vagrant
+deploy/cloudflared.env

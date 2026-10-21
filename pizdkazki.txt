@@ -1,0 +1,7 @@
+PGPASSWORD=pass psql -h 127.0.0.1 -U user -d db черги
+PGPASSWORD=pass psql -h 127.0.0.1 -U user -d history логи
+
+
+redis-cli -a pass --no-auth-warning
+
+vagrant ssh db -c "sudo -u logpull /usr/local/bin/logpull" 

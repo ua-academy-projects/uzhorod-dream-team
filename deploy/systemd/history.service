@@ -1,0 +1,19 @@
+[Unit]
+Description=POI history (queue -> Postgres)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+EnvironmentFile=/etc/queue.env
+EnvironmentFile=/etc/history.env
+ExecStart=/usr/local/bin/history
+Restart=on-failure
+RestartSec=3
+DynamicUser=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target
