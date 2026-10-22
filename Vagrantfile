@@ -69,7 +69,7 @@ Vagrant.configure("2") do |config|
         {
             name: "history",
             host: ENV["HISTORY_HOST"],
-            memory: "1024",
+            memory: "2048",
             cpus: 1,
             env: env_vars(
                 "HISTORY_PORT",

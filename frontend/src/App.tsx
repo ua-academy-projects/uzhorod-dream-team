@@ -50,9 +50,6 @@ function App() {
 
   const dataRef = useRef<CandlestickData[]>([])
 
-  const minDate = new Date(2026, 8, 30)
-  const maxDate = new Date()
-
   useEffect(() => {
     if (!chartContainerRef.current) return
 
@@ -380,10 +377,18 @@ function App() {
                     setDate(selectedDate)
                   }
                 }}
-                disabled={{
-                  before: minDate,
-                  after: maxDate,
-                }}
+                disabled={[
+                  {
+                    before: new Date(2026, 9, 1),
+                  },
+                  {
+                    after: new Date(2026, 9, 16),
+                    before: new Date(2026, 9, 19),
+                  },
+                  {
+                    after: new Date(),
+                  },
+                ]}
               />
             </DialogContent>
           </Dialog>
