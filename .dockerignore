@@ -1,0 +1,9 @@
+# Build context of history/Dockerfile is the project folder.
+# Everything is excluded, then only what the History image needs is allowed back.
+# So .env, .git, .vagrant and the code of other services never enter the context.
+*
+!history/go.mod
+!history/go.sum
+!history/*.go
+!ui/
+history/*_test.go

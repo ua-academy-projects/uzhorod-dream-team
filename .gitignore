@@ -1,0 +1,23 @@
+# Secrets and local settings — never commit to Git
+.env
+.env.*
+!.env.example
+
+# Python virtual environment and cache
+.venv/
+__pycache__/
+*.pyc
+
+# Vagrant service folder (VM state on this computer)
+.vagrant/
+
+# Built Go binary
+history/history
+
+# Editor and OS files
+.vscode/
+.idea/
+.DS_Store
+
+# Collected container logs (scripts/collect-logs.sh)
+logs/

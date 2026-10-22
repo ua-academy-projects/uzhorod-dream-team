@@ -1,0 +1,13 @@
+postgres_role: weather
+postgres_database: weather_history
+
+# Mode of the app: how History and Fetcher talk and where the UI settings are kept.
+#   rabbitmq - queues in RabbitMQ, settings in Redis (the default);
+#   postgres - queue tables and settings in PostgreSQL, RabbitMQ and Redis are not used.
+# Switch only with scripts/switch-mode.sh: it lets the old queue finish first.
+app_mode: rabbitmq
+
+# Mode postgres: how often History and Fetcher look into the queue tables, in seconds
+# (a positive whole number). It is only a query to the table: Open-Meteo is asked
+# only when there is a request, and History makes one request every 5 minutes.
+queue_poll_interval_seconds: 5

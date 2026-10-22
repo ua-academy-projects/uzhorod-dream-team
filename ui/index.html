@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="uk">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#eaf4f4">
+    <title>Погода у Львові — історія</title>
+    <!-- ?v=3: a new address, so browsers that cached the old files load the new ones. -->
+    <link rel="stylesheet" href="/style.css?v=3">
+    <script src="/app.js?v=3" defer></script>
+  </head>
+  <body>
+    <!-- data-i18n: app.js puts the text with this key in the chosen language (UA/EN). -->
+    <main class="page">
+      <header class="page-header">
+        <div class="header-top">
+          <p class="eyebrow" data-i18n="eyebrow">Історія погоди</p>
+          <div class="header-actions">
+            <button id="language-button" class="settings-button" type="button"
+                    lang="en" aria-label="Switch to English">EN</button>
+            <button id="theme-button" class="settings-button" type="button">Темна тема</button>
+          </div>
+        </div>
+        <h1 data-i18n="title">Погода у Львові</h1>
+        <p class="intro" data-i18n="intro">Збережені вимірювання температури з Open-Meteo.</p>
+        <p id="settings-message" class="settings-message" role="status" aria-live="polite"></p>
+      </header>
+
+      <section class="latest-card" aria-labelledby="latest-heading">
+        <div>
+          <p class="eyebrow" data-i18n="latestEyebrow">Останній запис</p>
+          <h2 id="latest-heading" data-i18n="latestHeading">Зараз у Львові</h2>
+        </div>
+        <p id="latest-temperature" class="temperature">—</p>
+        <p id="latest-time" class="latest-time">Час вимірювання з’явиться тут</p>
+      </section>
+
+      <section class="history-section" aria-labelledby="history-heading">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow" data-i18n="historyEyebrow">Збережені вимірювання</p>
+            <h2 id="history-heading" data-i18n="historyHeading">Історія температури</h2>
+          </div>
+          <button id="refresh-button" type="button" data-i18n="refresh">Оновити таблицю</button>
+        </div>
+
+        <p id="status-message" class="status-message" role="status" aria-live="polite">
+          Завантажуємо історію погоди…
+        </p>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col" data-i18n="columnCity">Місто</th>
+                <th scope="col" data-i18n="columnTemperature">Температура</th>
+                <th scope="col" data-i18n="columnTime">Час вимірювання (Київ)</th>
+              </tr>
+            </thead>
+            <tbody id="history-rows"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

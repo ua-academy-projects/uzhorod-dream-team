@@ -1,0 +1,9 @@
+# Files that never go into the build context of the image.
+# Secrets: settings come from docker run --env-file.
+.env
+.env.*
+# Local Python environment, cache and tests.
+.venv/
+__pycache__/
+*.pyc
+test_*.py
