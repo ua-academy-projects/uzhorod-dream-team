@@ -1,28 +1,38 @@
+name: datamonitor
+
 services:
   postgres:
+    profiles: ["database"]
     image: ghcr.io/pgmq/pg16-pgmq:v1.10.0
+    container_name: datamonitor-postgres
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-history}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      POSTGRES_INITDB_ARGS: "-k"  # synchronous commit
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    ports:
+      - "10.10.0.13:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      test:
+        - CMD-SHELL
+        - pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"
       interval: 5s
       timeout: 3s
-      retries: 10
+      retries: 15
+      start_period: 15s
     restart: unless-stopped
 
   rabbitmq:
+    profiles: ["database"]
     image: rabbitmq:3.13-alpine
+    container_name: datamonitor-rabbitmq
     environment:
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-datamonitor}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-datamonitor}
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:?Set RABBITMQ_USER in .env}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?Set RABBITMQ_PASSWORD in .env}
     ports:
-      - "5672:5672"
+      - "10.10.0.13:5672:5672"
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     healthcheck:
@@ -30,79 +40,87 @@ services:
       interval: 5s
       timeout: 5s
       retries: 12
+      start_period: 15s
     restart: unless-stopped
-    profiles:
-      - "hybrid"
 
   redis:
+    profiles: ["database"]
     image: redis:7-alpine
-    command: ["redis-server", "--appendonly", "yes"]
+    container_name: datamonitor-redis
+
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+
+    ports:
+      - "10.10.0.13:6379:6379"
+
     volumes:
       - redis_data:/data
+
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
       retries: 10
+
     restart: unless-stopped
-    profiles:
-      - "hybrid"
 
   fetcher:
-    build: ./fetcher
-    profiles:
-      - "${APP_BACKEND:-hybrid}"
+    profiles: ["fetcher"]
+    build:
+      context: ./fetcher
+    image: datamonitor-fetcher:latest
+    container_name: datamonitor-fetcher
     environment:
       APP_BACKEND: ${APP_BACKEND:-hybrid}
       SOURCES: ${SOURCES:-btc=https://api.coinbase.com/v2/prices/BTC-USD/spot,eth=https://api.coinbase.com/v2/prices/ETH-USD/spot}
-      FETCHER_PORT: 8000
-      RABBITMQ_URL: ${RABBITMQ_URL:-amqp://datamonitor:datamonitor@rabbitmq:5672/}
-      FETCHER_POSTGRES_HOST: ${POSTGRES_HOST:-postgres}
-      FETCHER_POSTGRES_PORT: ${POSTGRES_PORT:-5432}
-      FETCHER_POSTGRES_DB: ${POSTGRES_DB:-history}
+      FETCHER_PORT: "8000"
+      RABBITMQ_URL: ${RABBITMQ_URL:?Set RABBITMQ_URL in .env}
+      FETCHER_POSTGRES_HOST: ${FETCHER_POSTGRES_HOST:-10.10.0.13}
+      FETCHER_POSTGRES_PORT: ${FETCHER_POSTGRES_PORT:-5432}
+      FETCHER_POSTGRES_DB: ${FETCHER_POSTGRES_DB:-history}
       FETCHER_POSTGRES_USER: ${FETCHER_POSTGRES_USER:-fetcher_worker}
-      FETCHER_POSTGRES_PASSWORD: ${FETCHER_POSTGRES_PASSWORD:-fetcher}
+      FETCHER_POSTGRES_PASSWORD: ${FETCHER_POSTGRES_PASSWORD:?Set FETCHER_POSTGRES_PASSWORD in .env}
     ports:
-      - "8001:8000"
+      - "10.10.0.12:8000:8000"
     restart: unless-stopped
 
   history:
-    build: ./history
-    profiles:
-      - "${APP_BACKEND:-hybrid}"
+    profiles: ["history"]
+    build:
+      context: ./history
+    image: datamonitor-history:latest
+    container_name: datamonitor-history
     environment:
       APP_BACKEND: ${APP_BACKEND:-hybrid}
-      RABBITMQ_URL: ${RABBITMQ_URL:-amqp://datamonitor:datamonitor@rabbitmq:5672/}
+      RABBITMQ_URL: ${RABBITMQ_URL:?Set RABBITMQ_URL in .env}
       HISTORY_INTERVAL_SECONDS: ${HISTORY_INTERVAL_SECONDS:-10}
-      POSTGRES_HOST: ${POSTGRES_HOST:-postgres}
+      POSTGRES_HOST: ${POSTGRES_HOST:-10.10.0.13}
       POSTGRES_PORT: ${POSTGRES_PORT:-5432}
       POSTGRES_DB: ${POSTGRES_DB:-history}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      FETCHER_POSTGRES_PASSWORD: ${FETCHER_POSTGRES_PASSWORD:-fetcher}
-      PORT: 8000
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      FETCHER_POSTGRES_PASSWORD: ${FETCHER_POSTGRES_PASSWORD:?Set FETCHER_POSTGRES_PASSWORD in .env}
+      PORT: "8000"
     ports:
-      - "8002:8000"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      fetcher:
-        condition: service_started
+      - "10.10.0.14:8000:8000"
     restart: unless-stopped
 
   ui:
-    build: ./ui
-    profiles:
-      - "${APP_BACKEND:-hybrid}"
+    profiles: ["ui"]
+    build:
+      context: ./ui
+    image: datamonitor-ui:latest
+    container_name: datamonitor-ui
     environment:
       APP_BACKEND: ${APP_BACKEND:-hybrid}
-      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
-      HISTORY_SERVICE_URL: ${HISTORY_SERVICE_URL:-http://history:8000}
+      REDIS_URL: ${REDIS_URL:?Set REDIS_URL in .env}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      HISTORY_SERVICE_URL: ${HISTORY_SERVICE_URL:-http://10.10.0.14:8000}
     ports:
       - "8000:8000"
-    depends_on:
-      history:
-        condition: service_started
     restart: unless-stopped
 
 volumes:
