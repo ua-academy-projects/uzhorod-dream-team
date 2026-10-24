@@ -18,21 +18,21 @@ FIREWALL_RULES = [
   {
     to: "fetcher",
     from: {
-      host: ENV["DATABASE_HOST"],
+      host: ENV["POSTGRES_HOST"],
       ports: [22]
     }
   },
   {
     to: "history",
     from: {
-      host: ENV["DATABASE_HOST"],
+      host: ENV["POSTGRES_HOST"],
       ports: [22]
     }
   },
   {
     to: "frontend",
     from: {
-      host: ENV["DATABASE_HOST"],
+      host: ENV["POSTGRES_HOST"],
       ports: [22]
     }
   },
@@ -41,7 +41,7 @@ FIREWALL_RULES = [
     from: {
       host: ENV["BASTION_HOST"],
       ports: [
-        ENV["DATABASE_PORT"].to_i,
+        ENV["POSTGRES_PORT"].to_i,
         ENV["RABBITMQ_PORT"].to_i,
         ENV["RABBITMQ_MANAGEMENT_PORT"].to_i,
         ENV["REDIS_PORT"].to_i
@@ -54,7 +54,7 @@ FIREWALL_RULES = [
     from: {
       host: ENV["FETCHER_HOST"],
       ports: [
-        ENV["DATABASE_PORT"].to_i,
+        ENV["POSTGRES_PORT"].to_i,
         ENV["RABBITMQ_PORT"].to_i
       ]
     },
@@ -65,7 +65,7 @@ FIREWALL_RULES = [
     from: {
       host: ENV["HISTORY_HOST"],
       ports: [
-        ENV["DATABASE_PORT"].to_i,
+        ENV["POSTGRES_PORT"].to_i,
         ENV["RABBITMQ_PORT"].to_i,
         ENV["REDIS_PORT"].to_i
       ]

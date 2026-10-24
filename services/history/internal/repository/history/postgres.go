@@ -11,6 +11,15 @@ func (r *repository) GetHistory(
 	symbol string,
 	date time.Time,
 ) ([]model.Bar, error) {
+	loc, err := time.LoadLocation("Europe/Kyiv")
+	if err != nil {
+		return nil, err
+	}
+
+	year, month, day := date.Date()
+	start := time.Date(year, month, day, 0, 0, 0, 0, loc)
+	end := start.AddDate(0, 0, 1)
+
 	query := `
 		SELECT
 			id,
@@ -27,11 +36,11 @@ func (r *repository) GetHistory(
 		FROM bars
 		WHERE symbol = $1
 			AND open_time >= $2
-			AND open_time < $2 + INTERVAL '1 day'
+			AND open_time < $3
 		ORDER BY open_time ASC
 	`
 
-	rows, err := r.psql.Query(ctx, query, symbol, date)
+	rows, err := r.psql.Query(ctx, query, symbol, start, end)
 	if err != nil {
 		return nil, err
 	}

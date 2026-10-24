@@ -8,7 +8,7 @@ write_env /etc/frontend.env \
     FRONTEND_PORT \
     HISTORY_HOST \
     HISTORY_PORT \
-    DATABASE_HOST
+    POSTGRES_HOST
 
 source /vagrant/scripts/docker_install.sh
 install_docker

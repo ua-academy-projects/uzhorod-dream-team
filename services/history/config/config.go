@@ -47,12 +47,12 @@ func LoadConfig() *Config {
 
 		PSQL: PSQL{
 			Address: Address{
-				Host: os.Getenv("DATABASE_HOST"),
-				Port: os.Getenv("DATABASE_PORT"),
+				Host: os.Getenv("POSTGRES_HOST"),
+				Port: os.Getenv("POSTGRES_PORT"),
 			},
-			User:     os.Getenv("DATABASE_USER"),
-			Password: os.Getenv("DATABASE_PASSWORD"),
-			Database: os.Getenv("DATABASE_DB"),
+			User:     os.Getenv("POSTGRES_USER"),
+			Password: os.Getenv("POSTGRES_PASSWORD"),
+			Database: os.Getenv("POSTGRES_DB"),
 		},
 
 		Redis: Redis{

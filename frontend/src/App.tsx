@@ -53,27 +53,41 @@ function App() {
   useEffect(() => {
     if (!chartContainerRef.current) return
 
+    const palette = isDarkTheme
+  ? {
+      background: '#17171e',
+      text: '#a5a5b3',
+      grid: '#2b2b35',
+      border: '#353540',
+    }
+  : {
+      background: '#ffffff',
+      text: '#777783',
+      grid: '#eeeef2',
+      border: '#e3e3e8',
+    }
+
     const chart = createChart(chartContainerRef.current, {
       width: chartContainerRef.current.clientWidth,
       height: 500,
 
       layout: {
-        background: { color: '#ffffff' },
-        textColor: '#777783',
+        background: { color: palette.background },
+        textColor: palette.text,
         attributionLogo: false,
       },
 
       grid: {
-        vertLines: { color: '#eeeef2' },
-        horzLines: { color: '#eeeef2' },
+        vertLines: { color: palette.grid },
+        horzLines: { color: palette.grid },
       },
 
       rightPriceScale: {
-        borderColor: '#e3e3e8',
+        borderColor: palette.border,
       },
 
       timeScale: {
-        borderColor: '#e3e3e8',
+        borderColor: palette.border,
         timeVisible: true,
         secondsVisible: false,
 
@@ -91,13 +105,14 @@ function App() {
       localization: {
         timeFormatter: (time: any) => {
           const date = new Date(Number(time) * 1000)
+
           return new Intl.DateTimeFormat('uk-UA', {
             timeZone: 'Europe/Kyiv',
             hour: '2-digit',
             minute: '2-digit',
           }).format(date)
         },
-      }
+      },
     })
     chartRef.current = chart
 

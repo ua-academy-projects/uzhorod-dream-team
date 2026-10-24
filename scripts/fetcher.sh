@@ -10,11 +10,11 @@ write_env /etc/fetcher.env \
     RABBITMQ_PORT \
     RABBITMQ_USER \
     RABBITMQ_PASSWORD \
-    DATABASE_HOST \
-    DATABASE_PORT \
-    DATABASE_USER \
-    DATABASE_PASSWORD \
-    DATABASE_DB \
+    POSTGRES_HOST \
+    POSTGRES_PORT \
+    POSTGRES_USER \
+    POSTGRES_PASSWORD \
+    POSTGRES_DB \
     QUEUE_TYPE
 
 source /vagrant/scripts/docker_install.sh

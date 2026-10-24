@@ -4,7 +4,7 @@ set -euo pipefail
 
 function wait_until_pg_isready() {
     until sudo docker exec postgres pg_isready \
-        -U "$DATABASE_USER" -d postgres > /dev/null 2>&1
+        -U "$POSTGRES_USER" -d postgres > /dev/null 2>&1
     do
         sleep 1
     done
@@ -15,8 +15,8 @@ function install_pgmq() {
     local installed
 
     installed=$(sudo docker exec postgres psql \
-        -U "$DATABASE_USER" \
-        -d "$DATABASE_DB" \
+        -U "$POSTGRES_USER" \
+        -d "$POSTGRES_DB" \
         -tAc "SELECT EXISTS (
             SELECT 1
             FROM pg_namespace
@@ -47,16 +47,16 @@ function install_pgmq() {
 
     sudo docker exec postgres \
         psql -v ON_ERROR_STOP=1 \
-        -U "$DATABASE_USER" \
-        -d "$DATABASE_DB" \
+        -U "$POSTGRES_USER" \
+        -d "$POSTGRES_DB" \
         -f /docker-entrypoint-initdb.d/pgmq.sql
 }
 
 function install_hstore() {
     sudo docker exec postgres \
         psql -v ON_ERROR_STOP=1 \
-        -U "$DATABASE_USER" \
-        -d "$DATABASE_DB" \
+        -U "$POSTGRES_USER" \
+        -d "$POSTGRES_DB" \
         -c "
             CREATE EXTENSION IF NOT EXISTS hstore;
 
@@ -75,8 +75,8 @@ function install_hstore() {
 function init_database() {
     sudo docker exec postgres \
         psql -v ON_ERROR_STOP=1 \
-        -U "$DATABASE_USER" \
-        -d "$DATABASE_DB" \
+        -U "$POSTGRES_USER" \
+        -d "$POSTGRES_DB" \
         -c "
             CREATE TABLE IF NOT EXISTS public.bars (
                 id bigint NOT NULL,
@@ -99,27 +99,27 @@ function restore_database() {
 
     sudo docker exec -i postgres \
         dropdb \
-        -U "$DATABASE_USER" \
+        -U "$POSTGRES_USER" \
         --if-exists \
-        "$DATABASE_DB"
+        "$POSTGRES_DB"
 
     sudo docker exec -i postgres \
         createdb \
-        -U "$DATABASE_USER" \
-        "$DATABASE_DB"
+        -U "$POSTGRES_USER" \
+        "$POSTGRES_DB"
 
     sudo docker exec -i postgres psql \
-        -U "$DATABASE_USER" \
-        -d "$DATABASE_DB" \
+        -U "$POSTGRES_USER" \
+        -d "$POSTGRES_DB" \
         < "$snapshot"
 }
 
 source /vagrant/scripts/utils.sh
 write_env /etc/database.env \
-    DATABASE_USER \
-    DATABASE_PASSWORD \
-    DATABASE_DB \
-    DATABASE_PORT \
+    POSTGRES_USER \
+    POSTGRES_PASSWORD \
+    POSTGRES_DB \
+    POSTGRES_PORT \
     REDIS_PORT \
     REDIS_PASSWORD \
     RABBITMQ_HOST \
@@ -171,7 +171,7 @@ fi
 
 wait_until_pg_isready
 
-if [[ "$DATABASE_RESTORE" == "true" ]]; then
+if [[ "$POSTGRES_RESTORE" == "true" ]]; then
     restore_database
 else 
     init_database

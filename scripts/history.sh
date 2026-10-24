@@ -6,11 +6,11 @@ source /vagrant/scripts/utils.sh
 write_env /etc/history.env \
     "HISTORY_HOST=0.0.0.0" \
     HISTORY_PORT \
-    DATABASE_HOST \
-    DATABASE_PORT \
-    DATABASE_USER \
-    DATABASE_PASSWORD \
-    DATABASE_DB \
+    POSTGRES_HOST \
+    POSTGRES_PORT \
+    POSTGRES_USER \
+    POSTGRES_PASSWORD \
+    POSTGRES_DB \
     REDIS_HOST \
     REDIS_PORT \
     REDIS_PASSWORD \
