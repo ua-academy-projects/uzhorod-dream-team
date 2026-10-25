@@ -1,0 +1,57 @@
+substitutions:
+  _REGION: europe-central2
+  _TAG: ""
+
+steps:
+  - id: postgres
+    name: gcr.io/cloud-builders/docker
+    env: [DOCKER_BUILDKIT=1]
+    args:
+      [
+        build,
+        -t,
+        "${_REGION}-docker.pkg.dev/$PROJECT_ID/crypto/postgres:${_TAG}",
+        db,
+      ]
+    waitFor: ["-"]
+  - id: history
+    name: gcr.io/cloud-builders/docker
+    env: [DOCKER_BUILDKIT=1]
+    args:
+      [
+        build,
+        -t,
+        "${_REGION}-docker.pkg.dev/$PROJECT_ID/crypto/history:${_TAG}",
+        -f,
+        services/history/Dockerfile,
+        .,
+      ]
+    waitFor: ["-"]
+  - id: fetcher
+    name: gcr.io/cloud-builders/docker
+    env: [DOCKER_BUILDKIT=1]
+    args:
+      [
+        build,
+        -t,
+        "${_REGION}-docker.pkg.dev/$PROJECT_ID/crypto/fetcher:${_TAG}",
+        services/fetcher,
+      ]
+    waitFor: ["-"]
+  - id: ui
+    name: gcr.io/cloud-builders/docker
+    env: [DOCKER_BUILDKIT=1]
+    args:
+      [build, -t, "${_REGION}-docker.pkg.dev/$PROJECT_ID/crypto/ui:${_TAG}", ui]
+    waitFor: ["-"]
+
+# Pushed only when every step succeeded: a version is complete or absent.
+images:
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/crypto/postgres:${_TAG}
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/crypto/history:${_TAG}
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/crypto/fetcher:${_TAG}
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/crypto/ui:${_TAG}
+
+options:
+  logging: CLOUD_LOGGING_ONLY # required with a user-specified service account
+timeout: 1200s

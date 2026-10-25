@@ -1,0 +1,15 @@
+project_id   = "crypto-price-2610"
+console_user = "proshina_playground"
+
+# HTTPS name and its Cloudflare zone (dashboard → ai-optimizer.net → Overview → Zone ID)
+domain             = "crypto.ai-optimizer.net"
+cloudflare_zone_id = "0123456789abcdef0123456789abcdef"
+
+# Your public IP: curl -s https://ifconfig.me
+ssh_source_ranges = ["203.0.113.7/32"]
+# bastion_ssh_port = 22022
+
+# Version to run, printed by ../build.sh. Leave unset for the first apply.
+# image_tag = "0123456789ab"
+
+# backend = "redis"

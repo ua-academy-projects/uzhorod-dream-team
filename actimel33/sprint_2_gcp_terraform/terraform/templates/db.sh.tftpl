@@ -1,0 +1,82 @@
+${common}
+
+# The data disk: formatted once, mounted on every boot. Postgres and Redis keep
+# their files here.
+DATA_DEV=/dev/disk/by-id/google-data
+for _ in $(seq 1 30); do [ -e "$DATA_DEV" ] && break; sleep 2; done
+blkid "$DATA_DEV" >/dev/null 2>&1 || mkfs.ext4 -q -m 0 "$DATA_DEV"
+install -d /mnt/data
+grep -q " /mnt/data " /etc/fstab || echo "$DATA_DEV /mnt/data ext4 defaults,nofail 0 2" >> /etc/fstab
+mountpoint -q /mnt/data || mount /mnt/data
+# Subdirectories: an ext4 root holds lost+found, and initdb wants an empty directory.
+install -d /mnt/data/postgres /mnt/data/redis
+
+install_docker
+IMAGE=${registry}/postgres:${image_tag}
+registry_login "$IMAGE"
+
+POSTGRES_PASSWORD=$(secret postgres-password)
+QUEUE_WORKER_PASSWORD=$(secret queue-worker-password)
+env_file /opt/crypto/postgres.env \
+  POSTGRES_USER=app POSTGRES_DB=crypto \
+  "POSTGRES_PASSWORD=$POSTGRES_PASSWORD" "QUEUE_WORKER_PASSWORD=$QUEUE_WORKER_PASSWORD"
+
+# Runs once, on an empty data directory, before Postgres opens its TCP port.
+install -d /opt/crypto/initdb
+cat > /opt/crypto/initdb/10-queue-worker.sh <<'SH'
+#!/bin/sh
+set -e
+psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v pw="$QUEUE_WORKER_PASSWORD" <<'SQL'
+CREATE ROLE queue_worker LOGIN PASSWORD :'pw';
+SQL
+SH
+chmod 0755 /opt/crypto/initdb/10-queue-worker.sh
+
+run_container crypto_db \
+  --env-file /opt/crypto/postgres.env -p 5432:5432 \
+  -v /mnt/data/postgres:/var/lib/postgresql/data -v /opt/crypto/initdb:/docker-entrypoint-initdb.d:ro \
+  --health-cmd 'pg_isready -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' --health-interval 5s \
+  "$IMAGE"
+wait_healthy crypto_db
+
+%{ if backend == "redis" ~}
+REDIS_PASSWORD=$(secret redis-password)
+env_file /opt/crypto/redis.env "REDIS_PASSWORD=$REDIS_PASSWORD"
+run_container crypto_redis \
+  --env-file /opt/crypto/redis.env -p 6379:6379 -v /mnt/data/redis:/data \
+  --health-cmd 'REDISCLI_AUTH="$REDIS_PASSWORD" redis-cli ping | grep -q PONG' --health-interval 5s \
+  redis:7-alpine sh -c 'exec redis-server --requirepass "$REDIS_PASSWORD" --appendonly yes'
+wait_healthy crypto_redis
+%{ endif ~}
+
+# Log collector: user logs accepts batches only through logsink,
+# each key only from its own VM and only into its own directory.
+id logs >/dev/null 2>&1 || useradd --system --home-dir /srv/logs --shell /bin/sh logs
+install -d -o logs -g logs -m 0750 /srv/logs
+cat > /usr/local/bin/logsink <<'LOGSINK_EOF'
+${logsink_script}
+LOGSINK_EOF
+chmod 0755 /usr/local/bin/logsink
+install -d -o root -g logs -m 0750 /srv/logs/.ssh
+cat > /srv/logs/.ssh/authorized_keys <<'KEYS'
+%{ for name, key in logship_public_keys ~}
+restrict,from="${ip[name]}",command="/usr/local/bin/logsink ${name}" ${key}
+%{ endfor ~}
+KEYS
+chown root:logs /srv/logs/.ssh/authorized_keys
+chmod 0640 /srv/logs/.ssh/authorized_keys
+cat > /etc/logrotate.d/logship <<'CONF'
+/srv/logs/*/*.log {
+  su logs logs
+  daily
+  rotate 7
+  compress
+  delaycompress
+  missingok
+  notifempty
+}
+CONF
+
+setup_logship
+guard_ssh "${admin_user}@${ip.bastion} logs@${private_cidr} ${console_user}@${iap_cidr}"
+done_provisioning

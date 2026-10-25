@@ -1,0 +1,10 @@
+# Accepted risks for the whole project. Resource-specific exceptions sit next to
+# the resource as #trivy:ignore comments.
+
+# Customer-managed encryption keys (Cloud KMS). GCP already encrypts every disk
+# and bucket at rest with Google-managed keys. CMEK is for compliance that asks
+# for own keys; in this lab it only adds cost, and a KMS key ring can never be
+# deleted, so destroy followed by apply would fail on the existing name.
+GCP-0033
+GCP-0034
+GCP-0066

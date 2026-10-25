@@ -1,0 +1,18 @@
+.env
+node_modules/
+dist/
+docs/plan-terraform-gcp.md
+
+# Provider binaries and local caches
+.terraform/
+crash.log
+
+# State and plans can hold sensitive data; the state lives in GCS
+*.tfstate
+*.tfstate.*
+*.tfplan
+tfplan
+
+# Values of a particular environment
+terraform.tfvars
+backend.hcl

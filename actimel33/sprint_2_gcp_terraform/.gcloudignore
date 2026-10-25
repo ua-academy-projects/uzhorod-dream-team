@@ -1,0 +1,8 @@
+# What gcloud builds submit leaves out of the upload: only the build context goes.
+.gcloudignore
+.git
+.gitignore
+docs/
+terraform/
+**/node_modules/
+ui/dist/

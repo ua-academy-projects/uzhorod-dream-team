@@ -1,0 +1,32 @@
+${common}
+
+install_docker
+IMAGE=${registry}/history:${image_tag}
+registry_login "$IMAGE"
+
+POSTGRES_PASSWORD=$(secret postgres-password)
+SESSION_SECRET=$(secret session-secret)
+ENV=(
+  BACKEND=${backend}
+  HISTORY_HOST=0.0.0.0
+  "DATABASE_URL=postgres://app:$POSTGRES_PASSWORD@${ip.db}:5432/crypto"
+  "SESSION_SECRET=$SESSION_SECRET"
+)
+%{ if backend == "redis" ~}
+REDIS_PASSWORD=$(secret redis-password)
+ENV+=("REDIS_URL=redis://${ip.db}:6379" "REDIS_PASSWORD=$REDIS_PASSWORD")
+%{ endif ~}
+env_file /opt/crypto/history.env "$${ENV[@]}"
+
+wait_port ${ip.db} 5432
+%{ if backend == "redis" ~}
+wait_port ${ip.db} 6379
+%{ endif ~}
+run_container crypto_history \
+  --hostname history --read-only --init --env-file /opt/crypto/history.env -p 3001:3001 \
+  "$IMAGE"
+wait_healthy crypto_history
+
+setup_logship
+guard_ssh "${admin_user}@${ip.bastion} logs@${private_cidr} ${console_user}@${iap_cidr}"
+done_provisioning

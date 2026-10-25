@@ -1,0 +1,119 @@
+.shell {
+  max-width: 62rem;
+  margin: 0 auto;
+  padding: 3rem 1rem 4rem;
+}
+
+.topline {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.75rem;
+}
+
+.topline h1 {
+  font-size: 1rem;
+  font-weight: 500;
+  margin: 0;
+  letter-spacing: 0.01em;
+}
+
+/* The price and its observation time form one block, not a number with a caption. */
+.hero { margin: 2.5rem 0 2rem; }
+
+.hero__price {
+  font-size: clamp(3rem, 12vw, 5.5rem);
+  font-weight: 600;
+  line-height: 0.95;
+  margin: 0;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+
+.hero__observed {
+  font-size: clamp(1rem, 3.5vw, 1.375rem);
+  font-weight: 400;
+  color: var(--ink-secondary);
+  margin: 0.6rem 0 0;
+}
+
+.button {
+  font: inherit;
+  font-weight: 500;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.5rem 0.9rem;
+  cursor: pointer;
+  transition: border-color 120ms ease, color 120ms ease;
+}
+
+.button:hover:not(:disabled) { border-color: var(--series-1); color: var(--series-1); }
+.button:disabled { cursor: progress; color: var(--ink-muted); }
+
+.stale {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  border: 1px solid var(--warning);
+  border-left-width: 3px;
+  border-radius: 6px;
+  padding: 0.7rem 0.9rem;
+  margin-bottom: 2rem;
+  color: var(--ink-secondary);
+  font-size: 0.9375rem;
+}
+
+.stale__mark { color: var(--warning); font-weight: 600; flex: none; }
+.stale p { margin: 0; }
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1.25rem 1rem 0.5rem;
+}
+
+.panel__caption {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  color: var(--ink-muted);
+  font-size: 0.875rem;
+  margin: 0.75rem 0.25rem 0.5rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.state {
+  padding: 3rem 0;
+  color: var(--ink-secondary);
+  max-width: 34rem;
+}
+
+.state h2 { font-size: 1.125rem; font-weight: 600; margin: 0 0 0.4rem; color: var(--ink); }
+.state p { margin: 0 0 1rem; line-height: 1.5; }
+
+.chart-tooltip {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.5rem 0.65rem;
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.chart-tooltip strong { display: block; color: var(--ink); font-weight: 600; }
+.chart-tooltip span { color: var(--ink-muted); }
+
+/* Recharts is styled through CSS: presentation attributes do not resolve var(). */
+.chart .recharts-cartesian-grid line { stroke: var(--grid); }
+.chart .recharts-cartesian-axis-line,
+.chart .recharts-cartesian-axis-tick-line { stroke: var(--axis); }
+.chart .recharts-cartesian-axis-tick-value { fill: var(--ink-muted); }
+.chart .recharts-line-curve { stroke: var(--series-1); }
+.chart .recharts-tooltip-cursor { stroke: var(--axis); }

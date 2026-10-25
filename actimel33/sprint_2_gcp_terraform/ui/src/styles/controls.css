@@ -1,0 +1,34 @@
+.topline__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+/* Segmented control: the pressed option is marked by weight and colour,
+   never by colour alone. */
+.theme {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.theme__option {
+  font: inherit;
+  font-size: 0.875rem;
+  color: var(--ink-secondary);
+  background: transparent;
+  border: 0;
+  padding: 0.4rem 0.7rem;
+  cursor: pointer;
+  transition: color 120ms ease, background-color 120ms ease;
+}
+
+.theme__option + .theme__option { border-left: 1px solid var(--border); }
+.theme__option:hover { color: var(--ink); }
+
+.theme__option[aria-pressed='true'] {
+  color: var(--ink);
+  font-weight: 600;
+  background: var(--surface);
+}

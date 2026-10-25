@@ -1,0 +1,30 @@
+${common}
+
+install_docker
+IMAGE=${registry}/fetcher:${image_tag}
+registry_login "$IMAGE"
+
+%{ if backend == "postgres" ~}
+QUEUE_WORKER_PASSWORD=$(secret queue-worker-password)
+env_file /opt/crypto/fetcher.env \
+  BACKEND=postgres FETCHER_HOST=0.0.0.0 \
+  "QUEUE_DATABASE_URL=postgres://queue_worker:$QUEUE_WORKER_PASSWORD@${ip.db}:5432/crypto"
+DB_PORT=5432
+%{ else ~}
+REDIS_PASSWORD=$(secret redis-password)
+env_file /opt/crypto/fetcher.env \
+  BACKEND=redis FETCHER_HOST=0.0.0.0 \
+  "REDIS_URL=redis://${ip.db}:6379" "REDIS_PASSWORD=$REDIS_PASSWORD"
+DB_PORT=6379
+%{ endif ~}
+
+wait_port ${ip.db} "$DB_PORT"
+# The queue may not exist yet: the fetcher keeps retrying until history has migrated.
+run_container crypto_fetcher \
+  --hostname fetcher --read-only --env-file /opt/crypto/fetcher.env -p 3002:3002 \
+  "$IMAGE"
+wait_healthy crypto_fetcher
+
+setup_logship
+guard_ssh "${admin_user}@${ip.bastion} logs@${private_cidr} ${console_user}@${iap_cidr}"
+done_provisioning

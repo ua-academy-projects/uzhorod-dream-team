@@ -1,0 +1,16 @@
+${common}
+
+install_docker
+IMAGE=${registry}/ui:${image_tag}
+registry_login "$IMAGE"
+
+# nginx serves the build and proxies /api to history.
+run_container crypto_ui \
+  -e HISTORY_URL=http://${ip.history}:3001 -p 5173:8080 \
+  "$IMAGE"
+wait_healthy crypto_ui
+
+setup_logship
+# Only the load balancer reaches nginx; admins come through the bastion.
+guard_ssh "${admin_user}@${ip.bastion} logs@${private_cidr}"
+done_provisioning

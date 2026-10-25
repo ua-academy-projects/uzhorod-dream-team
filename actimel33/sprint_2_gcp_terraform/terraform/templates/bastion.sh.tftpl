@@ -1,0 +1,26 @@
+${common}
+
+# User jump: forwards to port 22 of the services.
+id jump >/dev/null 2>&1 || useradd --create-home --shell /bin/sh jump
+install -d -o root -g jump -m 0750 /home/jump/.ssh
+cat > /home/jump/.ssh/authorized_keys <<'KEYS'
+${jump_authorized_key}
+KEYS
+# root-owned: jump cannot widen its own permissions.
+chown root:jump /home/jump/.ssh/authorized_keys
+chmod 0640 /home/jump/.ssh/authorized_keys
+
+# Two ports: ${bastion_ssh_port} for the allowed ranges, 22 for IAP only (the firewall decides who reaches which).
+printf 'Port 22\nPort %s\n' ${bastion_ssh_port} > /etc/ssh/sshd_config.d/05-ports.conf
+# jump from the allowed ranges; the console user for gcloud compute ssh --tunnel-through-iap.
+guard_ssh "jump ${console_user}"
+
+# Ubuntu 24.04 starts sshd from ssh.socket, which listens on 22 only and ignores Port.
+# A plain ssh.service reads sshd_config as is (Ubuntu's documented way back).
+# An image without socket activation has no ssh.socket: nothing to switch off then.
+systemctl disable --now ssh.socket 2>/dev/null || true
+rm -f /etc/systemd/system/ssh.service.d/00-socket.conf /etc/systemd/system/ssh.socket.d/addresses.conf
+systemctl daemon-reload
+systemctl enable ssh.service
+systemctl restart ssh.service
+done_provisioning

@@ -1,0 +1,17 @@
+Host gcp-bastion
+  HostName ${bastion_ip}
+  Port ${bastion_port}
+  User jump
+%{ for name in services ~}
+
+Host gcp-${name}
+  HostName ${ip[name]}
+  User ${admin_user}
+  ProxyJump gcp-bastion
+%{ endfor ~}
+
+Host gcp-*
+  IdentityFile ${identity}
+  IdentitiesOnly yes
+  StrictHostKeyChecking accept-new
+  UserKnownHostsFile ${known_hosts}
