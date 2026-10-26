@@ -23,7 +23,7 @@ resource "google_compute_firewall" "gateway_from_internal" {
 
 locals {
   internal_rules = {
-    ssh-internal = { from = ["bastion"], to = ["via-bastion"], port = "22" }
+    ssh-internal = { from = ["bastion"], to = ["via-bastion"], port = tostring(var.ssh_port) }
     postgres     = { from = ["history", "fetcher"], to = ["db"], port = "5432" }
     rabbit       = { from = ["history", "fetcher"], to = ["db"], port = "5672" }
     redis        = { from = ["history"], to = ["db"], port = "6379" }

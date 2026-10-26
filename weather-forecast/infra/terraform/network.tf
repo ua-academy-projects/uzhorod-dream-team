@@ -10,6 +10,11 @@ resource "google_compute_subnetwork" "subnet" {
   network       = google_compute_network.vpc.id
 }
 
+resource "google_compute_address" "bastion" {
+  name   = "${var.prefix}-bastion-ip"
+  region = var.region
+}
+
 resource "google_compute_route" "via_bastion" {
   name                   = "${var.prefix}-default-via-bastion"
   network                = google_compute_network.vpc.name

@@ -1,0 +1,19 @@
+table inet weather_gateway {}
+flush table inet weather_gateway
+table inet weather_gateway {
+  chain forward {
+    type filter hook forward priority filter; policy drop;
+    ct state invalid drop
+    ct state established,related accept
+    ip saddr 192.168.56.0/24 accept
+  }
+}
+
+table ip weather_gateway_nat {}
+flush table ip weather_gateway_nat
+table ip weather_gateway_nat {
+  chain postrouting {
+    type nat hook postrouting priority srcnat; policy accept;
+    ip saddr 192.168.56.0/24 ip daddr != 192.168.56.0/24 masquerade
+  }
+}

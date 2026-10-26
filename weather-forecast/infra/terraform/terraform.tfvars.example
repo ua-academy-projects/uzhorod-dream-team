@@ -1,5 +1,5 @@
 project_id          = "your-gcp-project-id"
 my_ip_cidr          = "203.2.203.2/32"
-ssh_port            = 22
+ssh_port            = 2222
 ssh_user            = "your_user"
 ssh_public_key_path = "~/.ssh/your_key.pub"

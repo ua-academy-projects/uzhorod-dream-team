@@ -20,8 +20,12 @@ variable "my_ip_cidr" {
 }
 
 variable "ssh_port" {
-  type    = number
-  default = 22
+  type = number
+
+  validation {
+    condition     = var.ssh_port >= 1024 && var.ssh_port <= 65535
+    error_message = "ssh_port must be between 1024 and 65535"
+  }
 }
 
 variable "ssh_user" {
