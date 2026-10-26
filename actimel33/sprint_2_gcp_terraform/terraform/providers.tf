@@ -9,5 +9,11 @@ provider "google" {
   }
 }
 
-# The token comes from the CLOUDFLARE_API_TOKEN environment variable, never from code.
-provider "cloudflare" {}
+# The Cloudflare token lives in Secret Manager.
+ephemeral "google_secret_manager_secret_version" "cloudflare_token" {
+  secret = var.cloudflare_token_secret
+}
+
+provider "cloudflare" {
+  api_token = ephemeral.google_secret_manager_secret_version.cloudflare_token.secret_data
+}

@@ -51,9 +51,10 @@ resource "google_project_iam_member" "build_logs" {
   member  = "serviceAccount:${google_service_account.build.email}"
 }
 
-# gcloud uploads the source here; the build reads it. Old uploads expire,
-# so versioning would only keep garbage.
+# gcloud uploads the source here; the build reads it.
+# Uploads expire after 7 days: versioning and access logs would only keep noise.
 #trivy:ignore:GCP-0078
+#trivy:ignore:GCP-0077
 resource "google_storage_bucket" "build_source" {
   name                        = "${var.project_id}-build-source"
   location                    = var.region

@@ -44,12 +44,12 @@ variable "admin_user" {
 }
 
 variable "console_user" {
-  description = "User of the Console SSH button: the Google account with dots replaced by underscores."
+  description = "User of the Console SSH button"
   type        = string
 }
 
 variable "image_tag" {
-  description = "Image version to run, printed by ../build.sh (the git commit). Unset: no service VMs yet."
+  description = "Image version to run, printed by ../build.sh (the git commit)."
   type        = string
   default     = null
 
@@ -60,7 +60,7 @@ variable "image_tag" {
 }
 
 variable "domain" {
-  description = "Name the app is served under over HTTPS, e.g. crypto.example.com."
+  description = "Name the app is served under over HTTPS."
   type        = string
 
   validation {
@@ -70,7 +70,7 @@ variable "domain" {
 }
 
 variable "cloudflare_zone_id" {
-  description = "Cloudflare zone of the domain: dashboard → the domain → Overview → Zone ID."
+  description = "Cloudflare zone of the domain."
   type        = string
 
   validation {
@@ -80,17 +80,29 @@ variable "cloudflare_zone_id" {
 }
 
 variable "ssh_source_ranges" {
-  description = "Who may reach the bastion's public SSH port, e.g. your own IP as x.x.x.x/32."
+  description = "Who may reach the bastion's public SSH port, x.x.x.x/32."
   type        = list(string)
 
   validation {
     condition     = alltrue([for cidr in var.ssh_source_ranges : can(cidrnetmask(cidr))])
     error_message = "ssh_source_ranges must be IPv4 CIDR blocks."
   }
+
+  # 0.0.0.0/0 would open SSH to the whole internet.
+  validation {
+    condition     = alltrue([for cidr in var.ssh_source_ranges : !endswith(cidr, "/0")])
+    error_message = "ssh_source_ranges must not contain /0: list your own IP as x.x.x.x/32."
+  }
+}
+
+variable "cloudflare_token_secret" {
+  description = "Secret Manager secret holding the Cloudflare API token."
+  type        = string
+  default     = "cloudflare-api-token"
 }
 
 variable "bastion_ssh_port" {
-  description = "Public SSH port of the bastion. Port 22 stays open to IAP only (gcloud compute ssh --tunnel-through-iap)."
+  description = "Public SSH port of the bastion."
   type        = number
   default     = 22022
 

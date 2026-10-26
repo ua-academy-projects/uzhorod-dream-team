@@ -16,7 +16,10 @@ admin            ─▶ bastion :22022 (user jump) ─▶ :22 of db, fetcher, hi
 
 ```bash
 gcloud auth application-default login
-read -rsp 'Cloudflare API token: ' CLOUDFLARE_API_TOKEN && export CLOUDFLARE_API_TOKEN
+# once: the Cloudflare token into Secret Manager; scope it to Zone → DNS → Edit
+# on this one zone only (template "Edit zone DNS", Specific zone)
+gcloud secrets create cloudflare-api-token --replication-policy=automatic
+read -rsp 'Cloudflare API token: ' t && printf '%s' "$t" | gcloud secrets versions add cloudflare-api-token --data-file=- && unset t
 cp backend.hcl.example backend.hcl && cp terraform.tfvars.example terraform.tfvars
 terraform init -backend-config=backend.hcl
 
@@ -51,16 +54,20 @@ The VMs provision themselves on first boot: log with
 | `region`, `zone` | `europe-central2`, `-a` | location |
 | `ssh_public_key_path` | `~/.ssh/crypto-gcp.pub` | key of jump and of the admin user |
 | `admin_user` | `crypto` | admin account behind the bastion |
+| `cloudflare_token_secret` | `cloudflare-api-token` | Secret Manager secret with the Cloudflare token |
 
-Credentials never live in the code: Google through Application Default Credentials,
-Cloudflare through the `CLOUDFLARE_API_TOKEN` environment variable.
+Credentials never live in the code or on disk: Google through Application Default
+Credentials; the Cloudflare token is read from Secret Manager on every run as an
+ephemeral value, so it never reaches the state or the plan file.
 
 ## Checks
 
 ```bash
 terraform fmt -check -recursive && terraform validate
 tflint --init && tflint
-trivy config --skip-dirs .terraform .
+trivy config --skip-dirs .terraform --skip-files tfplan .
 ```
 
-Accepted exceptions are marked `#trivy:ignore` with the reason next to them.
+Accepted exceptions are marked `#trivy:ignore` with the reason next to them, or listed
+in `.trivyignore`. `tfplan` is skipped because it carries a copy of the configuration
+from the moment of `terraform plan`, which may be older than the files.
