@@ -114,6 +114,17 @@ ipconfig
 
   The key opens these VMs only. `ssh -p 2222 jump@<laptop IP>` gives no shell — by design.
 
+## 4. From anywhere — a quick Cloudflare tunnel
+
+No account and no Windows steps. In WSL:
+
+```bash
+~/.local/bin/cloudflared tunnel --url http://192.168.78.13:5173
+```
+
+Open the `https://….trycloudflare.com` link from the log. `Ctrl+C` stops the tunnel.
+The link is public — stop it after the demo.
+
 ## Troubleshooting
 
 Walk the chain from Windows and stop where it breaks:
@@ -141,6 +152,7 @@ only through the bastion.
 | iptables rules (WSL) | `wsl --shutdown`, Windows reboot |
 | route (Windows) | Windows reboot; also wrong after WSL changes its address |
 | portproxy, firewall rules, Hyper-V setting | nothing — they stay until removed |
+| Cloudflare tunnel | `Ctrl+C` or closing the terminal; the link changes on every start |
 
 ## Undo
 
