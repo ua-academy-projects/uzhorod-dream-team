@@ -1,0 +1,46 @@
+digraph deployment {
+  graph [rankdir=LR, bgcolor="#ffffff", pad=0.4, nodesep=0.6, ranksep=0.85,
+    fontname="DejaVu Sans", fontsize=20];
+  node [shape=box, style="rounded,filled", fillcolor="#ffffff", color="#94a3b8",
+    fontname="DejaVu Sans", fontsize=13, margin="0.22,0.16"];
+  edge [fontname="DejaVu Sans", fontsize=11, color="#475569", fontcolor="#334155", arrowsize=0.8];
+
+  subgraph cluster_host {
+    label="Host machine";
+    fontsize=18;
+    color="#64748b";
+    style="rounded,filled";
+    fillcolor="#f8fafc";
+    margin=24;
+
+    browser [label="Browser\nReact application", fillcolor="#dbeafe", color="#60a5fa"];
+
+    subgraph cluster_processes {
+      label="Host processes";
+      fontsize=15;
+      color="#cbd5e1";
+      fillcolor="#eff6ff";
+      margin=20;
+      ui [label=<<FONT FACE="DejaVu Sans Mono" POINT-SIZE="12"><B>pnpm dev</B></FONT><BR/><BR/>Vite dev server<BR/>localhost:5173>];
+      history [label=<<FONT FACE="DejaVu Sans Mono" POINT-SIZE="12"><B>go run</B></FONT><BR/><BR/>History service · Go<BR/>localhost:8081>];
+      fetcher [label=<<FONT FACE="DejaVu Sans Mono" POINT-SIZE="12"><B>go run</B></FONT><BR/><BR/>Fetcher service · Go<BR/>localhost:8080>];
+    }
+
+    subgraph cluster_docker {
+      label="Docker";
+      fontsize=15;
+      color="#93c5fd";
+      fillcolor="#f0f9ff";
+      margin=20;
+      postgres [shape=cylinder, style=filled, label=<<FONT FACE="DejaVu Sans Mono" POINT-SIZE="12"><B>docker run</B></FONT><BR/><BR/>PostgreSQL 16 Alpine<BR/>Published port: 5432>, fillcolor="#e0f2fe"];
+    }
+
+    browser -> ui [label="HTTP · UI assets"];
+    browser -> history [label="HTTP · /api/v1"];
+    history -> fetcher [label="HTTP · backfill\nand regular sync"];
+    history -> postgres [label="SQL · localhost:5432"];
+  }
+
+  openaq [label="OpenAQ API\napi.openaq.org", fillcolor="#fef3c7", color="#fbbf24"];
+  fetcher -> openaq [label="HTTPS · air quality data"];
+}

@@ -1,0 +1,86 @@
+digraph deployment {
+  graph [rankdir=LR, bgcolor="#ffffff", pad=0.4, nodesep=0.7, ranksep=0.9,
+    fontname="DejaVu Sans", fontsize=18];
+  node [shape=box, style="rounded,filled", fillcolor="#ffffff", color="#94a3b8",
+    fontname="DejaVu Sans", fontsize=13, margin="0.22,0.16"];
+  edge [fontname="DejaVu Sans", fontsize=11, color="#475569", fontcolor="#334155", arrowsize=0.8];
+
+  subgraph cluster_host {
+    label="Host machine\nVMs bridged to LAN · 192.168.1.0/24";
+    fontsize=18;
+    color="#64748b";
+    style="rounded,filled";
+    fillcolor="#f8fafc";
+    margin=24;
+
+    browser [label="Browser\nReact application", fillcolor="#dbeafe", color="#60a5fa"];
+
+    subgraph cluster_ui_vm {
+      label="kyiv-air-ui VM · Ubuntu 24.04\nLAN IP: 192.168.1.204";
+      fontsize=15;
+      color="#93c5fd";
+      fillcolor="#eff6ff";
+      margin=20;
+      subgraph cluster_ui_systemd {
+        label="systemd";
+        color="#818cf8";
+        fillcolor="#eef2ff";
+        margin=18;
+        ui [label=<<FONT FACE="DejaVu Sans Mono" POINT-SIZE="12"><B>pnpm run dev</B></FONT><BR/><BR/>Vite dev server · :5173<BR/>kyiv-air-ui.service>];
+      }
+    }
+
+    subgraph cluster_history_vm {
+      label="kyiv-air-history VM · Ubuntu 24.04\nLAN IP: 192.168.1.203";
+      fontsize=15;
+      color="#93c5fd";
+      fillcolor="#eff6ff";
+      margin=20;
+      subgraph cluster_history_systemd {
+        label="systemd";
+        color="#818cf8";
+        fillcolor="#eef2ff";
+        margin=18;
+        history [label=<<FONT FACE="DejaVu Sans Mono" POINT-SIZE="12"><B>/opt/kyiv-air/bin/history</B></FONT><BR/><BR/>History service · Go · :8081<BR/>kyiv-air-history.service>];
+      }
+    }
+
+    subgraph cluster_fetcher_vm {
+      label="kyiv-air-fetcher VM · Ubuntu 24.04\nLAN IP: 192.168.1.202";
+      fontsize=15;
+      color="#93c5fd";
+      fillcolor="#eff6ff";
+      margin=20;
+      subgraph cluster_fetcher_systemd {
+        label="systemd";
+        color="#818cf8";
+        fillcolor="#eef2ff";
+        margin=18;
+        fetcher [label=<<FONT FACE="DejaVu Sans Mono" POINT-SIZE="12"><B>/opt/kyiv-air/bin/fetcher</B></FONT><BR/><BR/>Fetcher service · Go · :8080<BR/>kyiv-air-fetcher.service>];
+      }
+    }
+
+    subgraph cluster_db_vm {
+      label="kyiv-air-db VM · Ubuntu 24.04\nLAN IP: 192.168.1.201";
+      fontsize=15;
+      color="#93c5fd";
+      fillcolor="#eff6ff";
+      margin=20;
+      subgraph cluster_db_systemd {
+        label="systemd";
+        color="#818cf8";
+        fillcolor="#eef2ff";
+        margin=18;
+        postgres [shape=cylinder, style=filled, label="PostgreSQL 16 · :5432\npostgresql@16-main.service", fillcolor="#e0f2fe"];
+      }
+    }
+
+    browser -> ui [label="HTTP · UI assets\n192.168.1.204:5173"];
+    browser -> history [label="HTTP · /api/v1\n192.168.1.203:8081"];
+    history -> fetcher [label="HTTP · backfill and regular sync\n192.168.1.202:8080"];
+    history -> postgres [label="SQL\n192.168.1.201:5432"];
+  }
+
+  openaq [label="OpenAQ API\napi.openaq.org", fillcolor="#fef3c7", color="#fbbf24"];
+  fetcher -> openaq [label="HTTPS · air quality data"];
+}
