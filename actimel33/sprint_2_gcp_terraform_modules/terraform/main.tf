@@ -60,6 +60,38 @@ module "data_disks" {
   depends_on = [module.project_services]
 }
 
+module "iam" {
+  source = "./modules/iam"
+
+  project_id     = local.config.project_id
+  account_prefix = local.config.iam.service_account_prefix
+  machine_roles  = { for name, machine in local.machines : name => try(machine.roles, []) }
+
+  depends_on = [module.project_services]
+}
+
+module "secrets" {
+  source = "./modules/secrets"
+
+  secrets       = local.config.secrets
+  reader_emails = module.iam.service_account_emails
+
+  depends_on = [module.project_services]
+}
+
+module "artifact_registry" {
+  source = "./modules/artifact_registry"
+
+  repository_id = local.config.artifact_registry.repository_id
+  location      = local.config.region
+  format        = local.config.artifact_registry.format
+  description   = local.config.artifact_registry.description
+  labels        = local.labels
+  reader_emails = { for name in local.config.artifact_registry.readers : name => module.iam.service_account_emails[name] }
+
+  depends_on = [module.project_services]
+}
+
 module "compute_instances" {
   source   = "./modules/compute_instance"
   for_each = local.machines
@@ -76,6 +108,8 @@ module "compute_instances" {
 
   attached_disk_id          = try(module.data_disks[each.key].id, null)
   attached_disk_device_name = try(local.data_disks[each.key].device_name, null)
+
+  service_account_email = module.iam.service_account_emails[each.key]
 
   # No public IPs: the bastion is reached through IAP, the rest through the bastion.
   has_public_ip = false

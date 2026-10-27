@@ -72,3 +72,8 @@ variable "attached_disk_device_name" {
   type        = string
   default     = "data-disk"
 }
+
+variable "service_account_email" {
+  type        = string
+  description = "Email of service account for the VM"
+}

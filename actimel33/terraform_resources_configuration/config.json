@@ -69,6 +69,30 @@
             "zone": "europe-central2-a"
         }
     },
+    "iam": {
+        "service_account_prefix": "sa-vm-"
+    },
+    "secrets": {
+        "crypto-db-password": {
+            "length": 16,
+            "readers": [
+                "db",
+                "fetcher"
+            ],
+            "version": 1
+        }
+    },
+    "artifact_registry": {
+        "repository_id": "crypto-services-repository",
+        "format": "DOCKER",
+        "description": "Docker repository for crypto application images",
+        "readers": [
+            "db",
+            "fetcher",
+            "history",
+            "ui"
+        ]
+    },
     "lb_source_ranges_list": [
         "130.211.0.0/22",
         "35.191.0.0/16"

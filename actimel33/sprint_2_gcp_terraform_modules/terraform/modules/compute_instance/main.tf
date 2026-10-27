@@ -36,4 +36,9 @@ resource "google_compute_instance" "this" {
       }
     }
   }
+
+  service_account {
+    email  = var.service_account_email
+    scopes = ["cloud-platform"] # what the VM may do is limited by the roles of its service account
+  }
 }
