@@ -7,6 +7,8 @@ LOG_ROOT="${PROJECT_ROOT}/var/logs/current"
 STATE_ROOT="${LOG_ROOT}/.state"
 
 VMS=(db fetcher history ui)
+# SSH host alias prefix, e.g. WEATHER_SSH_PREFIX=gcp-tf- for gcp-tf-db.
+SSH_PREFIX="${WEATHER_SSH_PREFIX:-}"
 
 declare -A CONTAINERS=(
   [db]="weather-postgres weather-rabbitmq weather-redis"
@@ -37,7 +39,7 @@ warn() {
 remote_ssh() {
   local vm="$1"
   shift
-  timeout 60s ssh "${SSH_OPTS[@]}" "$vm" "$@"
+  timeout 60s ssh "${SSH_OPTS[@]}" "${SSH_PREFIX}${vm}" "$@"
 }
 
 hash_key() {
@@ -211,7 +213,7 @@ printf 'Log collection started at %s UTC.\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 for vm in "${VMS[@]}"; do
   printf '\n=== %s ===\n' "$vm"
 
-  if ! timeout 12s ssh "${SSH_OPTS[@]}" "$vm" 'sudo -n true'; then
+  if ! timeout 12s ssh "${SSH_OPTS[@]}" "${SSH_PREFIX}${vm}" 'sudo -n true'; then
     warn "${vm} is unavailable; skipping it without advancing checkpoints"
     failures=1
     continue
