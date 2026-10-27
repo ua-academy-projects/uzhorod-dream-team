@@ -1,0 +1,85 @@
+{
+    "env": "dev",
+    "project_id": "crypto-price-2610",
+    "region": "europe-central2",
+    "ssh_user": "proshina_playground",
+    "tags": {
+        "bastion": "bastion"
+    },
+    "firewalls": {
+        "iap_to_bastion_name": "fw-allow-iap-to-bastion"
+    },
+    "networks": {
+        "secure_vpc": "private-network",
+        "private_network": "crypto-private",
+        "edge_network": "crypto-edge",
+        "private_cidr": "192.168.77.0/24",
+        "edge_cidr": "192.168.78.0/24",
+        "iap_cidr": "35.235.240.0/20",
+        "nat_router_name": "nat-router",
+        "private_subnet_region": "europe-central2",
+        "edge_subnet_region": "europe-central2",
+        "nat_router_region": "europe-central2"
+    },
+    "machines": {
+        "bastion": {
+            "disc_size": 10,
+            "disc_type": "pd-balanced",
+            "type": "e2-micro",
+            "has_edge": true,
+            "zone": "europe-central2-a",
+            "image": "ubuntu-os-cloud/ubuntu-2404-lts-amd64"
+        },
+        "db": {
+            "disc_type": "pd-balanced",
+            "disc_size": 10,
+            "image": "ubuntu-os-cloud/ubuntu-2404-lts-amd64",
+            "type": "e2-small",
+            "has_edge": false,
+            "zone": "europe-central2-a",
+            "data_disk": {
+                "name": "crypto-db-data-disk",
+                "size": 10,
+                "type": "pd-standard",
+                "device_name": "data-disk"
+            }
+        },
+        "fetcher": {
+            "disc_type": "pd-balanced",
+            "disc_size": 10,
+            "image": "ubuntu-os-cloud/ubuntu-2404-lts-amd64",
+            "type": "e2-small",
+            "has_edge": false,
+            "zone": "europe-central2-a"
+        },
+        "history": {
+            "disc_type": "pd-balanced",
+            "disc_size": 10,
+            "image": "ubuntu-os-cloud/ubuntu-2404-lts-amd64",
+            "type": "e2-small",
+            "has_edge": false,
+            "zone": "europe-central2-a"
+        },
+        "ui": {
+            "disc_type": "pd-balanced",
+            "image": "ubuntu-os-cloud/ubuntu-2404-lts-amd64",
+            "disc_size": 10,
+            "type": "e2-small",
+            "has_edge": false,
+            "zone": "europe-central2-a"
+        }
+    },
+    "lb_source_ranges_list": [
+        "130.211.0.0/22",
+        "35.191.0.0/16"
+    ],
+    "google_project_services_list": [
+        "artifactregistry.googleapis.com",
+        "cloudbuild.googleapis.com",
+        "compute.googleapis.com",
+        "iam.googleapis.com",
+        "iap.googleapis.com",
+        "secretmanager.googleapis.com",
+        "storage.googleapis.com"
+    ]
+}
