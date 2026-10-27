@@ -9,11 +9,29 @@ IMAGE_DIR=${IMAGE_DIR:-$APP/images}
 HELPERS=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 NETWORK=kyiv-air
 READY_TIMEOUT=${READY_TIMEOUT:-600}
+readonly SSH_PORT=222
 POSTGRES_ONLY=${POSTGRES_ONLY:-false}
 [[ "$POSTGRES_ONLY" == true || "$POSTGRES_ONLY" == false ]] || { echo "Invalid POSTGRES_ONLY" >&2; exit 1; }
 export DEBIAN_FRONTEND=noninteractive
 
 fail() { echo "$*" >&2; exit 1; }
+configure_ssh() {
+  install -d -m 0755 /etc/ssh/sshd_config.d
+  sed -i -E '/^[[:space:]]*Port[[:space:]]+/d' /etc/ssh/sshd_config
+  local snippet
+  for snippet in /etc/ssh/sshd_config.d/*.conf; do
+    [[ -f "$snippet" ]] || continue
+    sed -i -E '/^[[:space:]]*Port[[:space:]]+/d' "$snippet"
+  done
+  printf 'Port %s\n' "$SSH_PORT" > /etc/ssh/sshd_config.d/00-kyiv-air-port.conf
+  chmod 0644 /etc/ssh/sshd_config.d/00-kyiv-air-port.conf
+  /usr/sbin/sshd -t
+  systemctl daemon-reload
+  if systemctl is-active --quiet ssh.socket || systemctl is-enabled --quiet ssh.socket; then
+    systemctl restart ssh.socket
+  fi
+  systemctl restart ssh.service
+}
 env_value() { sed -n "s/^$2=//p" "$1" | tr -d '\r'; }
 require_env() { [[ -s "$ENV_DIR/$1.env" ]] || fail "Missing $ENV_DIR/$1.env."; }
 

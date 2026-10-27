@@ -9,6 +9,7 @@ require_env fetcher
 key=$(env_value "$ENV_DIR/fetcher.env" OPENAQ_API_KEY)
 [[ "$key" =~ ^[A-Za-z0-9_-]+$ && "$key" != your_openaq_api_key_here ]] || fail "Set an actual OPENAQ_API_KEY in env/fetcher.env."
 if [[ "$POSTGRES_ONLY" == true ]]; then read_queue; else read_rabbitmq; fi
+configure_ssh
 install_docker
 load_image fetcher "$FETCHER_IMAGE"
 ensure_network

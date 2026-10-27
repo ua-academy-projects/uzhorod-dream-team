@@ -18,6 +18,7 @@ if [[ "$POSTGRES_ONLY" == true ]]; then
 else
   read_rabbitmq
 fi
+configure_ssh
 install_docker
 load_image migrate "$MIGRATION_IMAGE"
 ensure_network

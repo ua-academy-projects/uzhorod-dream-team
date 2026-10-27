@@ -2,7 +2,7 @@
 set -euo pipefail
 
 readonly CONFIG=${CONFIG:-/etc/kyiv-air}
-readonly NGINX_CONTAINER=kyiv-air-bastion
+readonly NGINX_CONTAINER=kyiv-air-ui
 
 (( EUID == 0 )) || { echo "Run this script with sudo." >&2; exit 1; }
 source "$CONFIG/certbot-settings.env"

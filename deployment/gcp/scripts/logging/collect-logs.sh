@@ -11,6 +11,7 @@ readonly ARCHIVE=$DATA_MOUNT/logs/archives
 readonly INITIAL_LOOKBACK_SECONDS=900
 readonly OVERLAP_SECONDS=1
 readonly RETENTION_DAYS=7
+readonly SSH_PORT=222
 readonly SSH_CONNECT_TIMEOUT_SECONDS=10
 readonly EXPORT_TIMEOUT_SECONDS=120
 readonly MAX_TIMESTAMP_DIGITS=12
@@ -40,7 +41,7 @@ collect() {
   if [[ "$vm" == db ]]; then
     timeout "$EXPORT_TIMEOUT_SECONDS" docker logs --timestamps --since "$since" --until "$end" "$container" > "$file.tmp" 2>&1 || return 1
   else
-    timeout "$EXPORT_TIMEOUT_SECONDS" ssh -n -T -i "$STATE/id_ed25519" \
+    timeout "$EXPORT_TIMEOUT_SECONDS" ssh -p "$SSH_PORT" -n -T -i "$STATE/id_ed25519" \
       -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
       -o "UserKnownHostsFile=$STATE/known_hosts" -o GlobalKnownHostsFile=/dev/null \
       -o "ConnectTimeout=$SSH_CONNECT_TIMEOUT_SECONDS" "log-collector@$ip" \
@@ -55,7 +56,7 @@ collect() {
 }
 
 while read -r vm ip container; do
-  [[ "$vm" =~ ^(db|fetcher|history|ui|bastion)$ && "$ip" =~ ^[0-9.]+$ && "$container" =~ ^kyiv-air-(postgres|redis|rabbitmq|fetcher|history|ui|bastion)$ ]] || { failed=1; continue; }
+  [[ "$vm" =~ ^(db|fetcher|history|ui)$ && "$ip" =~ ^[0-9.]+$ && "$container" =~ ^kyiv-air-(postgres|redis|rabbitmq|fetcher|history|ui)$ ]] || { failed=1; continue; }
   if ! collect "$vm" "$ip" "$container"; then
     echo "$(date -u +%FT%TZ) failed $vm/$container; checkpoint retained" >&2
     rm -f "$ARCHIVE/$vm/$container/"*.tmp "$STATE/$vm-$container.timestamp.tmp"

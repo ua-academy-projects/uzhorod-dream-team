@@ -8,6 +8,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 require_env history
 read_database
 if [[ "$POSTGRES_ONLY" == false ]]; then read_rabbitmq; fi
+configure_ssh
 install_docker
 load_image history "$HISTORY_IMAGE"
 docker pull "$POSTGRES_CLIENT_IMAGE"
