@@ -26,6 +26,11 @@ resource "google_compute_instance" "this" {
 
   metadata_startup_script = var.startup_script
 
+  # SSH access is granted through IAM (OS Login), no keys in metadata.
+  metadata = {
+    enable-oslogin = "TRUE"
+  }
+
   network_interface {
     subnetwork = var.subnetwork
 

@@ -2,7 +2,7 @@
     "env": "dev",
     "project_id": "crypto-price-2610",
     "region": "europe-central2",
-    "ssh_user": "proshina_playground",
+    "ssh_user": "proshina_playground_gmail_com",
     "bastion_name": "bastion",
     "backend": "postgres",
     "firewalls": {
