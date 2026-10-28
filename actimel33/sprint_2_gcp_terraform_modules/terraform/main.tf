@@ -107,11 +107,30 @@ module "compute_instances" {
   attached_disk_device_name = try(local.data_disks[each.key].device_name, null)
 
   service_account_email = module.iam.service_account_emails[each.key]
-
-  # No public IPs: the bastion is reached through IAP, the rest through the bastion.
-  has_public_ip = false
+  has_public_ip         = false
 
   depends_on = [module.project_services]
+}
+
+module "load_balancer" {
+  source = "./modules/load_balancer"
+
+  name              = local.config.load_balancer.name
+  zone              = local.machines[local.config.load_balancer.backend].zone
+  instance_id       = module.compute_instances[local.config.load_balancer.backend].instance_id
+  port              = local.config.load_balancer.port
+  health_check_path = local.config.load_balancer.health_check_path
+  domain_name       = local.config.load_balancer.domain
+
+  depends_on = [module.project_services]
+}
+
+module "dns" {
+  source = "./modules/dns"
+
+  cloudflare_zone_id = local.config.dns.cloudflare_zone_id
+  record_name        = local.config.load_balancer.domain
+  lb_ip_address      = module.load_balancer.lb_public_ip_address
 }
 
 module "ssh_config" {

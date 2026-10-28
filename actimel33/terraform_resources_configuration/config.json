@@ -27,10 +27,9 @@
                 "internal-vm"
             ]
         },
-        "fw-allow-lb-health-checks": {
+        "fw-allow-lb-to-ui": {
             "ports": [
-                "80",
-                "8080"
+                "5173"
             ],
             "source_ranges": [
                 "130.211.0.0/22",
@@ -139,6 +138,16 @@
             "history",
             "ui"
         ]
+    },
+    "load_balancer": {
+        "name": "crypto-ui",
+        "backend": "ui",
+        "port": 5173,
+        "health_check_path": "/",
+        "domain": "crypto.ai-optimizer.net"
+    },
+    "dns": {
+        "cloudflare_zone_id": "6eb0f4498c576e43d1731bfdfd82825e"
     },
     "google_project_services_list": [
         "artifactregistry.googleapis.com",

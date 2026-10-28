@@ -8,3 +8,6 @@ output "edge_subnetwork_self_link" {
 output "private_subnetwork_self_link" {
   value = google_compute_subnetwork.private.self_link
 }
+output "network_id" {
+  value = google_compute_network.vpc.id
+}
