@@ -13,6 +13,26 @@ locals {
     env        = local.config.env
     managed_by = "terraform"
   }
+
+  registry_host = "${local.config.region}-docker.pkg.dev"
+  registry      = "${local.registry_host}/${local.config.project_id}/${local.config.artifact_registry.repository_id}"
+  hosts         = { for name, machine in local.machines : name => "${name}.${machine.zone}.c.${local.config.project_id}.internal" }
+
+  # Common part + part of the role, only for VMs that run a container (image_tag in config.json).
+  startup_scripts = {
+    for name, machine in local.machines : name => join("\n", [
+      templatefile("${path.module}/templates/common.sh.tftpl", {}),
+      templatefile("${path.module}/templates/${name}.sh.tftpl", {
+        image            = "${local.registry}/${name}:${machine.image_tag}"
+        registry_host    = local.registry_host
+        project_id       = local.config.project_id
+        backend          = local.config.backend
+        hosts            = local.hosts
+        ui_port          = local.config.load_balancer.port
+        data_disk_device = try("/dev/disk/by-id/google-${local.data_disks[name].device_name}", "")
+      }),
+    ]) if can(machine.image_tag)
+  }
 }
 
 module "project_services" {
@@ -108,6 +128,7 @@ module "compute_instances" {
   attached_disk_device_name = try(local.data_disks[each.key].device_name, null)
 
   service_account_email = module.iam.service_account_emails[each.key]
+  startup_script        = try(local.startup_scripts[each.key], null)
   has_public_ip         = false
 
   depends_on = [module.project_services]

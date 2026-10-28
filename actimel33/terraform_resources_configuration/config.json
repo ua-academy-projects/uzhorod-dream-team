@@ -167,7 +167,8 @@
             "tags": [
                 "internal-vm",
                 "ui-vm"
-            ]
+            ],
+            "image_tag": "1.0.0"
         }
     },
     "iam": {

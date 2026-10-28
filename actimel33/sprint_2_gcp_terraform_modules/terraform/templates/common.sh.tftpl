@@ -1,0 +1,25 @@
+#!/bin/bash
+set -euo pipefail
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin
+export DEBIAN_FRONTEND=noninteractive
+
+if ! command -v docker >/dev/null 2>&1; then
+  apt-get -o DPkg::Lock::Timeout=300 -qq update
+  install -m 0755 -d /etc/apt/keyrings
+  curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+  echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" > /etc/apt/sources.list.d/docker.list
+  apt-get -o DPkg::Lock::Timeout=300 -qq update
+  apt-get -o DPkg::Lock::Timeout=300 -qq install -y docker-ce docker-ce-cli containerd.io
+fi
+
+DAEMON_JSON='{"log-driver":"json-file","log-opts":{"max-size":"10m","max-file":"3"}}'
+if [ "$(cat /etc/docker/daemon.json 2>/dev/null)" != "$DAEMON_JSON" ]; then
+  mkdir -p /etc/docker
+  echo "$DAEMON_JSON" > /etc/docker/daemon.json
+  systemctl restart docker
+fi
+systemctl enable --now docker
+
+if ! command -v gcloud >/dev/null 2>&1; then
+  snap install google-cloud-cli --classic
+fi
