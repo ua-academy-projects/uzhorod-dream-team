@@ -1,3 +1,0 @@
-*.sh text eol=lf
-Vagrantfile text eol=lf
-*.env.example text eol=lf
