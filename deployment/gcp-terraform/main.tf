@@ -8,6 +8,17 @@ module "config" {
   config = jsondecode(file("${path.module}/../config/deployment.json"))
 }
 
+module "network" {
+  source = "./modules/network/"
+
+  project_id = local.cfg.google.project_id
+  region     = local.cfg.google.region
+  config     = local.cfg.network
+  vms        = local.cfg.vm
+
+  depends_on = [google_project_service.required["compute"]]
+}
+
 module "registry" {
   source = "./modules/registry/"
 

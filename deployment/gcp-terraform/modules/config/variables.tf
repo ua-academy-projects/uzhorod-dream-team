@@ -11,9 +11,23 @@ variable "config" {
       domain  = optional(string, "khokhotva.pp.ua")
     }), {})
     vm = map(object({
+      private_ip     = string
+      public_ip      = optional(bool, false)
       needs_registry = optional(bool, false)
       secrets        = optional(list(string), [])
+      tags           = set(string)
     }))
+    network = object({
+      name        = string
+      subnet_cidr = string
+      enable_nat  = optional(bool, true)
+      firewall_rules = map(object({
+        source_tags   = optional(set(string), [])
+        source_ranges = optional(set(string), [])
+        target_tags   = set(string)
+        ports         = set(number)
+      }))
+    })
     secrets = optional(object({
       passwords = optional(set(string), [])
     }), {})
