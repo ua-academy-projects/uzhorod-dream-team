@@ -2,10 +2,9 @@
 locals {
   config = jsondecode(file("${path.module}/../../terraform_resources_configuration/config.json"))
 
-  machines         = local.config.machines
-  services         = local.config.google_project_services_list
-  lb_source_ranges = local.config.lb_source_ranges_list
-  networks         = local.config.networks
+  machines = local.config.machines
+  services = local.config.google_project_services_list
+  networks = local.config.networks
 
   # Machines that keep their data on a separate disk (data_disk in config.json).
   data_disks = { for name, machine in local.machines : name => machine.data_disk if can(machine.data_disk) }
@@ -41,10 +40,8 @@ module "network" {
 module "firewall" {
   source = "./modules/firewall"
 
-  network_name     = module.network.network_self_link
-  iap_cidr         = local.networks.iap_cidr
-  edge_cidr        = local.networks.edge_cidr
-  lb_source_ranges = local.lb_source_ranges
+  network_name = module.network.network_self_link
+  rules        = local.config.firewalls
 }
 
 module "data_disks" {
@@ -103,7 +100,7 @@ module "compute_instances" {
   disc_size    = each.value.disc_size
   disc_type    = each.value.disc_type
   subnetwork   = each.value.has_edge ? module.network.edge_subnetwork_self_link : module.network.private_subnetwork_self_link
-  network_tags = each.key == "bastion" ? ["bastion-vm"] : (each.key == "ui" ? ["internal-vm", "ui-vm"] : ["internal-vm"])
+  network_tags = each.value.tags
   labels       = local.labels
 
   attached_disk_id          = try(module.data_disks[each.key].id, null)
@@ -122,8 +119,8 @@ module "ssh_config" {
 
   filename     = pathexpand("~/.ssh/config.d/gcp_crypto_modules.conf")
   project      = local.config.project_id
-  zone         = local.machines.bastion.zone
+  zone         = local.machines[local.config.bastion_name].zone
   ssh_user     = local.config.ssh_user
-  bastion_name = "bastion"
-  hosts        = { for name, vm in module.compute_instances : name => vm.private_ip if name != "bastion" }
+  bastion_name = local.config.bastion_name
+  hosts        = { for name, vm in module.compute_instances : name => vm.private_ip if name != local.config.bastion_name }
 }

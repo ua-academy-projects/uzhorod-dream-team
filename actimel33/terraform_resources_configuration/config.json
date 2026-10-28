@@ -3,11 +3,43 @@
     "project_id": "crypto-price-2610",
     "region": "europe-central2",
     "ssh_user": "proshina_playground",
-    "tags": {
-        "bastion": "bastion"
-    },
+    "bastion_name": "bastion",
     "firewalls": {
-        "iap_to_bastion_name": "fw-allow-iap-to-bastion"
+        "fw-allow-iap-to-bastion": {
+            "ports": [
+                "22"
+            ],
+            "source_ranges": [
+                "35.235.240.0/20"
+            ],
+            "target_tags": [
+                "bastion-vm"
+            ]
+        },
+        "fw-allow-bastion-to-internal": {
+            "ports": [
+                "22"
+            ],
+            "source_tags": [
+                "bastion-vm"
+            ],
+            "target_tags": [
+                "internal-vm"
+            ]
+        },
+        "fw-allow-lb-health-checks": {
+            "ports": [
+                "80",
+                "8080"
+            ],
+            "source_ranges": [
+                "130.211.0.0/22",
+                "35.191.0.0/16"
+            ],
+            "target_tags": [
+                "ui-vm"
+            ]
+        }
     },
     "networks": {
         "secure_vpc": "private-network",
@@ -15,7 +47,6 @@
         "edge_network": "crypto-edge",
         "private_cidr": "192.168.77.0/24",
         "edge_cidr": "192.168.78.0/24",
-        "iap_cidr": "35.235.240.0/20",
         "nat_router_name": "nat-router",
         "private_subnet_region": "europe-central2",
         "edge_subnet_region": "europe-central2",
@@ -28,7 +59,10 @@
             "type": "e2-micro",
             "has_edge": true,
             "zone": "europe-central2-a",
-            "image": "ubuntu-os-cloud/ubuntu-2404-lts-amd64"
+            "image": "ubuntu-os-cloud/ubuntu-2404-lts-amd64",
+            "tags": [
+                "bastion-vm"
+            ]
         },
         "db": {
             "disc_type": "pd-balanced",
@@ -42,7 +76,10 @@
                 "size": 10,
                 "type": "pd-standard",
                 "device_name": "data-disk"
-            }
+            },
+            "tags": [
+                "internal-vm"
+            ]
         },
         "fetcher": {
             "disc_type": "pd-balanced",
@@ -50,7 +87,10 @@
             "image": "ubuntu-os-cloud/ubuntu-2404-lts-amd64",
             "type": "e2-small",
             "has_edge": false,
-            "zone": "europe-central2-a"
+            "zone": "europe-central2-a",
+            "tags": [
+                "internal-vm"
+            ]
         },
         "history": {
             "disc_type": "pd-balanced",
@@ -58,7 +98,10 @@
             "image": "ubuntu-os-cloud/ubuntu-2404-lts-amd64",
             "type": "e2-small",
             "has_edge": false,
-            "zone": "europe-central2-a"
+            "zone": "europe-central2-a",
+            "tags": [
+                "internal-vm"
+            ]
         },
         "ui": {
             "disc_type": "pd-balanced",
@@ -66,7 +109,11 @@
             "disc_size": 10,
             "type": "e2-small",
             "has_edge": false,
-            "zone": "europe-central2-a"
+            "zone": "europe-central2-a",
+            "tags": [
+                "internal-vm",
+                "ui-vm"
+            ]
         }
     },
     "iam": {
@@ -93,10 +140,6 @@
             "ui"
         ]
     },
-    "lb_source_ranges_list": [
-        "130.211.0.0/22",
-        "35.191.0.0/16"
-    ],
     "google_project_services_list": [
         "artifactregistry.googleapis.com",
         "cloudbuild.googleapis.com",
