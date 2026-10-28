@@ -131,7 +131,8 @@ module "compute_instances" {
   startup_script        = try(local.startup_scripts[each.key], null)
   has_public_ip         = false
 
-  depends_on = [module.project_services]
+  # Cloud NAT must exist before the first boot.
+  depends_on = [module.project_services, module.network]
 }
 
 module "load_balancer" {
