@@ -57,7 +57,6 @@ resource "google_compute_managed_ssl_certificate" "this" {
   }
 }
 
-# Without a policy Google allows TLS 1.0 and 1.1 with old ciphers.
 resource "google_compute_ssl_policy" "this" {
   name            = "${var.name}-ssl-policy"
   profile         = "MODERN"
