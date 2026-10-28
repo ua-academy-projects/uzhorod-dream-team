@@ -3,11 +3,11 @@ resource "google_compute_network" "vpc" {
   auto_create_subnetworks = false
 }
 
-resource "google_compute_subnetwork" "edge" {
-  name          = var.edge_network
-  ip_cidr_range = var.edge_cidr
+resource "google_compute_subnetwork" "management" {
+  name          = var.management_subnet
+  ip_cidr_range = var.management_cidr
   network       = google_compute_network.vpc.id
-  region        = var.edge_subnet_region
+  region        = var.management_subnet_region
 
 }
 

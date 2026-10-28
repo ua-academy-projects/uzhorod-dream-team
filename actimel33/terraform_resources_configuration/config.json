@@ -95,12 +95,12 @@
     "networks": {
         "secure_vpc": "private-network",
         "private_network": "crypto-private",
-        "edge_network": "crypto-edge",
+        "management_subnet": "crypto-management",
         "private_cidr": "192.168.77.0/24",
-        "edge_cidr": "192.168.78.0/24",
+        "management_cidr": "192.168.78.0/24",
         "nat_router_name": "nat-router",
         "private_subnet_region": "europe-central2",
-        "edge_subnet_region": "europe-central2",
+        "management_subnet_region": "europe-central2",
         "nat_router_region": "europe-central2"
     },
     "machines": {
@@ -108,7 +108,7 @@
             "disc_size": 10,
             "disc_type": "pd-balanced",
             "type": "e2-micro",
-            "has_edge": true,
+            "in_management_subnet": true,
             "zone": "europe-central2-a",
             "image": "ubuntu-os-cloud/ubuntu-2404-lts-amd64",
             "tags": [
@@ -120,7 +120,7 @@
             "disc_size": 10,
             "image": "ubuntu-os-cloud/ubuntu-2404-lts-amd64",
             "type": "e2-small",
-            "has_edge": false,
+            "in_management_subnet": false,
             "zone": "europe-central2-a",
             "data_disk": {
                 "name": "crypto-db-data-disk",
@@ -138,7 +138,7 @@
             "disc_size": 10,
             "image": "ubuntu-os-cloud/ubuntu-2404-lts-amd64",
             "type": "e2-small",
-            "has_edge": false,
+            "in_management_subnet": false,
             "zone": "europe-central2-a",
             "tags": [
                 "internal-vm",
@@ -150,7 +150,7 @@
             "disc_size": 10,
             "image": "ubuntu-os-cloud/ubuntu-2404-lts-amd64",
             "type": "e2-small",
-            "has_edge": false,
+            "in_management_subnet": false,
             "zone": "europe-central2-a",
             "tags": [
                 "internal-vm",
@@ -162,7 +162,7 @@
             "image": "ubuntu-os-cloud/ubuntu-2404-lts-amd64",
             "disc_size": 10,
             "type": "e2-small",
-            "has_edge": false,
+            "in_management_subnet": false,
             "zone": "europe-central2-a",
             "tags": [
                 "internal-vm",

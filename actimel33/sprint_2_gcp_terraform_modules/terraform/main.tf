@@ -24,15 +24,15 @@ module "project_services" {
 module "network" {
   source = "./modules/network"
 
-  secure_vpc            = local.networks.secure_vpc
-  private_network       = local.networks.private_network
-  edge_network          = local.networks.edge_network
-  private_cidr          = local.networks.private_cidr
-  edge_cidr             = local.networks.edge_cidr
-  private_subnet_region = local.networks.private_subnet_region
-  edge_subnet_region    = local.networks.edge_subnet_region
-  nat_router_name       = local.networks.nat_router_name
-  nat_router_region     = local.networks.nat_router_region
+  secure_vpc               = local.networks.secure_vpc
+  private_network          = local.networks.private_network
+  management_subnet        = local.networks.management_subnet
+  private_cidr             = local.networks.private_cidr
+  management_cidr          = local.networks.management_cidr
+  private_subnet_region    = local.networks.private_subnet_region
+  management_subnet_region = local.networks.management_subnet_region
+  nat_router_name          = local.networks.nat_router_name
+  nat_router_region        = local.networks.nat_router_region
 
   depends_on = [module.project_services]
 }
@@ -100,7 +100,7 @@ module "compute_instances" {
   image        = each.value.image
   disc_size    = each.value.disc_size
   disc_type    = each.value.disc_type
-  subnetwork   = each.value.has_edge ? module.network.edge_subnetwork_self_link : module.network.private_subnetwork_self_link
+  subnetwork   = each.value.in_management_subnet ? module.network.management_subnetwork_self_link : module.network.private_subnetwork_self_link
   network_tags = each.value.tags
   labels       = local.labels
 

@@ -1,21 +1,21 @@
 variable "private_cidr" { type = string }
-variable "edge_cidr" { type = string }
+variable "management_cidr" { type = string }
 variable "secure_vpc" {
   type        = string
   default     = "secure-vpc"
   description = "Secure VPC name"
 }
-variable "edge_network" {
+variable "management_subnet" {
   type        = string
-  description = "Edge network name"
+  description = "Name of the subnet for admin access (bastion)"
 }
 variable "private_network" {
   type        = string
   description = "Private network name"
 }
-variable "edge_subnet_region" {
+variable "management_subnet_region" {
   type        = string
-  description = "Region of the edge network"
+  description = "Region of the management subnet"
   default     = "europe-central2"
 }
 variable "private_subnet_region" {
