@@ -1,0 +1,49 @@
+cat > /usr/local/bin/start-fetcher.sh <<'SCRIPT'
+#!/bin/bash
+set -euo pipefail
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin
+
+umask 077
+mkdir -p /run/crypto
+%{ if backend == "redis" ~}
+REDIS_PASSWORD=$(gcloud secrets versions access latest --secret=crypto-redis-password --project=${project_id})
+%{ else ~}
+QUEUE_PASSWORD=$(gcloud secrets versions access latest --secret=crypto-db-queue-worker-password --project=${project_id})
+%{ endif ~}
+cat > /run/crypto/fetcher.env <<EOF
+BACKEND=${backend}
+FETCHER_HOST=0.0.0.0
+%{ if backend == "redis" ~}
+REDIS_URL=redis://${hosts.db}:6379
+REDIS_PASSWORD=$REDIS_PASSWORD
+%{ else ~}
+QUEUE_DATABASE_URL=postgres://queue_worker:$QUEUE_PASSWORD@${hosts.db}:5432/crypto
+%{ endif ~}
+EOF
+
+gcloud auth print-access-token | docker login -u oauth2accesstoken --password-stdin https://${registry_host}
+docker pull ${image}
+docker rm -f crypto_fetcher >/dev/null 2>&1 || true
+exec docker run --rm --name crypto_fetcher --hostname fetcher --read-only --env-file /run/crypto/fetcher.env -p 3002:3002 ${image}
+SCRIPT
+chmod 755 /usr/local/bin/start-fetcher.sh
+
+cat > /etc/systemd/system/crypto-fetcher.service <<'UNIT'
+[Unit]
+Description=crypto fetcher container
+After=docker.service network-online.target
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+ExecStart=/usr/local/bin/start-fetcher.sh
+ExecStop=/usr/bin/docker stop -t 30 crypto_fetcher
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+systemctl daemon-reload
+systemctl enable --now crypto-fetcher.service
