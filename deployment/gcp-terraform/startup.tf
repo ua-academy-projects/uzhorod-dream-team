@@ -16,7 +16,9 @@ locals {
       templates = role == "ui" ? {
         "ui.conf.template" = filebase64("${path.module}/nginx/ui.conf.template")
       } : {}
-      environment = merge(vm.env, local.cfg.images, local.application_images, {
+      environment = merge(vm.env, local.cfg.images, local.application_images, vm.data_disk == null ? {} : {
+        DATA_DEVICE = "/dev/disk/by-id/google-${vm.data_disk.device_name}"
+        }, {
         PROJECT_ID      = local.cfg.google.project_id
         REGISTRY_HOST   = "${local.cfg.google.region}-docker.pkg.dev"
         PRIVATE_IP      = vm.private_ip

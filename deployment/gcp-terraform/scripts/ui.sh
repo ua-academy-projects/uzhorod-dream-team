@@ -7,7 +7,8 @@ source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
 HISTORY_URL=${HISTORY_URL:-http://$HISTORY_IP:8081}
 prepare_runtime ui
-: "${CERTBOT_EMAIL:?Set CERTBOT_EMAIL in the UI environment.}"
+CERTBOT_EMAIL=$(get_secret certbot-email)
+: "${CERTBOT_EMAIL:?Set a nonempty email address in the certbot-email secret.}"
 CERTBOT_DOMAIN=${CERTBOT_DOMAIN:-${UI_ORIGIN:-}}
 CERTBOT_DOMAIN=${CERTBOT_DOMAIN#https://}
 [[ "$CERTBOT_DOMAIN" =~ ^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$ && "$CERTBOT_DOMAIN" == *.* ]] ||

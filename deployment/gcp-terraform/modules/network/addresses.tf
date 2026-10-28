@@ -16,5 +16,5 @@ resource "google_compute_address" "public" {
   name         = "${var.config.name}-${each.key}-public"
   region       = var.region
   address_type = "EXTERNAL"
-  network_tier = "STANDARD"
+  network_tier = var.config.public_network_tier
 }

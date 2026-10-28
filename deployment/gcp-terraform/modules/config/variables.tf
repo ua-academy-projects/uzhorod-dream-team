@@ -11,6 +11,17 @@ variable "config" {
       domain  = optional(string, "khokhotva.pp.ua")
     }), {})
     vm = map(object({
+      machine_type = string
+      boot_disk = object({
+        image   = string
+        size_gb = number
+        type    = string
+      })
+      data_disk = optional(object({
+        size_gb     = number
+        type        = string
+        device_name = string
+      }))
       private_ip     = string
       public_ip      = optional(bool, false)
       needs_registry = optional(bool, false)
@@ -21,9 +32,10 @@ variable "config" {
       env            = optional(map(string), {})
     }))
     network = object({
-      name        = string
-      subnet_cidr = string
-      enable_nat  = optional(bool, true)
+      name                = string
+      subnet_cidr         = string
+      enable_nat          = optional(bool, true)
+      public_network_tier = optional(string, "STANDARD")
       firewall_rules = map(object({
         source_tags   = optional(set(string), [])
         source_ranges = optional(set(string), [])
@@ -46,14 +58,4 @@ variable "config" {
       versions  = optional(map(string), {})
     }), {})
   })
-
-  validation {
-    condition = alltrue([
-      for vm in values(var.config.vm) :
-      contains(vm.scripts, "common.sh") && contains(vm.scripts, vm.entrypoint) &&
-      alltrue([for script in vm.scripts : can(regex("^[a-zA-Z0-9_-]+[.]sh$", script))]) &&
-      alltrue([for key, value in vm.env : can(regex("^[A-Z_][A-Z0-9_]*$", key)) && length(regexall("[\\r\\n]", value)) == 0])
-    ])
-    error_message = "Each VM must list common.sh and its entrypoint, use simple shell filenames, and supply single-line environment values with valid names."
-  }
 }

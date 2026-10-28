@@ -17,3 +17,7 @@ output "public_ips" {
 output "vm_tags" {
   value = local.vm_tags
 }
+
+output "public_network_tier" {
+  value = var.config.public_network_tier
+}

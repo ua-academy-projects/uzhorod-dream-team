@@ -8,9 +8,10 @@ variable "region" {
 
 variable "config" {
   type = object({
-    name        = string
-    subnet_cidr = string
-    enable_nat  = optional(bool, true)
+    name                = string
+    subnet_cidr         = string
+    enable_nat          = optional(bool, true)
+    public_network_tier = optional(string, "STANDARD")
     firewall_rules = map(object({
       source_tags   = optional(set(string), [])
       source_ranges = optional(set(string), [])

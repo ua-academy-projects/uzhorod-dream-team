@@ -12,6 +12,7 @@ POSTGRES_ONLY=${POSTGRES_ONLY:-false}
 export DEBIAN_FRONTEND=noninteractive
 
 fail() { echo "$*" >&2; exit 1; }
+
 configure_ssh() {
   install -d -m 0755 /etc/ssh/sshd_config.d
   sed -i -E '/^[[:space:]]*Port[[:space:]]+/d' /etc/ssh/sshd_config
@@ -29,6 +30,7 @@ configure_ssh() {
   fi
   systemctl restart ssh.service
 }
+
 get_secret() {
   local name=$1 version secret
   version=$(jq -er --arg name "$name" '.[$name].version // empty' <<< "$SECRET_REFS") ||
