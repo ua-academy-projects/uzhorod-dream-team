@@ -1,0 +1,179 @@
+cat > /usr/local/bin/prepare-data-disk.sh <<'SCRIPT'
+#!/bin/bash
+# Usage: prepare-data-disk.sh DEVICE MOUNTPOINT
+set -euo pipefail
+DEVICE=$1
+MOUNTPOINT=$2
+
+for _ in $(seq 1 30); do
+  [ -e "$DEVICE" ] && break
+  sleep 2
+done
+
+# Format only a new disk: no filesystem and the first MiB is all zeros.
+# A recreated VM gets the old disk with the data, and blkid may fail for a moment.
+if ! blkid "$DEVICE" >/dev/null 2>&1; then
+  NON_ZERO=$(head -c 1048576 "$DEVICE" | tr -d '\0' | wc -c)
+  if [ "$NON_ZERO" = 0 ]; then
+    mkfs.ext4 -q "$DEVICE"
+  fi
+fi
+UUID=$(blkid -s UUID -o value "$DEVICE")
+mkdir -p "$MOUNTPOINT"
+if ! grep -q "UUID=$UUID" /etc/fstab; then
+  echo "UUID=$UUID $MOUNTPOINT ext4 defaults,nofail 0 2" >> /etc/fstab
+fi
+if ! mountpoint -q "$MOUNTPOINT"; then
+  mount "$DEVICE" "$MOUNTPOINT"
+fi
+mkdir -p "$MOUNTPOINT/pgdata" "$MOUNTPOINT/redisdata"
+SCRIPT
+chmod 755 /usr/local/bin/prepare-data-disk.sh
+/usr/local/bin/prepare-data-disk.sh ${data_disk_device} /mnt/data
+
+cat > /usr/local/bin/start-db.sh <<'SCRIPT'
+#!/bin/bash
+set -euo pipefail
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin
+
+umask 077
+mkdir -p /run/crypto
+APP_PASSWORD=$(gcloud secrets versions access latest --secret=crypto-db-app-password --project=${project_id})
+cat > /run/crypto/db.env <<EOF
+POSTGRES_USER=app
+POSTGRES_DB=crypto
+POSTGRES_PASSWORD=$APP_PASSWORD
+EOF
+
+gcloud auth print-access-token | docker login -u oauth2accesstoken --password-stdin https://${registry_host}
+docker pull ${image}
+docker rm -f crypto_db >/dev/null 2>&1 || true
+exec docker run --rm --name crypto_db --env-file /run/crypto/db.env -p 5432:5432 -v /mnt/data/pgdata:/var/lib/postgresql/data --health-cmd 'pg_isready -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' --health-interval 5s ${image}
+SCRIPT
+chmod 755 /usr/local/bin/start-db.sh
+
+cat > /etc/systemd/system/crypto-db.service <<'UNIT'
+[Unit]
+Description=crypto db container
+After=docker.service network-online.target
+Wants=network-online.target
+Requires=docker.service
+RequiresMountsFor=/mnt/data
+
+[Service]
+ExecStart=/usr/local/bin/start-db.sh
+ExecStop=/usr/bin/docker stop -t 30 crypto_db
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+cat > /usr/local/bin/set-db-roles.sh <<'SCRIPT'
+#!/bin/bash
+set -euo pipefail
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin
+
+STATUS=""
+for _ in $(seq 1 60); do
+  STATUS=$(docker inspect -f '{{.State.Health.Status}}' crypto_db 2>/dev/null || true)
+  if [ "$STATUS" = healthy ]; then
+    break
+  fi
+  sleep 5
+done
+if [ "$STATUS" != healthy ]; then
+  echo "crypto_db is not healthy" >&2
+  exit 1
+fi
+
+APP_PASSWORD=$(gcloud secrets versions access latest --secret=crypto-db-app-password --project=${project_id})
+QUEUE_PASSWORD=$(gcloud secrets versions access latest --secret=crypto-db-queue-worker-password --project=${project_id})
+
+# Passwords go to psql on stdin and are not logged: they never reach a command line.
+{
+  printf "\\set app_pw '%s'\n" "$APP_PASSWORD"
+  printf "\\set queue_pw '%s'\n" "$QUEUE_PASSWORD"
+  cat <<'SQL'
+SET log_min_error_statement = panic;
+ALTER ROLE app PASSWORD :'app_pw';
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'queue_worker') THEN
+        CREATE ROLE queue_worker LOGIN;
+    END IF;
+END $$;
+ALTER ROLE queue_worker PASSWORD :'queue_pw';
+SQL
+} | docker exec -i crypto_db sh -c 'psql -q -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
+SCRIPT
+chmod 755 /usr/local/bin/set-db-roles.sh
+
+cat > /etc/systemd/system/crypto-db-roles.service <<'UNIT'
+[Unit]
+Description=crypto db roles and passwords
+After=crypto-db.service
+Wants=crypto-db.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/set-db-roles.sh
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+%{ if backend == "redis" ~}
+cat > /usr/local/bin/start-redis.sh <<'SCRIPT'
+#!/bin/bash
+set -euo pipefail
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin
+
+umask 077
+mkdir -p /run/crypto
+REDIS_PASSWORD=$(gcloud secrets versions access latest --secret=crypto-redis-password --project=${project_id})
+cat > /run/crypto/redis.env <<EOF
+REDIS_PASSWORD=$REDIS_PASSWORD
+EOF
+cat > /run/crypto/redis.conf <<EOF
+requirepass $REDIS_PASSWORD
+EOF
+# Redis reads it as the redis user; /run/crypto itself stays root-only.
+chmod 644 /run/crypto/redis.conf
+
+docker pull redis:7-alpine
+docker rm -f crypto_redis >/dev/null 2>&1 || true
+exec docker run --rm --name crypto_redis --env-file /run/crypto/redis.env -v /run/crypto/redis.conf:/usr/local/etc/redis/redis.conf:ro -p 6379:6379 -v /mnt/data/redisdata:/data --health-cmd 'REDISCLI_AUTH="$REDIS_PASSWORD" redis-cli ping | grep -q PONG' --health-interval 5s redis:7-alpine redis-server /usr/local/etc/redis/redis.conf --appendonly yes
+SCRIPT
+chmod 755 /usr/local/bin/start-redis.sh
+
+cat > /etc/systemd/system/crypto-redis.service <<'UNIT'
+[Unit]
+Description=crypto redis container
+After=docker.service network-online.target
+Wants=network-online.target
+Requires=docker.service
+RequiresMountsFor=/mnt/data
+
+[Service]
+ExecStart=/usr/local/bin/start-redis.sh
+ExecStop=/usr/bin/docker stop -t 30 crypto_redis
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+%{ endif ~}
+systemctl daemon-reload
+systemctl enable --now crypto-db.service
+%{ if backend == "redis" ~}
+systemctl enable --now crypto-redis.service
+%{ endif ~}
+# Waits for Postgres in the background, so it does not hold up the boot.
+systemctl enable crypto-db-roles.service
+systemctl start --no-block crypto-db-roles.service

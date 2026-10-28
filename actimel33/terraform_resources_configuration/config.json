@@ -131,7 +131,8 @@
             "tags": [
                 "internal-vm",
                 "db-vm"
-            ]
+            ],
+            "image_tag": "1.0.0"
         },
         "fetcher": {
             "disc_type": "pd-balanced",
