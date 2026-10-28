@@ -1,0 +1,9 @@
+env/
+images/
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+crash.*.log
+*.secret.tfvars
