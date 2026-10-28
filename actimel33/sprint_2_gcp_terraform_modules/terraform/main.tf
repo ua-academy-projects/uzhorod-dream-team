@@ -41,7 +41,8 @@ module "firewall" {
   source = "./modules/firewall"
 
   network_name = module.network.network_self_link
-  rules        = local.config.firewalls
+  # postgres or redis.
+  rules = merge(local.config.firewalls, local.config.backend_firewalls[local.config.backend])
 }
 
 module "data_disks" {

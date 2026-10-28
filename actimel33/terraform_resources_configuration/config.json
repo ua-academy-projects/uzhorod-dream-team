@@ -4,6 +4,7 @@
     "region": "europe-central2",
     "ssh_user": "proshina_playground",
     "bastion_name": "bastion",
+    "backend": "postgres",
     "firewalls": {
         "fw-allow-iap-to-bastion": {
             "ports": [
@@ -38,6 +39,57 @@
             "target_tags": [
                 "ui-vm"
             ]
+        },
+        "fw-allow-history-to-db": {
+            "ports": [
+                "5432"
+            ],
+            "source_tags": [
+                "history-vm"
+            ],
+            "target_tags": [
+                "db-vm"
+            ]
+        },
+        "fw-allow-ui-to-history": {
+            "ports": [
+                "3001"
+            ],
+            "source_tags": [
+                "ui-vm"
+            ],
+            "target_tags": [
+                "history-vm"
+            ]
+        }
+    },
+    "backend_firewalls": {
+        "postgres": {
+            "fw-allow-fetcher-to-db": {
+                "ports": [
+                    "5432"
+                ],
+                "source_tags": [
+                    "fetcher-vm"
+                ],
+                "target_tags": [
+                    "db-vm"
+                ]
+            }
+        },
+        "redis": {
+            "fw-allow-app-to-redis": {
+                "ports": [
+                    "6379"
+                ],
+                "source_tags": [
+                    "fetcher-vm",
+                    "history-vm"
+                ],
+                "target_tags": [
+                    "db-vm"
+                ]
+            }
         }
     },
     "networks": {
@@ -77,7 +129,8 @@
                 "device_name": "data-disk"
             },
             "tags": [
-                "internal-vm"
+                "internal-vm",
+                "db-vm"
             ]
         },
         "fetcher": {
@@ -88,7 +141,8 @@
             "has_edge": false,
             "zone": "europe-central2-a",
             "tags": [
-                "internal-vm"
+                "internal-vm",
+                "fetcher-vm"
             ]
         },
         "history": {
@@ -99,7 +153,8 @@
             "has_edge": false,
             "zone": "europe-central2-a",
             "tags": [
-                "internal-vm"
+                "internal-vm",
+                "history-vm"
             ]
         },
         "ui": {
@@ -119,11 +174,35 @@
         "service_account_prefix": "sa-vm-"
     },
     "secrets": {
-        "crypto-db-password": {
+        "crypto-db-app-password": {
+            "length": 16,
+            "readers": [
+                "db",
+                "history"
+            ],
+            "version": 1
+        },
+        "crypto-db-queue-worker-password": {
             "length": 16,
             "readers": [
                 "db",
                 "fetcher"
+            ],
+            "version": 1
+        },
+        "crypto-redis-password": {
+            "length": 16,
+            "readers": [
+                "db",
+                "history",
+                "fetcher"
+            ],
+            "version": 1
+        },
+        "crypto-session-secret": {
+            "length": 32,
+            "readers": [
+                "history"
             ],
             "version": 1
         }
