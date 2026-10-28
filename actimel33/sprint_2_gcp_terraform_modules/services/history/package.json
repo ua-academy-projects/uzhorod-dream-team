@@ -1,0 +1,24 @@
+{
+  "name": "history",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node --env-file=../../.env src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "connect-redis": "^10.0.0",
+    "express": "^5.2.1",
+    "express-session": "^1.19.0",
+    "pg": "^8.23.0",
+    "redis": "^6.3.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/express-session": "^1.19.0",
+    "@types/node": "^26.6.3",
+    "@types/pg": "^8.23.1",
+    "typescript": "^7.0.2"
+  }
+}

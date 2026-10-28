@@ -1,0 +1,29 @@
+server {
+    listen 8080;
+    root /usr/share/nginx/html;
+
+    # Looks history up on every request, so a new history IP does not break the UI.
+    resolver ${NGINX_LOCAL_RESOLVERS} valid=10s;
+
+    # /api/... → history without the /api prefix.
+    location /api/ {
+        set $history ${HISTORY_URL};
+        rewrite ^/api/(.*)$ /$1 break;
+        proxy_pass $history;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+
+    # Hashed assets never change.
+    location /assets/ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
+
+    location / {
+        try_files $uri /index.html;
+    }
+
+    gzip on;
+    gzip_types text/css application/javascript application/json image/svg+xml;
+}

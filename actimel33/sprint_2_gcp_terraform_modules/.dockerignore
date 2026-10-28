@@ -1,0 +1,7 @@
+.git
+.env
+**/node_modules
+bin
+ui/dist
+docs
+terraform
