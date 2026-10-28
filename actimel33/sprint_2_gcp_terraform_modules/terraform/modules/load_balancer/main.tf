@@ -57,6 +57,13 @@ resource "google_compute_managed_ssl_certificate" "this" {
   }
 }
 
+# Without a policy Google allows TLS 1.0 and 1.1 with old ciphers.
+resource "google_compute_ssl_policy" "this" {
+  name            = "${var.name}-ssl-policy"
+  profile         = "MODERN"
+  min_tls_version = "TLS_1_2"
+}
+
 resource "google_compute_url_map" "https" {
   name            = "${var.name}-https-map"
   default_service = google_compute_backend_service.backend.id
@@ -67,6 +74,7 @@ resource "google_compute_target_https_proxy" "https" {
   name             = "${var.name}-https-proxy"
   url_map          = google_compute_url_map.https.id
   ssl_certificates = [google_compute_managed_ssl_certificate.this.id]
+  ssl_policy       = google_compute_ssl_policy.this.id
 }
 
 resource "google_compute_global_forwarding_rule" "https" {
