@@ -3,13 +3,10 @@ set -Eeuo pipefail
 
 APP=${APP:-/opt/kyiv-air}
 CONFIG=${CONFIG:-/etc/kyiv-air}
-if [[ -f "$CONFIG/deployment.env" ]]; then source "$CONFIG/deployment.env"; fi
-ENV_DIR=${ENV_DIR:-$CONFIG}
-IMAGE_DIR=${IMAGE_DIR:-$APP/images}
 HELPERS=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 NETWORK=kyiv-air
 READY_TIMEOUT=${READY_TIMEOUT:-600}
-readonly SSH_PORT=222
+readonly SSH_PORT=${SSH_PORT:-222}
 POSTGRES_ONLY=${POSTGRES_ONLY:-false}
 [[ "$POSTGRES_ONLY" == true || "$POSTGRES_ONLY" == false ]] || { echo "Invalid POSTGRES_ONLY" >&2; exit 1; }
 export DEBIAN_FRONTEND=noninteractive
@@ -32,21 +29,26 @@ configure_ssh() {
   fi
   systemctl restart ssh.service
 }
-env_value() { sed -n "s/^$2=//p" "$1" | tr -d '\r'; }
-require_env() { [[ -s "$ENV_DIR/$1.env" ]] || fail "Missing $ENV_DIR/$1.env."; }
+get_secret() {
+  local name=$1 version secret
+  version=$(jq -er --arg name "$name" '.[$name].version // empty' <<< "$SECRET_REFS") ||
+    fail "Missing numbered version for secret $name."
+  [[ "$version" =~ ^[1-9][0-9]*$ ]] || fail "Invalid version for secret $name."
+  secret=$(jq -er --arg name "$name" '.[$name].secret_id' <<< "$SECRET_REFS")
+  gcloud secrets versions access "$version" --project="$PROJECT_ID" --secret="$secret"
+}
 
-copy_env() {
-  require_env "$1"
-  if [[ ! "$ENV_DIR/$1.env" -ef "$CONFIG/$1.env" ]]; then
-    install -m 0600 "$ENV_DIR/$1.env" "$CONFIG/$1.env"
-  fi
+create_env() {
+  install -d -m 0700 "$CONFIG"
+  local application_env=${APPLICATION_ENV:-'{}'}
+  jq -r 'to_entries[] | "\(.key)=\(.value)"' <<< "$application_env" > "$CONFIG/$1.env"
   chmod 0600 "$CONFIG/$1.env"
-  sed -i 's/\r$//' "$CONFIG/$1.env"
 }
 
 set_env() {
+  [[ "$3" != *$'\n'* && "$3" != *$'\r'* ]] || fail "Invalid multiline value for $2."
   sed -i "/^$2=/d" "$CONFIG/$1.env"
-  printf '\n%s=%s\n' "$2" "$3" >> "$CONFIG/$1.env"
+  printf '%s=%s\n' "$2" "$3" >> "$CONFIG/$1.env"
 }
 
 validate_password() {
@@ -55,10 +57,10 @@ validate_password() {
 }
 
 read_database() {
-  require_env db
-  DB_NAME=$(env_value "$ENV_DIR/db.env" POSTGRES_DB)
-  DB_PASSWORD=$(env_value "$ENV_DIR/db.env" POSTGRES_PASSWORD)
-  REDIS_PASSWORD=$(env_value "$ENV_DIR/db.env" REDIS_PASSWORD)
+  DB_NAME=${POSTGRES_DB:-kyiv_air}
+  DB_PASSWORD=$(get_secret postgres-history-password)
+  REDIS_PASSWORD=
+  if [[ "$POSTGRES_ONLY" == false ]]; then REDIS_PASSWORD=$(get_secret redis-password); fi
   [[ "$DB_NAME" =~ ^[a-z_][a-z0-9_]*$ ]] || fail "POSTGRES_DB must be a lowercase identifier."
   validate_password POSTGRES_PASSWORD "$DB_PASSWORD" 16
   if [[ "$POSTGRES_ONLY" == false ]]; then validate_password REDIS_PASSWORD "$REDIS_PASSWORD" 32; fi
@@ -67,17 +69,15 @@ read_database() {
 }
 
 read_queue() {
-  require_env queue
-  QUEUE_DB_NAME=$(env_value "$ENV_DIR/queue.env" POSTGRES_DB)
-  FETCHER_DB_PASSWORD=$(env_value "$ENV_DIR/queue.env" POSTGRES_FETCHER_PASSWORD)
-  [[ "$QUEUE_DB_NAME" =~ ^[a-z_][a-z0-9_]*$ ]] || fail "POSTGRES_DB in queue.env must be a lowercase identifier."
+  QUEUE_DB_NAME=${POSTGRES_DB:-kyiv_air}
+  FETCHER_DB_PASSWORD=$(get_secret postgres-fetcher-password)
+  [[ "$QUEUE_DB_NAME" =~ ^[a-z_][a-z0-9_]*$ ]] || fail "POSTGRES_DB must be a lowercase identifier."
   validate_password POSTGRES_FETCHER_PASSWORD "$FETCHER_DB_PASSWORD" 16
   FETCHER_DATABASE_URL="postgres://kyiv_air_fetcher:${FETCHER_DB_PASSWORD}@${DB_HOST}:5432/${QUEUE_DB_NAME}?sslmode=disable"
 }
 
 read_rabbitmq() {
-  require_env rabbitmq
-  RABBITMQ_PASSWORD=$(env_value "$ENV_DIR/rabbitmq.env" RABBITMQ_PASSWORD)
+  RABBITMQ_PASSWORD=$(get_secret rabbitmq-password)
   validate_password RABBITMQ_PASSWORD "$RABBITMQ_PASSWORD" 32
   RABBITMQ_URL="amqp://kyiv_air:${RABBITMQ_PASSWORD}@${RABBITMQ_HOST}:5672/kyiv-air"
 }
@@ -89,7 +89,9 @@ install_docker() {
   install -d -m 0755 /etc/apt/keyrings
   curl -fsSL --retry 3 https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
   chmod 0644 /etc/apt/keyrings/docker.asc
-  echo 'deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu noble stable' > /etc/apt/sources.list.d/docker.list
+  local codename
+  codename=$(. /etc/os-release; printf '%s' "${UBUNTU_CODENAME:-$VERSION_CODENAME}")
+  printf 'deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu %s stable\n' "$codename" > /etc/apt/sources.list.d/docker.list
   apt-get -o APT::Update::Error-Mode=any update
   apt-get install -y --no-install-recommends docker-ce docker-ce-cli containerd.io
   local major
@@ -98,8 +100,6 @@ install_docker() {
   systemctl enable --now docker
   install -d -m 0755 "$APP/bin"
   install -d -m 0700 "$CONFIG"
-  install -m 0644 "$HELPERS/images.env" "$APP/images.env"
-  source "$APP/images.env"
 }
 
 ensure_network() {
@@ -108,15 +108,56 @@ ensure_network() {
   fi
 }
 
-load_image() {
-  local archive="$IMAGE_DIR/$1.tar" image=$2 platform loaded
-  [[ -s "$archive" ]] || fail "Missing image archive: $archive. Build it locally and upload it before provisioning."
-  loaded=$(docker image load --input "$archive")
-  printf '%s\n' "$loaded"
-  grep -qxF "Loaded image: $image" <<< "$loaded" || fail "Archive $archive must contain the tag $image."
-  platform=$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "$image") ||
-    fail "Archive $archive must contain $image."
-  [[ "$platform" == linux/amd64 ]] || fail "$image must target linux/amd64; got $platform."
+pull_image() {
+  docker pull --platform linux/amd64 "$1"
+}
+
+prepare_runtime() {
+  local role=$1
+  umask 077
+  configure_ssh
+  apt-get -o APT::Update::Error-Mode=any update
+  apt-get install -y --no-install-recommends ca-certificates curl gnupg jq
+  install -d -m 0755 /etc/apt/keyrings
+  curl -fsSL --retry 3 https://packages.cloud.google.com/apt/doc/apt-key.gpg -o /etc/apt/keyrings/google-cloud.asc
+  chmod 0644 /etc/apt/keyrings/google-cloud.asc
+  printf '%s\n' 'deb [signed-by=/etc/apt/keyrings/google-cloud.asc] https://packages.cloud.google.com/apt cloud-sdk main' > /etc/apt/sources.list.d/google-cloud.list
+  apt-get -o APT::Update::Error-Mode=any update
+  apt-get install -y --no-install-recommends google-cloud-cli
+  install_docker
+  gcloud auth configure-docker "$REGISTRY_HOST" --quiet
+  ensure_network
+  create_env "$role"
+}
+
+prepare_data_disk() {
+  : "${DATA_DEVICE:?Set DATA_DEVICE to the attached data disk device path.}"
+  local filesystem uuid mounted
+  apt-get -o APT::Update::Error-Mode=any update
+  apt-get install -y --no-install-recommends e2fsprogs util-linux
+  [[ -b "$DATA_DEVICE" ]] || fail "Data disk is not attached: $DATA_DEVICE"
+  if mountpoint -q "$DATA_MOUNT"; then
+    mounted=$(findmnt -n -o MAJ:MIN --target "$DATA_MOUNT")
+    [[ "$mounted" == "$(lsblk -dn -o MAJ:MIN "$DATA_DEVICE")" ]] || fail "A different disk is mounted at $DATA_MOUNT."
+    return
+  fi
+  [[ -z "$(lsblk -n -o MOUNTPOINTS "$DATA_DEVICE" | tr -d '[:space:]')" ]] || fail "Data disk is already mounted elsewhere."
+  filesystem=$(lsblk -dn -o FSTYPE "$DATA_DEVICE")
+  if [[ -z "$filesystem" ]]; then
+    [[ $(lsblk -nr -o NAME "$DATA_DEVICE" | wc -l) -eq 1 && -z "$(wipefs -n --noheadings "$DATA_DEVICE")" ]] ||
+      fail "Refusing to format a disk containing partitions or signatures."
+    mkfs.ext4 "$DATA_DEVICE"
+    filesystem=ext4
+  fi
+  [[ "$filesystem" == ext4 ]] || fail "Expected an ext4 data disk; got $filesystem."
+  uuid=$(blkid -s UUID -o value "$DATA_DEVICE")
+  install -d -m 0755 "$DATA_MOUNT"
+  if ! findmnt --fstab --mountpoint "$DATA_MOUNT" >/dev/null; then
+    printf 'UUID=%s %s ext4 defaults,nofail 0 2\n' "$uuid" "$DATA_MOUNT" >> /etc/fstab
+  else
+    [[ $(findmnt --fstab -n -o SOURCE --mountpoint "$DATA_MOUNT") == "UUID=$uuid" ]] || fail "Conflicting fstab entry for $DATA_MOUNT."
+  fi
+  mount "$DATA_MOUNT"
 }
 
 replace_container() {

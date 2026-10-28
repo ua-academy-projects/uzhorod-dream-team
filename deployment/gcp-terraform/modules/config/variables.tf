@@ -16,6 +16,9 @@ variable "config" {
       needs_registry = optional(bool, false)
       secrets        = optional(list(string), [])
       tags           = set(string)
+      scripts        = list(string)
+      entrypoint     = string
+      env            = optional(map(string), {})
     }))
     network = object({
       name        = string
@@ -28,8 +31,29 @@ variable "config" {
         ports         = set(number)
       }))
     })
+    application = object({
+      postgres_only = bool
+      database_name = string
+      image_version = string
+      ready_timeout = optional(number, 600)
+    })
+    registry = object({
+      repository_id = string
+    })
+    images = map(string)
     secrets = optional(object({
       passwords = optional(set(string), [])
+      versions  = optional(map(string), {})
     }), {})
   })
+
+  validation {
+    condition = alltrue([
+      for vm in values(var.config.vm) :
+      contains(vm.scripts, "common.sh") && contains(vm.scripts, vm.entrypoint) &&
+      alltrue([for script in vm.scripts : can(regex("^[a-zA-Z0-9_-]+[.]sh$", script))]) &&
+      alltrue([for key, value in vm.env : can(regex("^[A-Z_][A-Z0-9_]*$", key)) && length(regexall("[\\r\\n]", value)) == 0])
+    ])
+    error_message = "Each VM must list common.sh and its entrypoint, use simple shell filenames, and supply single-line environment values with valid names."
+  }
 }

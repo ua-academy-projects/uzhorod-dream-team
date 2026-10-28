@@ -3,27 +3,24 @@ set -Eeuo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
 (( EUID == 0 )) || fail "Run this script with sudo."
-: "${PRIVATE_IP:?Set PRIVATE_IP in /etc/kyiv-air/deployment.env or the environment.}"
+: "${PRIVATE_IP:?Set PRIVATE_IP in the startup environment.}"
 DB_HOST=${DB_HOST:-$PRIVATE_IP}
 REDIS_HOST=${REDIS_HOST:-$PRIVATE_IP}
 RABBITMQ_HOST=${RABBITMQ_HOST:-$PRIVATE_IP}
 DATA_MOUNT=${DATA_MOUNT:-/srv/kyiv-air-data}
 [[ "$DATA_MOUNT" =~ ^/[A-Za-z0-9_/-]+$ ]] || fail "DATA_MOUNT must be an absolute path without spaces."
-mountpoint -q "$DATA_MOUNT" || fail "Mount the database disk at $DATA_MOUNT before provisioning."
+prepare_data_disk
+prepare_runtime db
 
 read_database
 if [[ "$POSTGRES_ONLY" == true ]]; then
   read_queue
-  [[ "$QUEUE_DB_NAME" == "$DB_NAME" ]] || fail "POSTGRES_DB must match in db.env and queue.env."
+  [[ "$QUEUE_DB_NAME" == "$DB_NAME" ]] || fail "Queue and application database names must match."
 else
   read_rabbitmq
 fi
-configure_ssh
-install_docker
-load_image migrate "$MIGRATION_IMAGE"
-ensure_network
+pull_image "$MIGRATION_IMAGE"
 
-copy_env db
 printf 'POSTGRES_DB=%s\nPOSTGRES_USER=kyiv_air\nPOSTGRES_PASSWORD=%s\n' "$DB_NAME" "$DB_PASSWORD" > "$CONFIG/postgres.env"
 chmod 0600 "$CONFIG/postgres.env"
 pg_ports=(-p "$PRIVATE_IP:5432:5432" -p 127.0.0.1:5432:5432)
@@ -104,6 +101,13 @@ redis_ports=(-p "$PRIVATE_IP:6379:6379" -p 127.0.0.1:6379:6379)
 rabbit_ports=(-p "$PRIVATE_IP:5672:5672" -p 127.0.0.1:5672:5672)
 docker pull "$REDIS_IMAGE"
 docker pull "$RABBITMQ_IMAGE"
+
+for service in redis rabbitmq; do
+  if [[ "$service" == redis ]]; then image=$REDIS_IMAGE; else image=$RABBITMQ_IMAGE; fi
+  docker run --rm --user root --entrypoint sh \
+    --mount "type=bind,src=$DATA_MOUNT,dst=/data" "$image" -c \
+    'mkdir -p "/data/$1" && chown "$1:$1" "/data/$1" && chmod 0700 "/data/$1"' sh "$service"
+done
 
 replace_container kyiv-air-redis "${redis_ports[@]}" \
   --mount "type=bind,src=$DATA_MOUNT/redis,dst=/data" -v "$CONFIG/redis.conf:/usr/local/etc/redis/redis.conf:ro" \

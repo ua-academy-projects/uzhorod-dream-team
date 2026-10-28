@@ -6,4 +6,4 @@ images/
 *.tfplan
 crash.log
 crash.*.log
-*.secret.tfvars
+*.secret.auto.tfvars

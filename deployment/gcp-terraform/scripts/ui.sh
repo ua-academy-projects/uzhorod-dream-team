@@ -3,29 +3,23 @@ set -Eeuo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
 (( EUID == 0 )) || fail "Run this script with sudo."
-: "${PRIVATE_IP:?Set PRIVATE_IP in /etc/kyiv-air/deployment.env or the environment.}"
+: "${PRIVATE_IP:?Set PRIVATE_IP in the startup environment.}"
 
 HISTORY_URL=${HISTORY_URL:-http://$HISTORY_IP:8081}
-require_env ui
-: "${CERTBOT_EMAIL:?Set CERTBOT_EMAIL in deployment.env for the certificate account.}"
+prepare_runtime ui
+: "${CERTBOT_EMAIL:?Set CERTBOT_EMAIL in the UI environment.}"
 CERTBOT_DOMAIN=${CERTBOT_DOMAIN:-${UI_ORIGIN:-}}
 CERTBOT_DOMAIN=${CERTBOT_DOMAIN#https://}
 [[ "$CERTBOT_DOMAIN" =~ ^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$ && "$CERTBOT_DOMAIN" == *.* ]] ||
   fail "Set CERTBOT_DOMAIN to the public DNS hostname, without a protocol or path."
-[[ -s "$ENV_DIR/cloudflare.ini" ]] || fail "Missing $ENV_DIR/cloudflare.ini containing dns_cloudflare_api_token."
-configure_ssh
-install_docker
-load_image ui "$UI_IMAGE"
-ensure_network
+printf 'dns_cloudflare_api_token = %s\n' "$(get_secret cloudflare-dns-token)" > "$CONFIG/cloudflare.ini"
+chmod 0600 "$CONFIG/cloudflare.ini"
+pull_image "$UI_IMAGE"
 
 apt-get install -y --no-install-recommends cron util-linux
 readonly CERTIFICATE_GROUP=kyiv-air-certificates
 getent group "$CERTIFICATE_GROUP" >/dev/null || groupadd --system "$CERTIFICATE_GROUP"
 CERTIFICATE_GID=$(getent group "$CERTIFICATE_GROUP" | cut -d: -f3)
-if [[ ! "$ENV_DIR/cloudflare.ini" -ef "$CONFIG/cloudflare.ini" ]]; then
-  install -m 0600 "$ENV_DIR/cloudflare.ini" "$CONFIG/cloudflare.ini"
-fi
-chmod 0600 "$CONFIG/cloudflare.ini"
 install -d -m 0700 /etc/letsencrypt /var/lib/letsencrypt
 install -d -m 0750 /var/log/letsencrypt
 printf 'CERTBOT_IMAGE=%q\nCERTBOT_DOMAIN=%q\nCERTIFICATE_GROUP=%q\n' \
@@ -39,7 +33,7 @@ CONFIG="$CONFIG" "$APP/bin/renew-certificates" certonly \
 
 wait_command "History VM at $HISTORY_URL (complete History provisioning before UI)" \
   curl -fsS --connect-timeout 2 --max-time 3 "$HISTORY_URL/health"
-copy_env ui
+
 set_env ui HISTORY_URL "$HISTORY_URL"
 set_env ui CERTBOT_DOMAIN "$CERTBOT_DOMAIN"
 install -m 0644 "$HELPERS/../nginx/ui.conf.template" "$CONFIG/ui.conf.template"

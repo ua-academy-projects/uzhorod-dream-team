@@ -3,23 +3,19 @@ set -Eeuo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
 (( EUID == 0 )) || fail "Run this script with sudo."
-: "${PRIVATE_IP:?Set PRIVATE_IP in /etc/kyiv-air/deployment.env or the environment.}"
+: "${PRIVATE_IP:?Set PRIVATE_IP in the startup environment.}"
 
-require_env history
+prepare_runtime history
 read_database
 if [[ "$POSTGRES_ONLY" == false ]]; then read_rabbitmq; fi
-configure_ssh
-install_docker
-load_image history "$HISTORY_IMAGE"
+pull_image "$HISTORY_IMAGE"
 docker pull "$POSTGRES_CLIENT_IMAGE"
-ensure_network
 
-copy_env history
 set_env history PORT 8081
 set_env history POSTGRES_ONLY "$POSTGRES_ONLY"
 set_env history DATABASE_URL "$DATABASE_URL"
 set_env history FETCHER_SERVICE_URL "http://$FETCHER_IP:8080"
-allowed_origins=$(env_value "$CONFIG/history.env" ALLOWED_ORIGINS)
+allowed_origins=${ALLOWED_ORIGINS:-}
 case ",$allowed_origins," in
   *",$UI_ORIGIN,"*) ;;
   *) allowed_origins="${allowed_origins:+$allowed_origins,}$UI_ORIGIN" ;;

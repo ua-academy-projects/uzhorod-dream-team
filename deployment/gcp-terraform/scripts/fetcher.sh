@@ -3,18 +3,15 @@ set -Eeuo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
 (( EUID == 0 )) || fail "Run this script with sudo."
-: "${PRIVATE_IP:?Set PRIVATE_IP in /etc/kyiv-air/deployment.env or the environment.}"
+: "${PRIVATE_IP:?Set PRIVATE_IP in the startup environment.}"
 
-require_env fetcher
-key=$(env_value "$ENV_DIR/fetcher.env" OPENAQ_API_KEY)
-[[ "$key" =~ ^[A-Za-z0-9_-]+$ && "$key" != your_openaq_api_key_here ]] || fail "Set an actual OPENAQ_API_KEY in env/fetcher.env."
+prepare_runtime fetcher
+key=$(get_secret openaq-api-key)
+set_env fetcher OPENAQ_API_KEY "$key"
+[[ "$key" =~ ^[A-Za-z0-9_-]+$ && "$key" != your_openaq_api_key_here ]] || fail "Set a valid OpenAQ API key in Secret Manager."
 if [[ "$POSTGRES_ONLY" == true ]]; then read_queue; else read_rabbitmq; fi
-configure_ssh
-install_docker
-load_image fetcher "$FETCHER_IMAGE"
-ensure_network
+pull_image "$FETCHER_IMAGE"
 
-copy_env fetcher
 set_env fetcher PORT 8080
 set_env fetcher POSTGRES_ONLY "$POSTGRES_ONLY"
 if [[ "$POSTGRES_ONLY" == true ]]; then

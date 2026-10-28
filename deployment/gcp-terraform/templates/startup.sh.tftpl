@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+readonly MARKER=/var/lib/kyiv-air/startup-complete
+[[ -f "$MARKER" ]] && exit 0
+(( EUID == 0 )) || { echo 'Run startup provisioning as root.' >&2; exit 1; }
+umask 077
+
+install -d -m 0755 /opt/kyiv-air/scripts /opt/kyiv-air/nginx
+%{ for name, content in scripts ~}
+printf '%s' '${content}' | base64 --decode > '/opt/kyiv-air/scripts/${name}'
+chmod 0755 '/opt/kyiv-air/scripts/${name}'
+%{ endfor ~}
+%{ for name, content in templates ~}
+printf '%s' '${content}' | base64 --decode > '/opt/kyiv-air/nginx/${name}'
+%{ endfor ~}
+%{ for key, value in environment ~}
+export ${key}='${replace(value, "'", "'\"'\"'")}'
+%{ endfor ~}
+
+bash '/opt/kyiv-air/scripts/${entrypoint}'
+install -d -m 0700 /var/lib/kyiv-air
+touch "$MARKER"

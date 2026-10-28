@@ -22,8 +22,9 @@ module "network" {
 module "registry" {
   source = "./modules/registry/"
 
-  location   = local.cfg.google.region
-  project_id = local.cfg.google.project_id
+  repository_id = local.cfg.registry.repository_id
+  location      = local.cfg.google.region
+  project_id    = local.cfg.google.project_id
   readers = {
     for name, acc in google_service_account.vm :
     name => "serviceAccount:${acc.email}"
