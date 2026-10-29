@@ -9,7 +9,7 @@ RUN go mod download
 
 COPY . .
 
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=arm64 \
+RUN CGO_ENABLED=0 GOOS=linux \
     go build -ldflags="-s -w" -o fetcher ./cmd/fetcher
 
 
