@@ -2,18 +2,18 @@ server {
     listen 80;
     listen [::]:80;
 
-    server_name ${DOMEN} www.${DOMEN};
-    return 301 https://${DOMEN}$request_uri;
+    server_name ${DOMAIN} www.${DOMAIN};
+    return 301 https://${DOMAIN}$request_uri;
 }
 
 server {
     listen 443 ssl;
     listen [::]:443 ssl;
 
-    server_name ${DOMEN} www.${DOMEN};
+    server_name ${DOMAIN} www.${DOMAIN};
 
-    ssl_certificate /etc/letsencrypt/live/${DOMEN}/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/${DOMEN}/privkey.pem;
+    ssl_certificate /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
 
     root /usr/share/nginx/html;
     index index.html;
