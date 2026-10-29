@@ -1,11 +1,8 @@
 #!/usr/bin/env bash
 
-#   1. creates two key pairs:
-#        citybikes_ed25519           YOUR key: lets you log in to the bastion (and only there)
+#        citybikes_ed25519 - for bastion
 #        citybikes_internal_ed25519  the bastion's key: lets the bastion log in to the other VMs
-#   2. writes ./ssh_config so that plain `ssh bastion` works
 
-# Usage: bash scripts/setup-ssh.sh [--install]   (--install adds an Include line to ~/.ssh/config)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 

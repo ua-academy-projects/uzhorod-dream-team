@@ -1,0 +1,62 @@
+{
+
+  "prefix": "citybikes",
+
+  "network": {
+    "subnet_cidr": "10.20.0.0/24",
+    "ssh_allowed_cidrs": ["203.0.113.7/32"]
+  },
+
+  "ssh": {
+    "user": "citybikes",
+    "user_public_key_file": "~/.ssh/citybikes_ed25519.pub",
+    "internal_public_key_file": "~/.ssh/citybikes_internal_ed25519.pub"
+  },
+
+  "vms": {
+    "db": {
+      "host": 50,
+      "machine_type": "e2-small",
+      "disk_size_gb": 20,
+      "services": ["postgres", "redis", "rabbitmq"],
+      "cloud_logging": true
+    },
+    "fetcher": {
+      "host": 51,
+      "machine_type": "e2-small",
+      "disk_size_gb": 10,
+      "services": ["fetcher"]
+    },
+    "history": {
+      "host": 52,
+      "machine_type": "e2-small",
+      "disk_size_gb": 10,
+      "services": ["history"]
+    },
+    "ui": {
+      "host": 53,
+      "machine_type": "e2-small",
+      "disk_size_gb": 15,
+      "services": ["ui", "cloudflared"]
+    },
+    "bastion": {
+      "host": 54,
+      "machine_type": "e2-small",
+      "disk_size_gb": 10,
+      "services": [],
+      "bastion": true
+    }
+  },
+
+  "app": {
+    "queue_backend": "rabbitmq",
+    "cache_backend": "redis",
+    "citybikes_network": "pittsburgh",
+    "poll_interval": 60,
+    "db_name": "citybikes",
+    "db_user": "citybikes_app",
+    "rabbitmq_user": "citybikes",
+    "rabbitmq_vhost": "citybikes",
+    "cloudflare_tunnel_protocol": "auto"
+  }
+}
