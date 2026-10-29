@@ -1,0 +1,19 @@
+
+#!/usr/bin/env bash
+set -euo pipefail
+
+mkdir -p /opt/datamonitor-scripts
+
+cat > /opt/datamonitor-scripts/install-docker.sh <<'INSTALL_DOCKER_SCRIPT'
+${install_docker_script}
+INSTALL_DOCKER_SCRIPT
+
+cat > /opt/datamonitor-scripts/startup-service.sh <<'STARTUP_SERVICE_SCRIPT'
+${startup_service_script}
+STARTUP_SERVICE_SCRIPT
+
+chmod 700 /opt/datamonitor-scripts/*.sh
+
+%{ if service_role == "history" }bash%{ else }exec bash%{ endif } /opt/datamonitor-scripts/startup-service.sh \
+  "${service_role}" \
+  "${project_id}"

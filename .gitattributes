@@ -1,0 +1,3 @@
+gcp-terra/scripts/*.sh text eol=lf
+gcp-terra/scripts/*.tftpl text eol=lf
+provision/bastion.sh text eol=lf

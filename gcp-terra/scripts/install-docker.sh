@@ -15,4 +15,6 @@ apt-get install -y docker-compose-v2 || \
 docker --version
 docker compose version
 
+apt-get install -y git
+
 echo "=== Docker installation completed ==="

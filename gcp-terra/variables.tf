@@ -28,7 +28,7 @@ variable "machine_size" {
 variable "boot_image" {
   description = "Default VM image"
   type        = string
-  default     = "ubuntu-os-cloud/ubuntu-2404-lts"
+  default     = "projects/ubuntu-os-cloud/global/images/family/ubuntu-2404-lts-amd64"
 }
 
 variable "admin_ip_cidr" {
