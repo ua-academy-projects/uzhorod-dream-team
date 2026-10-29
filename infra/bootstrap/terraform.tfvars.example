@@ -1,0 +1,11 @@
+# cp terraform.tfvars.example terraform.tfvars   (terraform.tfvars is git-ignored)
+project = {
+  id              = "citybikes-gcp-123456"
+  name            = "citybikes-gcp"        # display name; for an existing project use its current name
+  billing_account = "012345-6789AB-CDEF01" # gcloud billing accounts list
+  region          = "europe-central2"
+  zone            = "europe-central2-a"
+}
+my_ip = "203.0.113.7" # curl ifconfig.me
+
+# output_dir = "~/.config/citybikes"   # where the key and terraform.env go (outside the repo)

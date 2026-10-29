@@ -6,3 +6,12 @@ node_modules/
 dist/
 ssh_config
 .ssh_known_hosts
+
+infra/**/.terraform/
+*.tfstate
+*.tfstate.*
+infra/**/.build/
+
+infra/bootstrap/terraform.tfvars
+infra/bootstrap/backend.tf
+infra/**/backend.hcl
