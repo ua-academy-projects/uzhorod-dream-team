@@ -16,3 +16,4 @@ check_*.py
 test_*.py
 
 # Components will have their own specific .gitignore files
+deployment/config/

@@ -17,9 +17,3 @@ variable "secret_revisions" {
   description = "Map of secret variables to their version numbers"
   default     = {}
 }
-
-variable "deploy_vms" {
-  type        = bool
-  description = "Create VMs after the registry images and required secrets are ready. Disable only for initial infrastructure bootstrap."
-  default     = true
-}

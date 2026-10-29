@@ -1,11 +1,5 @@
 locals {
-  cfg = module.config.value
-}
-
-module "config" {
-  source = "./modules/config/"
-
-  config = jsondecode(var.config_path)
+  cfg = jsondecode(file(var.config_path))
 }
 
 module "network" {
@@ -35,7 +29,7 @@ module "registry" {
 
 module "vm" {
   source   = "./modules/vm"
-  for_each = var.deploy_vms ? local.cfg.vm : {}
+  for_each = local.cfg.deploy_vms ? local.cfg.vm : {}
 
   project_id = local.cfg.google.project_id
   name       = "${local.cfg.network.name}-${each.key}"
