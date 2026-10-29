@@ -5,7 +5,7 @@ locals {
 module "config" {
   source = "./modules/config/"
 
-  config = jsondecode(file("${path.module}/../config/deployment.json"))
+  config = jsondecode(var.config_path)
 }
 
 module "network" {
