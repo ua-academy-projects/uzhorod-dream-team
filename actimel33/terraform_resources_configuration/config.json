@@ -255,14 +255,5 @@
             "roles/secretmanager.admin",
             "roles/artifactregistry.admin"
         ]
-    },
-    "google_project_services_list": [
-        "artifactregistry.googleapis.com",
-        "cloudbuild.googleapis.com",
-        "compute.googleapis.com",
-        "iam.googleapis.com",
-        "iap.googleapis.com",
-        "secretmanager.googleapis.com",
-        "storage.googleapis.com"
-    ]
+    }
 }

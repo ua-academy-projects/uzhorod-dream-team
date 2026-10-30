@@ -3,7 +3,6 @@ locals {
   config = jsondecode(file("${path.module}/../../terraform_resources_configuration/config.json"))
 
   machines = local.config.machines
-  services = local.config.google_project_services_list
   networks = local.config.networks
 
   # Machines that keep their data on a separate disk (data_disk in config.json).
@@ -13,6 +12,9 @@ locals {
     env        = local.config.env
     managed_by = "terraform"
   }
+
+  # Terraform runs as this account (created by bootstrap/bootstrap.sh), not as the user.
+  terraform_service_account_email = "${local.config.bootstrap.terraform_service_account}@${local.config.project_id}.iam.gserviceaccount.com"
 
   registry_host = "${local.config.region}-docker.pkg.dev"
   registry      = "${local.registry_host}/${local.config.project_id}/${local.config.artifact_registry.repository_id}"
@@ -35,12 +37,6 @@ locals {
   }
 }
 
-module "project_services" {
-  source = "./modules/project_services"
-
-  services = local.services
-}
-
 module "network" {
   source = "./modules/network"
 
@@ -53,8 +49,6 @@ module "network" {
   management_subnet_region = local.networks.management_subnet_region
   nat_router_name          = local.networks.nat_router_name
   nat_router_region        = local.networks.nat_router_region
-
-  depends_on = [module.project_services]
 }
 
 module "firewall" {
@@ -74,8 +68,6 @@ module "data_disks" {
   size   = each.value.size
   type   = each.value.type
   labels = local.labels
-
-  depends_on = [module.project_services]
 }
 
 module "iam" {
@@ -84,8 +76,6 @@ module "iam" {
   project_id     = local.config.project_id
   account_prefix = local.config.iam.service_account_prefix
   machine_roles  = { for name, machine in local.machines : name => try(machine.roles, []) }
-
-  depends_on = [module.project_services]
 }
 
 module "secrets" {
@@ -93,8 +83,6 @@ module "secrets" {
 
   secrets       = local.config.secrets
   reader_emails = module.iam.service_account_emails
-
-  depends_on = [module.project_services]
 }
 
 module "artifact_registry" {
@@ -106,8 +94,6 @@ module "artifact_registry" {
   description   = local.config.artifact_registry.description
   labels        = local.labels
   reader_emails = { for name in local.config.artifact_registry.readers : name => module.iam.service_account_emails[name] }
-
-  depends_on = [module.project_services]
 }
 
 module "compute_instances" {
@@ -132,7 +118,7 @@ module "compute_instances" {
   has_public_ip         = false
 
   # Cloud NAT must exist before the first boot.
-  depends_on = [module.project_services, module.network]
+  depends_on = [module.network]
 }
 
 module "load_balancer" {
@@ -144,8 +130,6 @@ module "load_balancer" {
   port              = local.config.load_balancer.port
   health_check_path = local.config.load_balancer.health_check_path
   domain_name       = local.config.load_balancer.domain
-
-  depends_on = [module.project_services]
 }
 
 module "dns" {
