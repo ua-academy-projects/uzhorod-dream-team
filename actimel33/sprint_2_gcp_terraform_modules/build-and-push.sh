@@ -16,9 +16,9 @@ for key in sys.argv[2:]:
 print(value)' "$CONFIG" "$@"
 }
 
-PROJECT=$(config_value project_id)
-REGION=$(config_value region)
-REPOSITORY=$(config_value artifact_registry repository_id)
+PROJECT=$(config_value project id)
+REGION=$(config_value project region)
+REPOSITORY=$(config_value registry repository_id)
 REGISTRY=$REGION-docker.pkg.dev/$PROJECT/$REPOSITORY
 
 # push_image NAME CONTEXT [DOCKERFILE]
@@ -27,7 +27,7 @@ push_image() {
   local context=$2
   local dockerfile=${3:-$2/Dockerfile}
   local image
-  image=$REGISTRY/$name:$(config_value machines "$name" image_tag)
+  image=$REGISTRY/$name:$(config_value vms machines "$name" image_tag)
 
   if gcloud artifacts docker images describe "$image" >/dev/null 2>&1; then
     echo "skip $image: already in the registry"

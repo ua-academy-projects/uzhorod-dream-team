@@ -25,7 +25,7 @@ save_project_id() {
   python3 -I -c '
 import json, os, sys
 config = json.load(open(sys.argv[1]))
-config["project_id"] = sys.argv[2]
+config["project"]["id"] = sys.argv[2]
 with open(sys.argv[1] + ".tmp", "w") as f:
     json.dump(config, f, indent=4, ensure_ascii=False)
     f.write("\n")
@@ -47,10 +47,10 @@ retry() {
 read_config() {
   echo "==> gcloud account: $(gcloud config get-value account)"
   # TODO move to secrets
-  PROJECT_ID=$(config_value project_id)
+  PROJECT_ID=$(config_value project id)
   PROJECT_ID_PREFIX=$(config_value bootstrap project_id_prefix)
   PROJECT_NAME=$(config_value bootstrap project_name)
-  REGION=$(config_value region)
+  REGION=$(config_value project region)
   SA_NAME=$(config_value bootstrap terraform_service_account)
   STATE_PREFIX=$(config_value bootstrap state_prefix)
   mapfile -t APIS < <(config_value bootstrap apis)
@@ -70,7 +70,7 @@ create_project() {
     [[ "$PROJECT_ID" =~ ^[a-z][a-z0-9-]{4,28}[a-z0-9]$ ]] \
       || die "'$PROJECT_ID' is not a valid project id, check bootstrap.project_id_prefix."
     # Saved before create, so an interrupted run reuses the id.
-    echo "==> project_id is empty: new project id $PROJECT_ID, saved to config.json"
+    echo "==> project.id is empty: new project id $PROJECT_ID, saved to config.json"
     save_project_id
   fi
 
@@ -81,14 +81,14 @@ create_project() {
   fi
   if [ "$state" = DELETE_REQUESTED ]; then
     die "project $PROJECT_ID is DELETE_REQUESTED (deleted, kept for 30 days).
-Restore it with 'gcloud projects undelete $PROJECT_ID' or clear project_id in config.json."
+Restore it with 'gcloud projects undelete $PROJECT_ID' or clear project.id in config.json."
   fi
 
   echo "==> Creating project $PROJECT_ID"
   # The cleanup steps run only in projects with this label.
   gcloud projects create "$PROJECT_ID" --name="$PROJECT_NAME" --labels=created-by=bootstrap \
     || die "could not create project $PROJECT_ID, the id may be taken.
-Clear project_id in config.json to get a new id and run again."
+Clear project.id in config.json to get a new id and run again."
 }
 
 name_resources() {
