@@ -246,7 +246,8 @@
             "compute.googleapis.com",
             "iap.googleapis.com",
             "secretmanager.googleapis.com",
-            "artifactregistry.googleapis.com"
+            "artifactregistry.googleapis.com",
+            "oslogin.googleapis.com"
         ],
         "terraform_roles": [
             "roles/compute.admin",
