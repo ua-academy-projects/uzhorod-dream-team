@@ -62,7 +62,8 @@ The HTTPS certificate becomes ACTIVE 15–60 minutes after the DNS record exists
 
 ## SSH
 
-The first time, log in once with `gcloud`. It creates `~/.ssh/google_compute_engine` and your OS Login user:
+The first time in a project, log in once with `gcloud`. It creates `~/.ssh/google_compute_engine` if you have none
+and your OS Login user for this project:
 
 ```bash
 gcloud compute ssh bastion --tunnel-through-iap --project=<project id> --zone=<zone of bastion>

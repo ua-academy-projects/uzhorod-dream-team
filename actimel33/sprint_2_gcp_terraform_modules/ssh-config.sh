@@ -39,9 +39,10 @@ for vm in "${VMS[@]}"; do
 done
 [ -n "$BASTION_ZONE" ] || die "the bastion VM '$BASTION' (ssh.bastion in config.json) is not in $PROJECT."
 
-# The OS Login user appears after the first login with gcloud.
-USER_NAME=$(gcloud compute os-login describe-profile --format='value(posixAccounts[0].username)')
-[ -n "$USER_NAME" ] || die "you have no OS Login user yet. Log in once, it also creates your SSH key:
+# OS Login keeps a user per project; it appears after the first login with gcloud in that project.
+USER_NAME=$(gcloud compute os-login describe-profile --flatten=posixAccounts \
+  --format='csv[no-heading](posixAccounts.accountId,posixAccounts.username)' | awk -F, -v project="$PROJECT" '$1 == project {print $2}')
+[ -n "$USER_NAME" ] || die "you have no OS Login user in $PROJECT yet. Log in once (it also creates an SSH key if you have none):
   gcloud compute ssh $BASTION --tunnel-through-iap --project=$PROJECT --zone=$BASTION_ZONE"
 
 mkdir -p "$(dirname "$SSH_CONFIG")"
