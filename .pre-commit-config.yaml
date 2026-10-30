@@ -1,0 +1,12 @@
+repos:
+  - repo: https://github.com/python-jsonschema/check-jsonschema
+    rev: 0.38.2
+    hooks:
+      - id: check-jsonschema
+        name: config.json matches config.schema.json
+        files: ^actimel33/terraform_resources_configuration/config(\.schema)?\.json$
+        pass_filenames: false
+        args:
+          - --schemafile
+          - actimel33/terraform_resources_configuration/config.schema.json
+          - actimel33/terraform_resources_configuration/config.json
