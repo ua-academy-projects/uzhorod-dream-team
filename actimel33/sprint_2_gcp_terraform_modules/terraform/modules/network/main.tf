@@ -1,34 +1,33 @@
 resource "google_compute_network" "vpc" {
-  name                    = var.secure_vpc
+  name                    = var.config.vpc
   auto_create_subnetworks = false
 }
 
 resource "google_compute_subnetwork" "management" {
-  name          = var.management_subnet
-  ip_cidr_range = var.management_cidr
+  name          = var.config.subnets.management.name
+  ip_cidr_range = var.config.subnets.management.cidr
   network       = google_compute_network.vpc.id
-  region        = var.management_subnet_region
-
+  region        = var.region
 }
 
 resource "google_compute_subnetwork" "private" {
-  name          = var.private_network
-  ip_cidr_range = var.private_cidr
+  name          = var.config.subnets.private.name
+  ip_cidr_range = var.config.subnets.private.cidr
   network       = google_compute_network.vpc.id
-  region        = var.private_subnet_region
+  region        = var.region
 
-  # Enables access to google services without publick IP
+  # Google APIs without a public IP.
   private_ip_google_access = true
 }
 
 resource "google_compute_router" "router" {
-  name    = var.nat_router_name
+  name    = var.config.nat_router
   network = google_compute_network.vpc.id
-  region  = var.nat_router_region
+  region  = var.region
 }
 
 resource "google_compute_router_nat" "nat" {
-  name                               = "${var.nat_router_name}-nat"
+  name                               = "${var.config.nat_router}-nat"
   router                             = google_compute_router.router.name
   region                             = google_compute_router.router.region
   nat_ip_allocate_option             = "AUTO_ONLY"

@@ -1,35 +1,16 @@
-variable "private_cidr" { type = string }
-variable "management_cidr" { type = string }
-variable "secure_vpc" {
-  type        = string
-  default     = "secure-vpc"
-  description = "Secure VPC name"
+variable "config" {
+  description = "network part of config.json"
+  type = object({
+    vpc = string
+    subnets = object({
+      private    = object({ name = string, cidr = string })
+      management = object({ name = string, cidr = string })
+    })
+    nat_router = string
+  })
 }
-variable "management_subnet" {
+
+variable "region" {
+  description = "Region of the subnets and the NAT router"
   type        = string
-  description = "Name of the subnet for admin access (bastion)"
-}
-variable "private_network" {
-  type        = string
-  description = "Private network name"
-}
-variable "management_subnet_region" {
-  type        = string
-  description = "Region of the management subnet"
-  default     = "europe-central2"
-}
-variable "private_subnet_region" {
-  type        = string
-  description = "Region of the private network"
-  default     = "europe-central2"
-}
-variable "nat_router_name" {
-  type        = string
-  description = "Cloud router name"
-  default     = "nat-router"
-}
-variable "nat_router_region" {
-  type        = string
-  description = "Cloud router region"
-  default     = "europe-central2"
 }

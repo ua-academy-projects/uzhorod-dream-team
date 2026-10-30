@@ -1,149 +1,65 @@
-# Entry point
 locals {
   config = jsondecode(file("${path.module}/../../terraform_resources_configuration/config.json"))
-
-  machines = local.config.machines
-  networks = local.config.networks
-
-  # Machines that keep their data on a separate disk (data_disk in config.json).
-  data_disks = { for name, machine in local.machines : name => machine.data_disk if can(machine.data_disk) }
-
-  labels = {
-    env        = local.config.env
-    managed_by = "terraform"
-  }
-
-  registry_host = "${local.config.region}-docker.pkg.dev"
-  registry      = "${local.registry_host}/${local.config.project_id}/${local.config.artifact_registry.repository_id}"
-  hosts         = { for name, machine in local.machines : name => "${name}.${machine.zone}.c.${local.config.project_id}.internal" }
-
-  # Common part + part of the role, only for VMs that run a container (image_tag in config.json).
-  startup_scripts = {
-    for name, machine in local.machines : name => join("\n", [
-      templatefile("${path.module}/templates/common.sh.tftpl", {}),
-      templatefile("${path.module}/templates/${name}.sh.tftpl", {
-        image            = "${local.registry}/${name}:${machine.image_tag}"
-        registry_host    = local.registry_host
-        project_id       = local.config.project_id
-        backend          = local.config.backend
-        hosts            = local.hosts
-        ui_port          = local.config.load_balancer.port
-        data_disk_device = try("/dev/disk/by-id/google-${local.data_disks[name].device_name}", "")
-      }),
-    ]) if can(machine.image_tag)
-  }
 }
 
 module "network" {
   source = "./modules/network"
 
-  secure_vpc               = local.networks.secure_vpc
-  private_network          = local.networks.private_network
-  management_subnet        = local.networks.management_subnet
-  private_cidr             = local.networks.private_cidr
-  management_cidr          = local.networks.management_cidr
-  private_subnet_region    = local.networks.private_subnet_region
-  management_subnet_region = local.networks.management_subnet_region
-  nat_router_name          = local.networks.nat_router_name
-  nat_router_region        = local.networks.nat_router_region
+  config = local.config.network
+  region = local.config.project.region
 }
 
 module "firewall" {
   source = "./modules/firewall"
 
-  network_name = module.network.network_self_link
-  # postgres or redis.
-  rules = merge(local.config.firewalls, local.config.backend_firewalls[local.config.backend])
-}
-
-module "data_disks" {
-  source   = "./modules/data_disk"
-  for_each = local.data_disks
-
-  name   = each.value.name
-  zone   = local.machines[each.key].zone
-  size   = each.value.size
-  type   = each.value.type
-  labels = local.labels
-}
-
-module "iam" {
-  source = "./modules/iam"
-
-  project_id     = local.config.project_id
-  account_prefix = local.config.iam.service_account_prefix
-  machine_roles  = { for name, machine in local.machines : name => try(machine.roles, []) }
-}
-
-module "secrets" {
-  source = "./modules/secrets"
-
-  secrets       = local.config.secrets
-  reader_emails = module.iam.service_account_emails
+  config  = local.config.firewall
+  backend = local.config.app.backend
+  network = module.network.self_link
 }
 
 module "artifact_registry" {
   source = "./modules/artifact_registry"
 
-  repository_id = local.config.artifact_registry.repository_id
-  location      = local.config.region
-  format        = local.config.artifact_registry.format
-  description   = local.config.artifact_registry.description
-  labels        = local.labels
-  reader_emails = { for name in local.config.artifact_registry.readers : name => module.iam.service_account_emails[name] }
+  config  = local.config.registry
+  project = local.config.project
 }
 
-module "compute_instances" {
-  source   = "./modules/compute_instance"
-  for_each = local.machines
+module "vms" {
+  source = "./modules/vms"
 
-  name         = each.key
-  machine_type = each.value.type
-  zone         = each.value.zone
-  image        = each.value.image
-  disc_size    = each.value.disc_size
-  disc_type    = each.value.disc_type
-  subnetwork   = each.value.in_management_subnet ? module.network.management_subnetwork_self_link : module.network.private_subnetwork_self_link
-  network_tags = each.value.tags
-  labels       = local.labels
+  config   = local.config.vms
+  project  = local.config.project
+  backend  = local.config.app.backend
+  subnets  = module.network.subnets
+  registry = module.artifact_registry.repository
+}
 
-  attached_disk_id          = try(module.data_disks[each.key].id, null)
-  attached_disk_device_name = try(local.data_disks[each.key].device_name, null)
+module "secrets" {
+  source = "./modules/secrets"
 
-  service_account_email = module.iam.service_account_emails[each.key]
-  startup_script        = try(local.startup_scripts[each.key], null)
-  has_public_ip         = false
-
-  # Cloud NAT must exist before the first boot.
-  depends_on = [module.network]
+  config  = local.config.secrets
+  readers = module.vms.service_account_emails
 }
 
 module "load_balancer" {
   source = "./modules/load_balancer"
 
-  name              = local.config.load_balancer.name
-  zone              = local.machines[local.config.load_balancer.backend].zone
-  instance_id       = module.compute_instances[local.config.load_balancer.backend].instance_id
-  port              = local.config.load_balancer.port
-  health_check_path = local.config.load_balancer.health_check_path
-  domain_name       = local.config.load_balancer.domain
+  config    = local.config.load_balancer
+  instances = module.vms.instances
 }
 
 module "dns" {
   source = "./modules/dns"
 
-  cloudflare_zone_id = local.config.dns.cloudflare_zone_id
-  record_name        = local.config.load_balancer.domain
-  lb_ip_address      = module.load_balancer.lb_public_ip_address
+  config = local.config.dns
+  domain = module.load_balancer.domain
+  ip     = module.load_balancer.ip
 }
 
 module "ssh_config" {
   source = "./modules/ssh_config"
 
-  filename     = pathexpand("~/.ssh/config.d/gcp_crypto_modules.conf")
-  project      = local.config.project_id
-  zone         = local.machines[local.config.bastion_name].zone
-  ssh_user     = local.config.ssh_user
-  bastion_name = local.config.bastion_name
-  hosts        = { for name, vm in module.compute_instances : name => vm.private_ip if name != local.config.bastion_name }
+  config    = local.config.ssh
+  project   = local.config.project
+  instances = module.vms.instances
 }

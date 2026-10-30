@@ -1,8 +1,12 @@
+locals {
+  rules = merge(var.config.common, var.config[var.backend])
+}
+
 resource "google_compute_firewall" "this" {
-  for_each = var.rules
+  for_each = local.rules
 
   name      = each.key
-  network   = var.network_name
+  network   = var.network
   direction = "INGRESS"
 
   allow {

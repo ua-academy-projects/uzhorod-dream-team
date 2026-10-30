@@ -1,6 +1,6 @@
 locals {
   grants = merge([
-    for secret_id, secret in var.secrets : {
+    for secret_id, secret in var.config : {
       for reader in secret.readers : "${secret_id}/${reader}" => { secret_id = secret_id, reader = reader }
     }
   ]...)
@@ -8,14 +8,14 @@ locals {
 
 # Ephemeral: the password is never written to the state, only to Secret Manager.
 ephemeral "random_password" "this" {
-  for_each = var.secrets
+  for_each = var.config
 
   length  = each.value.length
   special = false # passwords end up inside postgres:// URLs
 }
 
 resource "google_secret_manager_secret" "this" {
-  for_each = var.secrets
+  for_each = var.config
 
   secret_id = each.key
 
@@ -25,7 +25,7 @@ resource "google_secret_manager_secret" "this" {
 }
 
 resource "google_secret_manager_secret_version" "this" {
-  for_each = var.secrets
+  for_each = var.config
 
   secret                 = google_secret_manager_secret.this[each.key].id
   secret_data_wo         = ephemeral.random_password.this[each.key].result
@@ -38,5 +38,5 @@ resource "google_secret_manager_secret_iam_member" "reader" {
 
   secret_id = google_secret_manager_secret.this[each.value.secret_id].secret_id
   role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${var.reader_emails[each.value.reader]}"
+  member    = "serviceAccount:${var.readers[each.value.reader]}"
 }

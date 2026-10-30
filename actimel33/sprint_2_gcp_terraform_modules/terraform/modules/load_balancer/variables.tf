@@ -1,30 +1,19 @@
-variable "name" {
-  description = "Prefix of the names of all load balancer resources"
-  type        = string
+variable "config" {
+  description = "load_balancer part of config.json"
+  type = object({
+    name              = string
+    backend           = string
+    health_check_path = string
+    domain            = string
+  })
 }
 
-variable "zone" {
-  description = "Zone of the backend VM"
-  type        = string
-}
-
-variable "instance_id" {
-  description = "ID of the VM that receives the traffic"
-  type        = string
-}
-
-variable "port" {
-  description = "Port the application listens on inside the VM"
-  type        = number
-}
-
-variable "health_check_path" {
-  description = "Path the health check requests, it must answer 200"
-  type        = string
-  default     = "/"
-}
-
-variable "domain_name" {
-  description = "Domain of the site, the certificate is issued for it"
-  type        = string
+variable "instances" {
+  description = "VMs from the vms module: name => id, zone, private_ip and port"
+  type = map(object({
+    id         = string
+    zone       = string
+    private_ip = string
+    port       = number
+  }))
 }

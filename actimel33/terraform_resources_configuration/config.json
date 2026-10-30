@@ -1,69 +1,113 @@
 {
-    "env": "dev",
-    "project_id": "crypto-price-2610",
-    "region": "europe-central2",
-    "ssh_user": "proshina_playground_gmail_com",
-    "bastion_name": "bastion",
-    "backend": "postgres",
-    "firewalls": {
-        "fw-allow-iap-to-bastion": {
-            "ports": [
-                "22"
-            ],
-            "source_ranges": [
-                "35.235.240.0/20"
-            ],
-            "target_tags": [
-                "bastion-vm"
-            ]
-        },
-        "fw-allow-bastion-to-internal": {
-            "ports": [
-                "22"
-            ],
-            "source_tags": [
-                "bastion-vm"
-            ],
-            "target_tags": [
-                "internal-vm"
-            ]
-        },
-        "fw-allow-lb-to-ui": {
-            "ports": [
-                "5173"
-            ],
-            "source_ranges": [
-                "130.211.0.0/22",
-                "35.191.0.0/16"
-            ],
-            "target_tags": [
-                "ui-vm"
-            ]
-        },
-        "fw-allow-history-to-db": {
-            "ports": [
-                "5432"
-            ],
-            "source_tags": [
-                "history-vm"
-            ],
-            "target_tags": [
-                "db-vm"
-            ]
-        },
-        "fw-allow-ui-to-history": {
-            "ports": [
-                "3001"
-            ],
-            "source_tags": [
-                "ui-vm"
-            ],
-            "target_tags": [
-                "history-vm"
-            ]
+    "project": {
+        "id": "crypto-price-2610",
+        "region": "europe-central2",
+        "labels": {
+            "env": "dev",
+            "managed_by": "terraform"
         }
     },
-    "backend_firewalls": {
+    "bootstrap": {
+        "project_id_prefix": "crypto-price",
+        "project_name": "crypto-price-service",
+        "terraform_service_account": "terraform",
+        "state_prefix": "terraform/state",
+        "apis": [
+            "cloudresourcemanager.googleapis.com",
+            "serviceusage.googleapis.com",
+            "iam.googleapis.com",
+            "iamcredentials.googleapis.com",
+            "storage.googleapis.com",
+            "compute.googleapis.com",
+            "iap.googleapis.com",
+            "secretmanager.googleapis.com",
+            "artifactregistry.googleapis.com",
+            "oslogin.googleapis.com"
+        ],
+        "terraform_roles": [
+            "roles/compute.admin",
+            "roles/iam.serviceAccountAdmin",
+            "roles/iam.serviceAccountUser",
+            "roles/secretmanager.admin",
+            "roles/artifactregistry.admin"
+        ]
+    },
+    "app": {
+        "backend": "postgres"
+    },
+    "network": {
+        "vpc": "crypto-vpc",
+        "subnets": {
+            "private": {
+                "name": "crypto-private",
+                "cidr": "192.168.77.0/24"
+            },
+            "management": {
+                "name": "crypto-management",
+                "cidr": "192.168.78.0/24"
+            }
+        },
+        "nat_router": "nat-router"
+    },
+    "firewall": {
+        "common": {
+            "fw-allow-iap-to-bastion": {
+                "ports": [
+                    "22"
+                ],
+                "source_ranges": [
+                    "35.235.240.0/20"
+                ],
+                "target_tags": [
+                    "bastion-vm"
+                ]
+            },
+            "fw-allow-bastion-to-internal": {
+                "ports": [
+                    "22"
+                ],
+                "source_tags": [
+                    "bastion-vm"
+                ],
+                "target_tags": [
+                    "internal-vm"
+                ]
+            },
+            "fw-allow-lb-to-ui": {
+                "ports": [
+                    "5173"
+                ],
+                "source_ranges": [
+                    "130.211.0.0/22",
+                    "35.191.0.0/16"
+                ],
+                "target_tags": [
+                    "ui-vm"
+                ]
+            },
+            "fw-allow-history-to-db": {
+                "ports": [
+                    "5432"
+                ],
+                "source_tags": [
+                    "history-vm"
+                ],
+                "target_tags": [
+                    "db-vm"
+                ]
+            },
+            "fw-allow-ui-to-history": {
+                "ports": [
+                    "3001"
+                ],
+                "source_tags": [
+                    "ui-vm"
+                ],
+                "target_tags": [
+                    "history-vm"
+                ]
+            }
+        },
         "postgres": {
             "fw-allow-fetcher-to-db": {
                 "ports": [
@@ -92,90 +136,41 @@
             }
         }
     },
-    "networks": {
-        "secure_vpc": "private-network",
-        "private_network": "crypto-private",
-        "management_subnet": "crypto-management",
-        "private_cidr": "192.168.77.0/24",
-        "management_cidr": "192.168.78.0/24",
-        "nat_router_name": "nat-router",
-        "private_subnet_region": "europe-central2",
-        "management_subnet_region": "europe-central2",
-        "nat_router_region": "europe-central2"
-    },
-    "machines": {
-        "bastion": {
-            "disc_size": 10,
-            "disc_type": "pd-balanced",
-            "type": "e2-micro",
-            "in_management_subnet": true,
-            "zone": "europe-central2-a",
-            "image": "ubuntu-os-cloud/ubuntu-2404-lts-amd64",
-            "tags": [
-                "bastion-vm"
-            ]
-        },
-        "db": {
-            "disc_type": "pd-balanced",
-            "disc_size": 10,
-            "image": "ubuntu-os-cloud/ubuntu-2404-lts-amd64",
+    "vms": {
+        "service_account_prefix": "sa-vm-",
+        "defaults": {
             "type": "e2-small",
-            "in_management_subnet": false,
             "zone": "europe-central2-a",
-            "data_disk": {
-                "name": "crypto-db-data-disk",
-                "size": 10,
-                "type": "pd-standard",
-                "device_name": "data-disk"
+            "image": "ubuntu-os-cloud/ubuntu-2404-lts-amd64",
+            "disk_size": 10,
+            "disk_type": "pd-balanced",
+            "subnet": "private"
+        },
+        "machines": {
+            "bastion": {
+                "type": "e2-micro",
+                "subnet": "management"
             },
-            "tags": [
-                "internal-vm",
-                "db-vm"
-            ],
-            "image_tag": "1.0.0"
-        },
-        "fetcher": {
-            "disc_type": "pd-balanced",
-            "disc_size": 10,
-            "image": "ubuntu-os-cloud/ubuntu-2404-lts-amd64",
-            "type": "e2-small",
-            "in_management_subnet": false,
-            "zone": "europe-central2-a",
-            "tags": [
-                "internal-vm",
-                "fetcher-vm"
-            ],
-            "image_tag": "1.0.0"
-        },
-        "history": {
-            "disc_type": "pd-balanced",
-            "disc_size": 10,
-            "image": "ubuntu-os-cloud/ubuntu-2404-lts-amd64",
-            "type": "e2-small",
-            "in_management_subnet": false,
-            "zone": "europe-central2-a",
-            "tags": [
-                "internal-vm",
-                "history-vm"
-            ],
-            "image_tag": "1.0.0"
-        },
-        "ui": {
-            "disc_type": "pd-balanced",
-            "image": "ubuntu-os-cloud/ubuntu-2404-lts-amd64",
-            "disc_size": 10,
-            "type": "e2-small",
-            "in_management_subnet": false,
-            "zone": "europe-central2-a",
-            "tags": [
-                "internal-vm",
-                "ui-vm"
-            ],
-            "image_tag": "1.0.0"
+            "db": {
+                "image_tag": "1.0.0",
+                "data_disk": {
+                    "name": "crypto-db-data-disk",
+                    "size": 10,
+                    "type": "pd-standard",
+                    "device_name": "data-disk"
+                }
+            },
+            "fetcher": {
+                "image_tag": "1.0.0"
+            },
+            "history": {
+                "image_tag": "1.0.0"
+            },
+            "ui": {
+                "image_tag": "1.0.0",
+                "port": 5173
+            }
         }
-    },
-    "iam": {
-        "service_account_prefix": "sa-vm-"
     },
     "secrets": {
         "crypto-db-app-password": {
@@ -211,50 +206,22 @@
             "version": 1
         }
     },
-    "artifact_registry": {
+    "registry": {
         "repository_id": "crypto-services-repository",
         "format": "DOCKER",
-        "description": "Docker repository for crypto application images",
-        "readers": [
-            "db",
-            "fetcher",
-            "history",
-            "ui"
-        ]
+        "description": "Docker repository for crypto application images"
     },
     "load_balancer": {
         "name": "crypto-ui",
         "backend": "ui",
-        "port": 5173,
         "health_check_path": "/",
         "domain": "crypto.ai-optimizer.net"
     },
     "dns": {
         "cloudflare_zone_id": "6eb0f4498c576e43d1731bfdfd82825e"
     },
-    "bootstrap": {
-        "project_id_prefix": "crypto-price",
-        "project_name": "crypto-price-service",
-        "terraform_service_account": "terraform",
-        "state_prefix": "terraform/state",
-        "apis": [
-            "cloudresourcemanager.googleapis.com",
-            "serviceusage.googleapis.com",
-            "iam.googleapis.com",
-            "iamcredentials.googleapis.com",
-            "storage.googleapis.com",
-            "compute.googleapis.com",
-            "iap.googleapis.com",
-            "secretmanager.googleapis.com",
-            "artifactregistry.googleapis.com",
-            "oslogin.googleapis.com"
-        ],
-        "terraform_roles": [
-            "roles/compute.admin",
-            "roles/iam.serviceAccountAdmin",
-            "roles/iam.serviceAccountUser",
-            "roles/secretmanager.admin",
-            "roles/artifactregistry.admin"
-        ]
+    "ssh": {
+        "user": "proshina_playground_gmail_com",
+        "bastion": "bastion"
     }
 }

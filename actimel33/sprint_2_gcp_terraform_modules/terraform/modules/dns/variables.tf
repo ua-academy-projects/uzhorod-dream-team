@@ -1,14 +1,16 @@
-variable "cloudflare_zone_id" {
-  description = "Cloudflare zone ID of the domain"
+variable "config" {
+  description = "dns part of config.json"
+  type = object({
+    cloudflare_zone_id = string
+  })
+}
+
+variable "domain" {
+  description = "Full name of the record, from the load_balancer module"
   type        = string
 }
 
-variable "record_name" {
-  description = "Full name of the record, e.g. crypto.example.com"
-  type        = string
-}
-
-variable "lb_ip_address" {
+variable "ip" {
   description = "Public IP of the load balancer the record points to"
   type        = string
 }
