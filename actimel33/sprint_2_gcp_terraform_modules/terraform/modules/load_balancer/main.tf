@@ -1,7 +1,7 @@
-# Named port that links the backend service to the port of the instance group.
 locals {
+  # Named port that links the backend service to the port of the instance group.
   port_name = "http"
-  backend   = var.instances[var.config.backend]
+  vm        = var.instances[var.config.backend]
 }
 
 # External static IP of the site
@@ -12,14 +12,14 @@ resource "google_compute_global_address" "lb_public_ip" {
 # The load balancer sends traffic to instance groups only, so the backend VM is put into an unmanaged one.
 resource "google_compute_instance_group" "backend" {
   name        = "${var.config.name}-group"
-  zone        = local.backend.zone
+  zone        = local.vm.zone
   description = "Unmanaged group of instances behind the load balancer"
 
-  instances = [local.backend.id]
+  instances = [local.vm.id]
 
   named_port {
     name = local.port_name
-    port = local.backend.port
+    port = local.vm.port
   }
 }
 
@@ -29,7 +29,7 @@ resource "google_compute_health_check" "backend" {
   timeout_sec        = 5
 
   http_health_check {
-    port         = local.backend.port
+    port         = local.vm.port
     request_path = var.config.health_check_path
   }
 }

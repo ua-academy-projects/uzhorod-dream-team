@@ -1,5 +1,5 @@
 variable "machine_roles" {
-  description = "VM name => project roles of its service account (roles in config.json)"
+  description = "VM name => project roles of its service account"
   type        = map(list(string))
 }
 

@@ -11,13 +11,11 @@ variable "zone" {
 variable "size" {
   description = "Disk size in GB"
   type        = number
-  default     = 10
 }
 
 variable "type" {
   description = "Disk type (pd-standard, pd-balanced or pd-ssd)"
   type        = string
-  default     = "pd-standard"
 }
 
 variable "labels" {

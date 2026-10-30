@@ -52,6 +52,7 @@
     "firewall": {
         "common": {
             "fw-allow-iap-to-bastion": {
+                "protocol": "tcp",
                 "ports": [
                     "22"
                 ],
@@ -63,6 +64,7 @@
                 ]
             },
             "fw-allow-bastion-to-internal": {
+                "protocol": "tcp",
                 "ports": [
                     "22"
                 ],
@@ -74,6 +76,7 @@
                 ]
             },
             "fw-allow-lb-to-ui": {
+                "protocol": "tcp",
                 "ports": [
                     "5173"
                 ],
@@ -86,6 +89,7 @@
                 ]
             },
             "fw-allow-history-to-db": {
+                "protocol": "tcp",
                 "ports": [
                     "5432"
                 ],
@@ -97,6 +101,7 @@
                 ]
             },
             "fw-allow-ui-to-history": {
+                "protocol": "tcp",
                 "ports": [
                     "3001"
                 ],
@@ -110,6 +115,7 @@
         },
         "postgres": {
             "fw-allow-fetcher-to-db": {
+                "protocol": "tcp",
                 "ports": [
                     "5432"
                 ],
@@ -123,6 +129,7 @@
         },
         "redis": {
             "fw-allow-app-to-redis": {
+                "protocol": "tcp",
                 "ports": [
                     "6379"
                 ],

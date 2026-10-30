@@ -6,7 +6,6 @@ variable "name" {
 variable "machine_type" {
   description = "Instance type, (e2-micro, e2-small)"
   type        = string
-  default     = "e2-micro"
 }
 
 variable "zone" {
@@ -22,19 +21,16 @@ variable "subnetwork" {
 variable "image" {
   description = "Image"
   type        = string
-  default     = "debian-cloud/debian-11"
 }
 
-variable "disc_size" {
-  description = "Disc size in GB"
+variable "disk_size" {
+  description = "Boot disk size in GB"
   type        = number
-  default     = 10
 }
 
-variable "disc_type" {
-  description = "Disc type ( pd-standard, pd-ssd or pd-balanced)"
+variable "disk_type" {
+  description = "Boot disk type (pd-standard, pd-ssd or pd-balanced)"
   type        = string
-  default     = "pd-balanced"
 }
 
 variable "has_public_ip" {

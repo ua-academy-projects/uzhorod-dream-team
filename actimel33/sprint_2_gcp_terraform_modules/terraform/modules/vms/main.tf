@@ -3,6 +3,7 @@ locals {
   data_disks = { for name, machine in local.machines : name => machine.data_disk if can(machine.data_disk) }
   containers = { for name, machine in local.machines : name => machine if can(machine.image_tag) }
 
+  # Built from config: registry_uri is known only after apply.
   registry_host = "${var.project.region}-docker.pkg.dev"
   registry      = "${local.registry_host}/${var.project.id}/${var.registry.repository_id}"
   hosts         = { for name, machine in local.machines : name => "${name}.${machine.zone}.c.${var.project.id}.internal" }
@@ -50,11 +51,13 @@ module "compute_instances" {
   machine_type = each.value.type
   zone         = each.value.zone
   image        = each.value.image
-  disc_size    = each.value.disk_size
-  disc_type    = each.value.disk_type
+  disk_size    = each.value.disk_size
+  disk_type    = each.value.disk_type
   subnetwork   = var.subnets[each.value.subnet]
-  network_tags = each.value.subnet == "private" ? ["internal-vm", "${each.key}-vm"] : ["${each.key}-vm"]
   labels       = var.project.labels
+
+  # Firewall rules in config.json target these: <vm>-vm, plus internal-vm in the private subnet.
+  network_tags = each.value.subnet == "private" ? ["internal-vm", "${each.key}-vm"] : ["${each.key}-vm"]
 
   attached_disk_id          = try(module.data_disks[each.key].id, null)
   attached_disk_device_name = try(local.data_disks[each.key].device_name, null)

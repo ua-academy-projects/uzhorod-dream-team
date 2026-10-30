@@ -10,6 +10,14 @@ variable "config" {
     ])
     error_message = "vms.machines: allowed keys are type, zone, image, disk_size, disk_type, subnet, image_tag, port, data_disk."
   }
+
+  validation {
+    condition = alltrue([
+      for machine in values(var.config.machines) :
+      length(setsubtract(["name", "size", "type", "device_name"], keys(machine.data_disk))) == 0 if can(machine.data_disk)
+    ])
+    error_message = "vms.machines.<vm>.data_disk needs name, size, type and device_name."
+  }
 }
 
 variable "project" {
@@ -37,6 +45,5 @@ variable "registry" {
     repository_id = string
     location      = string
     name          = string
-    registry_uri  = string
   })
 }

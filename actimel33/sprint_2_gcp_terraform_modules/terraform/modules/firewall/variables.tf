@@ -1,14 +1,16 @@
 variable "config" {
-  description = "firewall part of config.json: rules for every backend (common) and per backend (postgres, redis)"
-  type = object({
-    common   = map(object({ protocol = optional(string, "tcp"), ports = list(string), source_ranges = optional(list(string)), source_tags = optional(list(string)), target_tags = list(string) }))
-    postgres = map(object({ protocol = optional(string, "tcp"), ports = list(string), source_ranges = optional(list(string)), source_tags = optional(list(string)), target_tags = list(string) }))
-    redis    = map(object({ protocol = optional(string, "tcp"), ports = list(string), source_ranges = optional(list(string)), source_tags = optional(list(string)), target_tags = list(string) }))
-  })
+  description = "firewall part of config.json: group (common for every backend, postgres, redis) => rule name => rule"
+  type = map(map(object({
+    protocol      = string
+    ports         = list(string)
+    source_ranges = optional(list(string))
+    source_tags   = optional(list(string))
+    target_tags   = list(string)
+  })))
 
   validation {
     condition = alltrue([
-      for rule in concat(values(var.config.common), values(var.config.postgres), values(var.config.redis)) :
+      for rule in flatten([for group in values(var.config) : values(group)]) :
       length(coalesce(rule.source_ranges, [])) + length(coalesce(rule.source_tags, [])) > 0
     ])
     error_message = "Every firewall rule needs source_ranges or source_tags."
@@ -16,7 +18,7 @@ variable "config" {
 
   validation {
     condition = alltrue([
-      for rule in concat(values(var.config.common), values(var.config.postgres), values(var.config.redis)) :
+      for rule in flatten([for group in values(var.config) : values(group)]) :
       !contains(coalesce(rule.source_ranges, []), "0.0.0.0/0")
     ])
     error_message = "Firewall rules must not be open to 0.0.0.0/0."
