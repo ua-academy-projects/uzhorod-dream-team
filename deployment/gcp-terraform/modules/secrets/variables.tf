@@ -2,18 +2,24 @@ variable "project_id" {
   type = string
 }
 
-variable "secrets_to_set" {
-  type        = set(string)
-  description = "Set of secret names to set"
-  default     = []
+variable "config" {
+  type = object({
+    passwords = optional(set(string), [])
+  })
+  description = "Secret generation configuration"
 }
 
-variable "vm_access" {
+variable "vms" {
   type = map(object({
-    email   = string
-    secrets = list(string)
+    secrets = optional(set(string), [])
   }))
-  description = "Map of VM to their secrets and service email"
+  description = "VMs and the secrets they need"
+  default     = {}
+}
+
+variable "service_accounts" {
+  type        = map(object({ email = string }))
+  description = "VM service accounts used to grant secret access"
   default     = {}
 }
 
@@ -22,6 +28,7 @@ variable "payloads" {
   description = "Map of secret names to their values"
   sensitive   = true
   ephemeral   = true
+  default     = {}
 }
 
 variable "revisions" {

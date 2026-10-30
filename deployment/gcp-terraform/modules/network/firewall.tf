@@ -5,7 +5,7 @@ locals {
 resource "google_compute_firewall" "ingress" {
   for_each = var.config.firewall_rules
 
-  project   = var.project_id
+  project   = var.google.project_id
   name      = "${var.config.name}-${each.key}"
   network   = google_compute_network.main.id
   direction = "INGRESS"

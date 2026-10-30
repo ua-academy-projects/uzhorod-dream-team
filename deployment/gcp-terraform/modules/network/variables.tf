@@ -1,9 +1,8 @@
-variable "project_id" {
-  type = string
-}
-
-variable "region" {
-  type = string
+variable "google" {
+  type = object({
+    project_id = string
+    region     = string
+  })
 }
 
 variable "config" {
@@ -11,7 +10,7 @@ variable "config" {
     name                = string
     subnet_cidr         = string
     enable_nat          = optional(bool, true)
-    public_network_tier = optional(string, "STANDARD")
+    public_tier = optional(string, "STANDARD")
     firewall_rules = map(object({
       source_tags   = optional(set(string), [])
       source_ranges = optional(set(string), [])

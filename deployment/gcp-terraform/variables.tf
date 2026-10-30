@@ -4,6 +4,13 @@ variable "config_path" {
   default     = "../config/deployment.json"
 }
 
+variable "cloudflare_zone" {
+  type = string
+  description = "Cloudflare Zone ID"
+  sensitive = true
+  default = null
+}
+
 variable "secret_payloads" {
   type        = map(string)
   description = "Map of secret variables to their values to set"

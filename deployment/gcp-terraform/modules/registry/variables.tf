@@ -1,29 +1,25 @@
 variable "project_id" {
-  type = string
+  type        = string
+  description = "GCP project_id"
 }
 
-variable "location" {
-  type = string
-}
-
-variable "repository_id" {
-  type    = string
-  default = "kyiv-air"
-}
-
-variable "description" {
-  type    = string
-  default = "Kyiv Air container images"
+variable "repository" {
+  type = object({
+    id          = optional(string, "kyiv-air")
+    description = optional(string, "Kyiv Air container images")
+    location    = optional(string, "us-central1")
+  })
+  description = "Artifact registry repository config"
 }
 
 variable "readers" {
-  type        = map(string)
+  type        = map(object({ email = string }))
   description = "Stable names mapped to IAM members allowed to pull images."
   default     = {}
 }
 
 variable "writers" {
-  type        = map(string)
+  type        = map(object({ email = string }))
   description = "Stable names mapped to IAM members allowed to push images."
   default     = {}
 }

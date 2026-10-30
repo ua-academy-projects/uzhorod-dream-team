@@ -1,7 +1,7 @@
 output "repo_id" {
-  value = google_artifact_registry_repository.main_repo.id
+  value = local.repo_id
 }
 
 output "repository_url" {
-  value = "${var.location}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.main_repo.repository_id}"
+  value = "${var.repository.location}-docker.pkg.dev/${var.project_id}/${local.repo_id}"
 }

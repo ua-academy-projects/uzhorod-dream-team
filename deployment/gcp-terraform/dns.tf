@@ -1,5 +1,5 @@
 resource "cloudflare_dns_record" "ui" {
-  zone_id = local.cfg.cloudflare.zone_id
+  zone_id = var.cloudflare_zone
   name    = local.cfg.cloudflare.domain
   type    = "A"
   content = module.network.public_ips["ui"]
@@ -8,7 +8,7 @@ resource "cloudflare_dns_record" "ui" {
 }
 
 resource "cloudflare_dns_record" "www" {
-  zone_id = local.cfg.cloudflare.zone_id
+  zone_id = var.cloudflare_zone
   name    = "www.${local.cfg.cloudflare.domain}"
   type    = "CNAME"
   content = cloudflare_dns_record.ui.name
