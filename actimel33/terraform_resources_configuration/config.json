@@ -232,6 +232,30 @@
     "dns": {
         "cloudflare_zone_id": "6eb0f4498c576e43d1731bfdfd82825e"
     },
+    "bootstrap": {
+        "project_id_prefix": "crypto-price",
+        "project_name": "crypto-price-service",
+        "terraform_service_account": "terraform",
+        "state_prefix": "terraform/state",
+        "apis": [
+            "cloudresourcemanager.googleapis.com",
+            "serviceusage.googleapis.com",
+            "iam.googleapis.com",
+            "iamcredentials.googleapis.com",
+            "storage.googleapis.com",
+            "compute.googleapis.com",
+            "iap.googleapis.com",
+            "secretmanager.googleapis.com",
+            "artifactregistry.googleapis.com"
+        ],
+        "terraform_roles": [
+            "roles/compute.admin",
+            "roles/iam.serviceAccountAdmin",
+            "roles/iam.serviceAccountUser",
+            "roles/secretmanager.admin",
+            "roles/artifactregistry.admin"
+        ]
+    },
     "google_project_services_list": [
         "artifactregistry.googleapis.com",
         "cloudbuild.googleapis.com",
