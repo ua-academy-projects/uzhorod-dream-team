@@ -264,7 +264,8 @@ write_env_file() {
   echo "==> Writing $ENV_FILE"
   {
     echo "# Written by bootstrap/bootstrap.sh. Use: source .env"
-    printf 'export GOOGLE_APPLICATION_CREDENTIALS=%q\n' "$KEY_FILE"
+    # Read by the google provider and the gcs backend only. A path, so the key itself stays out of the environment.
+    printf 'export GOOGLE_CREDENTIALS=%q\n' "$KEY_FILE"
     printf 'CLOUDFLARE_API_TOKEN=$(gcloud secrets versions access latest --secret=%q --project=%q) \\\n' "$TOKEN_SECRET" "$PROJECT_ID"
     printf '  || { echo "could not read the Cloudflare API token from secret %s in %s" >&2; return 1; }\n' "$TOKEN_SECRET" "$PROJECT_ID"
     echo "export CLOUDFLARE_API_TOKEN"
