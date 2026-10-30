@@ -25,13 +25,14 @@
         "bootstrap": {
             "description": "Read only by bootstrap/bootstrap.sh.",
             "type": "object",
-            "required": ["project_id_prefix", "project_name", "terraform_service_account", "state_prefix", "apis", "terraform_roles"],
+            "required": ["project_id_prefix", "project_name", "terraform_service_account", "state_prefix", "cloudflare_token_secret", "apis", "terraform_roles"],
             "additionalProperties": false,
             "properties": {
                 "project_id_prefix": { "description": "A new project gets the ID <prefix>-<6 random hex characters>.", "type": "string", "pattern": "^[a-z][a-z0-9-]{0,22}$" },
                 "project_name": { "description": "Display name of a new project.", "type": "string", "minLength": 4, "maxLength": 30 },
                 "terraform_service_account": { "description": "ID of the service account Terraform runs as.", "type": "string", "pattern": "^[a-z][a-z0-9-]{4,28}[a-z0-9]$" },
                 "state_prefix": { "description": "Folder of the Terraform state in the state bucket.", "type": "string", "minLength": 1 },
+                "cloudflare_token_secret": { "description": "Secret Manager secret with the Cloudflare API token; terraform/.env reads it.", "type": "string", "pattern": "^[A-Za-z0-9_-]{1,255}$" },
                 "apis": {
                     "description": "APIs enabled in the project.",
                     "type": "array",
@@ -152,11 +153,11 @@
             }
         },
         "ssh": {
+            "description": "Read by ssh-config.sh; the user name comes from the OS Login profile of whoever runs it.",
             "type": "object",
-            "required": ["user", "bastion"],
+            "required": ["bastion"],
             "additionalProperties": false,
             "properties": {
-                "user": { "description": "OS Login user name written to the SSH config.", "type": "string" },
                 "bastion": { "description": "VM that the SSH config jumps through.", "type": "string" }
             }
         }

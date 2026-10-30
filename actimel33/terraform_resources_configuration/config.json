@@ -13,6 +13,7 @@
         "project_name": "crypto-price-service",
         "terraform_service_account": "terraform",
         "state_prefix": "terraform/state",
+        "cloudflare_token_secret": "cloudflare-api-token",
         "apis": [
             "cloudresourcemanager.googleapis.com",
             "serviceusage.googleapis.com",
@@ -229,7 +230,6 @@
         "cloudflare_zone_id": "6eb0f4498c576e43d1731bfdfd82825e"
     },
     "ssh": {
-        "user": "proshina_playground_gmail_com",
         "bastion": "bastion"
     }
 }

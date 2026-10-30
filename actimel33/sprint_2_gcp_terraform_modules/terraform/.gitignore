@@ -11,3 +11,4 @@ tfplan
 # Values of a particular environment
 terraform.tfvars
 backend.hcl
+.env

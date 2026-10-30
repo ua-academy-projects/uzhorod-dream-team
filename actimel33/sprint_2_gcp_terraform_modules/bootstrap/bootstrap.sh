@@ -6,6 +6,7 @@ set -euo pipefail
 DIR=$(cd "$(dirname "$0")" && pwd)
 CONFIG=$DIR/../../terraform_resources_configuration/config.json
 BACKEND_FILE=$DIR/../terraform/backend.hcl
+ENV_FILE=$DIR/../terraform/.env
 
 die() {
   echo "ERROR: $*" >&2
@@ -38,7 +39,7 @@ retry() {
     if "$@"; then
       return 0
     fi
-    echo "    attempt $attempt failed, retrying in 5 s"
+    echo "    attempt $attempt failed, retrying in 5 s" >&2
     sleep 5
   done
   return 1
@@ -53,6 +54,7 @@ read_config() {
   REGION=$(config_value project region)
   SA_NAME=$(config_value bootstrap terraform_service_account)
   STATE_PREFIX=$(config_value bootstrap state_prefix)
+  TOKEN_SECRET=$(config_value bootstrap cloudflare_token_secret)
   mapfile -t APIS < <(config_value bootstrap apis)
   mapfile -t ROLES < <(config_value bootstrap terraform_roles)
 
@@ -61,6 +63,8 @@ read_config() {
     || die "bootstrap.terraform_service_account '$SA_NAME' is not a valid account name."
   [[ "$STATE_PREFIX" =~ ^[A-Za-z0-9/_.-]+$ ]] \
     || die "bootstrap.state_prefix '$STATE_PREFIX' may only have letters, digits and / _ . -"
+  [[ "$TOKEN_SECRET" =~ ^[A-Za-z0-9_-]+$ ]] \
+    || die "bootstrap.cloudflare_token_secret '$TOKEN_SECRET' may only have letters, digits and _ -"
 }
 
 create_project() {
@@ -233,6 +237,20 @@ create_key() {
     || die "$KEY_FILE is not 600, the disk ignores permissions (a Windows drive?). Keep the key on the Linux disk."
 }
 
+# The token itself is added by a person, never by this script.
+create_token_secret() {
+  if gcloud secrets describe "$TOKEN_SECRET" --project="$PROJECT_ID" >/dev/null 2>&1; then
+    echo "skip: secret $TOKEN_SECRET already exists"
+  else
+    echo "==> Creating secret $TOKEN_SECRET for the Cloudflare API token"
+    gcloud secrets create "$TOKEN_SECRET" --project="$PROJECT_ID" --replication-policy=automatic
+  fi
+}
+
+token_is_set() {
+  [ -n "$(gcloud secrets versions list "$TOKEN_SECRET" --project="$PROJECT_ID" --filter=state=ENABLED --limit=1 --format='value(name)')" ]
+}
+
 write_backend_config() {
   echo "==> Writing $BACKEND_FILE"
   cat > "$BACKEND_FILE" <<EOF
@@ -241,11 +259,29 @@ prefix = "$STATE_PREFIX"
 EOF
 }
 
+# Holds no secrets: the token is read from Secret Manager on every source.
+write_env_file() {
+  echo "==> Writing $ENV_FILE"
+  {
+    echo "# Written by bootstrap/bootstrap.sh. Use: source .env"
+    printf 'export GOOGLE_APPLICATION_CREDENTIALS=%q\n' "$KEY_FILE"
+    printf 'CLOUDFLARE_API_TOKEN=$(gcloud secrets versions access latest --secret=%q --project=%q) \\\n' "$TOKEN_SECRET" "$PROJECT_ID"
+    printf '  || { echo "could not read the Cloudflare API token from secret %s in %s" >&2; return 1; }\n' "$TOKEN_SECRET" "$PROJECT_ID"
+    echo "export CLOUDFLARE_API_TOKEN"
+  } > "$ENV_FILE"
+  chmod 600 "$ENV_FILE"
+}
+
 print_next_steps() {
   echo
-  echo "Bootstrap of $PROJECT_ID is done. New IAM grants can take a minute or two to work. Next:"
-  echo "  export GOOGLE_APPLICATION_CREDENTIALS=$KEY_FILE    # if GOOGLE_APPLICATION_CREDENTIALS is not set, Terraform runs as you"
+  echo "Bootstrap of $PROJECT_ID is done. New IAM grants can take a minute or two to work."
+  if ! token_is_set; then
+    echo "Add the Cloudflare API token once (Cloudflare: My Profile > API Tokens, permission Zone > DNS > Edit; the input is hidden):"
+    echo "  read -rsp 'Cloudflare API token: ' t && printf %s \"\$t\" | gcloud secrets versions add $TOKEN_SECRET --data-file=- --project=$PROJECT_ID; unset t"
+  fi
+  echo "Next:"
   echo "  cd $(cd "$DIR/../terraform" && pwd)"
+  echo "  source .env    # without it Terraform runs as you, not as $SA_EMAIL"
   echo "  terraform init -reconfigure -backend-config=backend.hcl"
   echo "  terraform plan"
 }
@@ -265,7 +301,9 @@ main() {
   create_state_bucket
   create_terraform_account
   create_key
+  create_token_secret
   write_backend_config
+  write_env_file
   print_next_steps
 }
 

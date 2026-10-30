@@ -55,11 +55,3 @@ module "dns" {
   domain = module.load_balancer.domain
   ip     = module.load_balancer.ip
 }
-
-module "ssh_config" {
-  source = "./modules/ssh_config"
-
-  config    = local.config.ssh
-  project   = local.config.project
-  instances = module.vms.instances
-}
