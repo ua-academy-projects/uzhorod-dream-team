@@ -13,9 +13,6 @@ locals {
     managed_by = "terraform"
   }
 
-  # Terraform runs as this account (created by bootstrap/bootstrap.sh), not as the user.
-  terraform_service_account_email = "${local.config.bootstrap.terraform_service_account}@${local.config.project_id}.iam.gserviceaccount.com"
-
   registry_host = "${local.config.region}-docker.pkg.dev"
   registry      = "${local.registry_host}/${local.config.project_id}/${local.config.artifact_registry.repository_id}"
   hosts         = { for name, machine in local.machines : name => "${name}.${machine.zone}.c.${local.config.project_id}.internal" }
