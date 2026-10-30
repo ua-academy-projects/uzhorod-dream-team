@@ -56,7 +56,7 @@
 │             │ /api :3001                             │ ssh :22       │
 │             ▼                                        ▼               │
 │    ┌─────────────────┐  ┌────────┐  ┌─────────┐    port 22 of        │
-│    │ history         │─▶│ db     │◀─│ fetcher │    db, fetcher,      │
+│    │ history         │─▶│ db    │◀─│ fetcher │    db, fetcher,      │
 │    │ .77.12          │  │ .77.10 │  │ .77.11  │    history, ui       │
 │    └─────────────────┘  └────────┘  └─────────┘                      │
 └─ crypto-private 192.168.77.0/24 · isolated, no route in or out ──────┘
