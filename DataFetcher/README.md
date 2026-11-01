@@ -103,3 +103,102 @@ Run UI tests (install packages from `ui/requirements-dev.txt` first):
 cd ui
 APP_BACKEND=postgres python -m pytest -q
 ```
+
+
+## UI через Nginx і Cloudflare Tunnel (опціонально)
+
+Для цього альтернативного режиму задайте `ip_https: false` та ім’я секрету
+токена в UI startup, а також `tunnel_token_secret_id` у secret_manager.
+Тоді на UI VM Terraform запускає Compose profiles `ui` і `tunnel`:
+`Cloudflare HTTPS → cloudflared → http://nginx:80 → ui:8000`.
+Nginx і UI публікують діагностичні порти лише на localhost VM
+(8080 і 8000). Відкривати зовнішні порти 80/443 для тунелю не потрібно.
+
+Перед запуском нової інфраструктури:
+
+1. У Cloudflare створіть remotely-managed Cloudflare Tunnel.
+2. Додайте published application route для свого домену з service URL
+   `http://nginx:80` (контейнери працюють в одній Docker network).
+3. Підготуйте GCP Secret Manager secret `datamonitor-cloudflare-tunnel-token`
+   і додайте версію з токеном тунелю. Terraform описує контейнер секрету
+   та IAM-доступ, але значення токена не зберігає. Якщо секрет створений
+   вручну перед першим apply, імпортуйте його в Terraform:
+
+   ```bash
+   terraform -chdir=gcp-terra import \
+     'module.secrets.google_secret_manager_secret.tunnel_token[0]' \
+     projects/PROJECT_ID/secrets/datamonitor-cloudflare-tunnel-token
+   ```
+
+   Або спочатку створіть секрет через окремий підготовчий apply модуля:
+
+   ```bash
+   terraform -chdir=gcp-terra apply -target=module.secrets
+   ```
+
+   Після цього додайте версію через Google Cloud Console, а тоді виконайте
+   звичайний plan/apply всієї конфігурації. Не передавайте токен у Git,
+   config.json, startup metadata або аргументах команд.
+4. Наявний секрет `datamonitor-env` також має містити робочий `.env`.
+
+Ім'я секрету токена налаштовується у `secret_manager.tunnel_token_secret_id`
+та `compute.instances.ui.startup.tunnel_token_secret_id`; вони мають збігатися.
+Токен отримує лише UI startup script. Поточний service account спільний для
+прикладних VM, тому IAM технічно дозволяє йому читати цей секрет на всіх цих VM.
+На UI VM токен зберігається у файлі з правами 0400 і монтується лише в cloudflared.
+Для HTTPS через тунель startup script виставляє `COOKIE_SECURE=true`.
+
+Terraform вбудовує локальні Compose і Nginx конфігурації в startup script;
+код застосунку, як і раніше, клонується з налаштованої у скрипті Git-гілки.
+Заміна токена в Secret Manager застосовується після повторного запуску
+startup script або перезапуску VM; автоматичного оновлення токена немає.
+
+Для локального запуску лише UI і Nginx використовуйте profile `ui`.
+Для тунелю додайте profile `tunnel` і `CLOUDFLARE_TUNNEL_TOKEN_FILE` — шлях
+до локального файла токена. `NGINX_CONFIG_DIR` дозволяє перевизначити каталог
+із Nginx конфігурацією.
+
+
+## Поточний режим: HTTPS на статичній IP без домену
+
+У `config.json` для UI встановлено `startup.ip_https: true`.
+Cloudflare Tunnel у цьому режимі не запускається, токен не потрібний.
+Terraform резервує статичну публічну IP та дозволяє TCP 80/443 лише для
+VM із тегом `ui-service`. UI:8000 залишається прив'язаним до localhost.
+
+Startup script на UI VM:
+
+1. Запускає UI і Nginx з HTTP endpoint для ACME-перевірки.
+2. Встановлює Certbot >= 5.4 у Python venv.
+3. Отримує довірений IP-сертифікат Let's Encrypt через HTTP-01
+   (`--ip-address`, профіль `shortlived`).
+4. Вмикає Nginx HTTPS на 443 і редирект HTTP → HTTPS на фактичну IP VM.
+   ACME challenge та локальна healthcheck-адреса залишаються доступними по HTTP.
+5. Встановлює systemd timer `datamonitor-ip-https.timer`: перевірка сертифіката
+   кожні шість годин, повторна спроба також у разі невдалої першої видачі.
+   Після перевірки/поновлення Nginx перечитує сертифікат.
+
+Сертифікати та ключі лежать у `/etc/letsencrypt` на boot-диску UI VM.
+Вони переживають перезапуск VM; при видаленні boot-диска буде потрібна нова
+видача. Для перевірки Let's Encrypt має досягати публічного порту 80;
+поки VM зупинена, поновлення не працює. IP-сертифікат діє близько шести днів.
+Certbot реєструє ACME-акаунт без email; значення email у конфігу не потрібне.
+
+Перевірка після розгортання:
+
+```bash
+terraform -chdir=gcp-terra output -raw ui_public_ip
+```
+
+На UI VM:
+
+```bash
+systemctl status datamonitor-ip-https.timer
+journalctl -u datamonitor-ip-https.service --no-pager -n 50
+docker logs datamonitor-nginx --tail 50
+/opt/datamonitor-certbot/bin/certbot certificates
+```
+
+Відкрийте `http://UI_IP/`: очікується перенаправлення на `https://UI_IP/`.
+Початкова видача сертифіката виконується у startup script;
+`terraform apply` сам по собі не підтверджує, що вона вже завершилась.

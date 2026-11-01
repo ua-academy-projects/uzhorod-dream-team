@@ -75,3 +75,12 @@ terraform.rc
 
 
 .terraform.tfstate.lock.info
+# Private bootstrap settings, exported service account keys and generated files
+/gcp-terra/bootstrap/bootstrap.local.json
+/gcp-terra/bootstrap/.credentials/
+/gcp-terra/bootstrap/.bootstrap.lock
+/gcp-terra/bootstrap/terraform.env.sh
+/gcp-terra/bootstrap/backend.hcl
+
+# Local bootstrap dependencies
+/gcp-terra/bootstrap/.tools/

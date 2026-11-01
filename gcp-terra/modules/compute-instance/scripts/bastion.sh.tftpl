@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+export DEBIAN_FRONTEND=noninteractive
+
+echo "=== Configuring Bastion VM ==="
+
+apt-get update
+apt-get install -y fail2ban ufw
+
+
+cat > /etc/ssh/sshd_config.d/01-hardening.conf <<'EOF'
+Port ${ssh_port}
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PermitRootLogin no
+X11Forwarding no
+AllowAgentForwarding no
+AllowTcpForwarding yes
+MaxAuthTries 3
+EOF
+
+# Validate SSH configuration before restarting
+sshd -t
+# Use ssh.service so Ubuntu socket activation cannot keep the old port.
+systemctl disable --now ssh.socket
+systemctl enable ssh.service
+systemctl restart ssh.service
+
+# Configure local firewall
+ufw default deny incoming
+ufw default allow outgoing
+
+ufw allow ${ssh_port}/tcp
+
+ufw --force enable
+
+cat > /etc/fail2ban/jail.d/sshd.local <<'EOF'
+[sshd]
+enabled = true
+port = ${ssh_port}
+backend = systemd
+EOF
+
+# Enable Fail2Ban
+systemctl enable fail2ban
+systemctl restart fail2ban
+
+echo "=== Bastion configuration completed ==="

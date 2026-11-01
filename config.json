@@ -1,0 +1,163 @@
+{
+  "project_id": "project-a5588ddc-4a2e-4c04-879",
+  "region": "europe-west4",
+  "zone": "europe-west4-a",
+  "network": {
+    "name": "analyzer-vpc",
+    "subnet": {
+      "name": "analyzer-subnet",
+      "cidr": "10.10.0.0/24",
+      "region": "europe-west4"
+    },
+    "nat": {
+      "name": "analyzer-nat",
+      "enabled": true
+    }
+  },
+  "firewall": {
+    "rules": [
+      {
+        "name": "allow-ssh-bastion",
+        "priority": 900,
+        "target_tags": [
+          "bastion-service"
+        ],
+        "allowed": [
+          {
+            "protocol": "tcp",
+            "ports": [
+              "56789"
+            ]
+          }
+        ],
+        "source_ranges_key": "admin"
+      },
+      {
+        "name": "allow-internal",
+        "priority": 1000,
+        "source_ranges": [
+          "10.10.0.0/24"
+        ],
+        "allowed": [
+          {
+            "protocol": "tcp"
+          },
+          {
+            "protocol": "udp"
+          },
+          {
+            "protocol": "icmp"
+          }
+        ]
+      },
+      {
+        "name": "allow-ui-web",
+        "target_tags": [
+          "ui-service"
+        ],
+        "source_ranges": [
+          "0.0.0.0/0"
+        ],
+        "allowed": [
+          {
+            "protocol": "tcp",
+            "ports": [
+              "80",
+              "443"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "secret_manager": {
+    "secret_id": "datamonitor-env",
+    "account_id": "datamonitor-vm",
+    "display_name": "Data Monitor VM Service Account",
+    "roles": [
+      "roles/secretmanager.secretAccessor"
+    ]
+  },
+  "compute": {
+    "defaults": {
+      "machine_type": "e2-small",
+      "boot_disk": {
+        "image": "projects/ubuntu-os-cloud/global/images/family/ubuntu-2404-lts-amd64",
+        "size_gb": 15,
+        "type": "pd-standard"
+      },
+      "public_ip": false,
+      "attach_service_account": true
+    },
+    "instances": {
+      "bastion": {
+        "name": "bastion-instance",
+        "machine_type": "e2-micro",
+        "network_ip": "10.10.0.11",
+        "tags": [
+          "bastion-service"
+        ],
+        "public_ip": true,
+        "attach_service_account": false,
+        "boot_disk": {
+          "size_gb": 10
+        },
+        "startup": {
+          "type": "bastion",
+          "ssh_port": 56789
+        },
+        "static_public_ip": true
+      },
+      "fetcher": {
+        "name": "fetcher-instance",
+        "network_ip": "10.10.0.12",
+        "tags": [
+          "fetcher-service",
+          "internal-service"
+        ],
+        "startup": {
+          "type": "application",
+          "service_role": "fetcher"
+        }
+      },
+      "postgres": {
+        "name": "postgres-instance",
+        "network_ip": "10.10.0.13",
+        "tags": [
+          "postgres-service",
+          "internal-service"
+        ],
+        "startup": {
+          "type": "application",
+          "service_role": "database"
+        }
+      },
+      "history": {
+        "name": "history-instance",
+        "network_ip": "10.10.0.14",
+        "tags": [
+          "history-service",
+          "internal-service"
+        ],
+        "startup": {
+          "type": "application",
+          "service_role": "history"
+        }
+      },
+      "ui": {
+        "name": "ui-instance",
+        "network_ip": "10.10.0.15",
+        "tags": [
+          "ui-service"
+        ],
+        "startup": {
+          "type": "application",
+          "service_role": "ui",
+          "ip_https": true
+        },
+        "public_ip": true,
+        "static_public_ip": true
+      }
+    }
+  }
+}

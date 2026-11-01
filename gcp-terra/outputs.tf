@@ -1,4 +1,9 @@
 output "bastion_public_ip" {
   description = "Public IP of Bastion VM"
-  value       = google_compute_instance.bastion.network_interface[0].access_config[0].nat_ip
+  value       = module.compute.public_ips["bastion"]
+}
+
+output "ui_public_ip" {
+  description = "Static public IP of the UI VM"
+  value       = module.compute.public_ips["ui"]
 }

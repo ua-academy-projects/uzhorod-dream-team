@@ -120,7 +120,27 @@ services:
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
       HISTORY_SERVICE_URL: ${HISTORY_SERVICE_URL:-http://10.10.0.14:8000}
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
+    restart: unless-stopped
+
+  nginx:
+    profiles: ["ui"]
+    image: nginx:1.28-alpine
+    container_name: datamonitor-nginx
+    ports:
+      - "${UI_HTTP_BIND:-127.0.0.1:8080}:80"
+      - "${UI_HTTPS_BIND:-127.0.0.1:8443}:443"
+    volumes:
+      - ${NGINX_CONFIG_DIR:-./nginx}:/etc/nginx/conf.d:ro
+      - /var/lib/letsencrypt:/var/www/certbot:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+    depends_on:
+      - ui
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
     restart: unless-stopped
 
 volumes:
