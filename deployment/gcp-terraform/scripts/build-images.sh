@@ -4,9 +4,7 @@ set -Eeuo pipefail
 scripts=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 project=$(cd "$scripts/../../.." && pwd)
 config=${DEPLOYMENT_CONFIG:-$project/deployment/config/deployment.json}
-: "${BOOTSTRAP_CONFIG_DIR:?Set BOOTSTRAP_CONFIG_DIR to the directory containing bootstrap.json.}"
-bootstrap=$BOOTSTRAP_CONFIG_DIR/bootstrap.json
-registry=$(jq -er '.google.region + "-docker.pkg.dev/" + .google.project_id' "$bootstrap")
+registry=$(jq -er '.google.region + "-docker.pkg.dev/" + .google.project_id' "$config")
 repository=$(jq -er '.registry.id // "kyiv-air"' "$config")
 registry=$registry/$repository
 version=$(jq -er '.application.image_version' "$config")

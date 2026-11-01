@@ -1,6 +1,5 @@
 locals {
-  bootstrap = jsondecode(file(pathexpand(var.bootstrap_config_path)))
-  cfg       = merge(jsondecode(file(var.config_path)), { google = local.bootstrap.google })
+  cfg = jsondecode(file(var.config_path))
 }
 
 module "network" {

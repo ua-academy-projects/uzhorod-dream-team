@@ -23,7 +23,8 @@ BOOTSTRAP_REGION           Default: us-central1
 BOOTSTRAP_ZONE             Default: <region>-a
 BOOTSTRAP_BUCKET           Default: <project-id>-tfstate
 BOOTSTRAP_STATE_PREFIX     Default: terraform/state
-BOOTSTRAP_CONFIG_DIR       Default: ~/.config/kyiv-air/<project-id>
+DEPLOYMENT_CONFIG          Default: <config-dir>/deployment.json
+BOOTSTRAP_CONFIG_DIR       Default: ~/.config/kyiv-air
 EOF
 }
 
@@ -72,6 +73,14 @@ for dependency in gcloud jq awk; do
   command -v "$dependency" >/dev/null || die "Install $dependency before running bootstrap."
 done
 
+# Reading config paths
+BOOTSTRAP_CONFIG_DIR=${BOOTSTRAP_CONFIG_DIR:-$HOME/.config/kyiv-air}
+if "$interactive"; then prompt BOOTSTRAP_CONFIG_DIR; fi
+BOOTSTRAP_CONFIG_DIR=${BOOTSTRAP_CONFIG_DIR/#\~/$HOME}
+DEPLOYMENT_CONFIG=${DEPLOYMENT_CONFIG:-$BOOTSTRAP_CONFIG_DIR/deployment.json}
+if "$interactive"; then prompt DEPLOYMENT_CONFIG; fi
+DEPLOYMENT_CONFIG=${DEPLOYMENT_CONFIG/#\~/$HOME}
+
 # Reading project ID & billing account
 BOOTSTRAP_PROJECT_ID=${BOOTSTRAP_PROJECT_ID:-}
 BOOTSTRAP_BILLING_ACCOUNT=${BOOTSTRAP_BILLING_ACCOUNT:-}
@@ -80,7 +89,7 @@ if "$interactive"; then
   prompt BOOTSTRAP_BILLING_ACCOUNT
 fi
 missing=()
-for name in BOOTSTRAP_PROJECT_ID BOOTSTRAP_BILLING_ACCOUNT; do
+for name in BOOTSTRAP_PROJECT_ID BOOTSTRAP_BILLING_ACCOUNT DEPLOYMENT_CONFIG; do
   [[ -n "${!name}" ]] || missing+=("$name")
 done
 if (( ${#missing[@]} )); then
@@ -94,9 +103,8 @@ if "$interactive"; then prompt BOOTSTRAP_REGION; fi
 BOOTSTRAP_ZONE=${BOOTSTRAP_ZONE:-$BOOTSTRAP_REGION-a}
 BOOTSTRAP_BUCKET=${BOOTSTRAP_BUCKET:-$BOOTSTRAP_PROJECT_ID-tfstate}
 BOOTSTRAP_STATE_PREFIX=${BOOTSTRAP_STATE_PREFIX:-$DEFAULT_STATE_PREFIX}
-BOOTSTRAP_CONFIG_DIR=${BOOTSTRAP_CONFIG_DIR:-$HOME/.config/kyiv-air/$BOOTSTRAP_PROJECT_ID}
 if "$interactive"; then
-  for name in BOOTSTRAP_ZONE BOOTSTRAP_BUCKET BOOTSTRAP_STATE_PREFIX BOOTSTRAP_CONFIG_DIR; do
+  for name in BOOTSTRAP_ZONE BOOTSTRAP_BUCKET BOOTSTRAP_STATE_PREFIX; do
     prompt "$name"
   done
 fi
@@ -104,21 +112,13 @@ fi
 install -d -m 0700 "$BOOTSTRAP_CONFIG_DIR"
 BOOTSTRAP_CONFIG_DIR=$(cd "$BOOTSTRAP_CONFIG_DIR" && pwd)
 
-readonly CONFIG_FILE=$BOOTSTRAP_CONFIG_DIR/bootstrap.json
+readonly CONFIG_FILE=$(realpath "$DEPLOYMENT_CONFIG")
 readonly BACKEND_FILE=$BOOTSTRAP_CONFIG_DIR/backend.ini
 readonly KEY_FILE=$BOOTSTRAP_CONFIG_DIR/terraform-key.json
+readonly ENV_FILE=$BOOTSTRAP_CONFIG_DIR/env.sh
 readonly ACCOUNT=$SERVICE_ACCOUNT_NAME@$BOOTSTRAP_PROJECT_ID.iam.gserviceaccount.com
 
-# Reading existing google config
-expected_config=$(jq -n \
-  --arg project "$BOOTSTRAP_PROJECT_ID" --arg region "$BOOTSTRAP_REGION" --arg zone "$BOOTSTRAP_ZONE" \
-  '{google: {project_id: $project, region: $region, zone: $zone}}')
-
-if [[ -e "$CONFIG_FILE" ]]; then
-  jq -e --argjson expected "$expected_config" '. == $expected' "$CONFIG_FILE" >/dev/null \
-    || die "Existing $CONFIG_FILE conflicts with selected settings."
-  chmod 0600 "$CONFIG_FILE"
-fi
+jq -e 'type == "object"' "$CONFIG_FILE" >/dev/null || die "Expected a JSON object in $CONFIG_FILE."
 
 # Reading existing Terraform Backend config
 if [[ -e "$BACKEND_FILE" ]]; then
@@ -234,23 +234,24 @@ retry_iam gcloud storage buckets add-iam-policy-binding "gs://$BOOTSTRAP_BUCKET"
   --project="$BOOTSTRAP_PROJECT_ID" --member="serviceAccount:$ACCOUNT" --role=roles/storage.objectAdmin --quiet
 
 # Saving new config
-if [[ ! -f "$CONFIG_FILE" ]]; then
-  config_temp=$(mktemp "$BOOTSTRAP_CONFIG_DIR/.bootstrap.XXXXXX")
-  printf '%s\n' "$expected_config" > "$config_temp"
-  mv "$config_temp" "$CONFIG_FILE"
-fi
+config_temp=$(mktemp "${CONFIG_FILE}.XXXXXX")
+jq --arg project "$BOOTSTRAP_PROJECT_ID" --arg region "$BOOTSTRAP_REGION" --arg zone "$BOOTSTRAP_ZONE" '
+  .google.project_id = $project | .google.region = $region | .google.zone = $zone
+' "$CONFIG_FILE" > "$config_temp"
+chmod --reference="$CONFIG_FILE" "$config_temp"
+mv "$config_temp" "$CONFIG_FILE"
 if [[ ! -f "$BACKEND_FILE" ]]; then
   printf 'bucket = "%s"\nprefix = "%s"\n' "$BOOTSTRAP_BUCKET" "$BOOTSTRAP_STATE_PREFIX" > "$BACKEND_FILE"
 fi
 
-# Printing ready-to-use bash commands
-printf '\nBootstrap complete. Run these commands (application config and Cloudflare inputs must be available):\n\n'
-printf 'export GOOGLE_APPLICATION_CREDENTIALS=%q\n' "$KEY_FILE"
-printf 'export TF_VAR_bootstrap_config_path=%q\n\n' "$CONFIG_FILE"
-for action in init plan; do
-  printf 'terraform -chdir=%q %s' "$TERRAFORM_DIR" "$action"
-  if [[ "$action" == init ]]; then
-    printf ' %q' "-backend-config=$BACKEND_FILE"
-  fi
-  printf '\n\n'
-done
+# Saving sourceable environment and initialization commands
+{
+  printf '#!/usr/bin/env bash\n\n'
+  printf 'export GOOGLE_APPLICATION_CREDENTIALS=%q\n' "$KEY_FILE"
+  printf 'export TF_VAR_config_path=%q\n\n' "$CONFIG_FILE"
+  printf 'terraform -chdir=%q init %q\n' "$TERRAFORM_DIR" "-backend-config=$BACKEND_FILE"
+} > "$ENV_FILE"
+chmod 0600 "$ENV_FILE"
+
+printf '\nBootstrap complete. Source this file to set the environment and initialize Terraform:\n\n'
+printf 'source %q\n' "$ENV_FILE"
