@@ -1,48 +1,53 @@
 locals {
-  application_images = {
-    FETCHER_IMAGE   = "${var.registry_url}/fetcher:${var.application.image_version}"
-    HISTORY_IMAGE   = "${var.registry_url}/history:${var.application.image_version}"
-    MIGRATION_IMAGE = "${var.registry_url}/migrate:${var.application.image_version}"
-    UI_IMAGE        = "${var.registry_url}/ui:${var.application.image_version}"
+  repo_url   = var.registry.repository_url
+  web_domain = var.cfg.cloudflare.domain
+  google     = var.cfg.google
+  images = {
+    FETCHER_IMAGE   = "${local.repo_url}/fetcher:${var.cfg.application.image_version}"
+    HISTORY_IMAGE   = "${local.repo_url}/history:${var.cfg.application.image_version}"
+    MIGRATION_IMAGE = "${local.repo_url}/migrate:${var.cfg.application.image_version}"
+    UI_IMAGE        = "${local.repo_url}/ui:${var.cfg.application.image_version}"
   }
 
-  startup_script = templatefile("${path.module}/templates/startup.sh.tftpl", {
-    entrypoint = var.machine.entrypoint
-    scripts = {
-      for script in var.machine.scripts : script => filebase64("${path.module}/scripts/${script}")
-    }
-    templates = var.machine.name == "ui" ? {
-      "ui.conf.template" = filebase64("${path.module}/nginx/ui.conf.template")
-    } : {}
-    environment = merge(
-      var.machine.env,
-      var.images,
-      local.application_images,
-      var.machine.data_disk != null ? {
-        DATA_DEVICE = "/dev/disk/by-id/google-${var.machine.data_disk.device_name}"
-      } : {},
-      {
-        PROJECT_ID      = var.google.project_id
-        REGISTRY_HOST   = "${var.google.region}-docker.pkg.dev"
-        PRIVATE_IP      = var.network.private_ip
-        DB_IP           = var.vms.db.private_ip
-        FETCHER_IP      = var.vms.fetcher.private_ip
-        HISTORY_IP      = var.vms.history.private_ip
-        UI_IP           = var.vms.ui.private_ip
-        UI_ORIGIN       = "https://${var.domain}"
-        CERTBOT_DOMAIN  = var.domain
-        POSTGRES_ONLY   = tostring(var.application.postgres_only)
-        POSTGRES_DB     = var.application.database_name
-        SSH_PORT        = tostring(one(var.network.firewall_rules["iap-ssh"].ports))
-        READY_TIMEOUT   = tostring(var.application.ready_timeout)
-        APPLICATION_ENV = jsonencode(var.machine.env)
-        SECRET_REFS = length(var.machine.secrets) > 0 ? jsonencode({
-          for name in var.machine.secrets : name => {
-            secret_id = var.secrets.secrets[name].secret_id
-            version   = coalesce(var.secrets.secrets[name].version, lookup(var.secrets.versions, name, "missing"))
-          }
-        }) : ""
+  startup_scripts = { for name, vm in var.cfg.vm :
+    name => templatefile("${path.module}/templates/startup.sh.tftpl", {
+      entrypoint = vm.entrypoint
+      scripts = {
+        for script in vm.scripts : script => filebase64("${path.module}/scripts/${script}")
       }
-    )
-  })
+      templates = name == "ui" ? {
+        "ui.conf.template" = filebase64("${path.module}/nginx/ui.conf.template")
+      } : {}
+      environment = merge(
+        vm.env,
+        var.cfg.images,
+        local.images,
+        vm.data_disk != null ? {
+          DATA_DEVICE = "/dev/disk/by-id/google-${vm.data_disk.device_name}"
+        } : {},
+        {
+          PROJECT_ID      = local.google.project_id
+          REGISTRY_HOST   = "${local.google.region}-docker.pkg.dev"
+          PRIVATE_IP      = vm.private_ip
+          DB_IP           = var.cfg.vm.db.private_ip
+          FETCHER_IP      = var.cfg.vm.fetcher.private_ip
+          HISTORY_IP      = var.cfg.vm.history.private_ip
+          UI_IP           = var.cfg.vm.ui.private_ip
+          UI_ORIGIN       = "https://${local.web_domain}"
+          CERTBOT_DOMAIN  = local.web_domain
+          POSTGRES_ONLY   = tostring(var.cfg.application.postgres_only)
+          POSTGRES_DB     = var.cfg.application.database_name
+          SSH_PORT        = tostring(one(var.cfg.network.firewall_rules["iap-ssh"].ports))
+          READY_TIMEOUT   = tostring(var.cfg.application.ready_timeout)
+          APPLICATION_ENV = jsonencode(vm.env)
+          SECRET_REFS = length(vm.secrets) > 0 ? jsonencode({
+            for name in vm.secrets : name => {
+              secret_id = var.secrets.secrets[name].secret_id
+              version   = coalesce(var.secrets.secrets[name].version, lookup(var.cfg.secrets.versions, name, "missing"))
+            }
+          }) : ""
+        }
+      )
+    })
+  }
 }

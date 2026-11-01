@@ -1,6 +1,6 @@
 output "vms" {
   value = {
-    for role, vm in module.vm : role => {
+    for role, vm in module.vm.instances : role => {
       name         = vm.name
       zone         = vm.zone
       private_ip   = vm.private_ip

@@ -1,18 +1,18 @@
 resource "google_compute_router" "main" {
-  count = var.config.enable_nat ? 1 : 0
+  count = var.cfg.network.enable_nat ? 1 : 0
 
-  project = var.google.project_id
-  name    = "${var.config.name}-router"
-  region  = var.google.region
+  project = var.cfg.google.project_id
+  name    = "${var.cfg.network.name}-router"
+  region  = var.cfg.google.region
   network = google_compute_network.main.id
 }
 
 resource "google_compute_router_nat" "main" {
-  count = var.config.enable_nat ? 1 : 0
+  count = var.cfg.network.enable_nat ? 1 : 0
 
-  project                            = var.google.project_id
-  name                               = "${var.config.name}-nat"
-  region                             = var.google.region
+  project                            = var.cfg.google.project_id
+  name                               = "${var.cfg.network.name}-nat"
+  region                             = var.cfg.google.region
   router                             = google_compute_router.main[0].name
   nat_ip_allocate_option             = "AUTO_ONLY"
   source_subnetwork_ip_ranges_to_nat = "LIST_OF_SUBNETWORKS"

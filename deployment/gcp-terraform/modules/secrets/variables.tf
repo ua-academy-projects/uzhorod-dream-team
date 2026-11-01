@@ -1,20 +1,15 @@
-variable "project_id" {
-  type = string
-}
-
-variable "config" {
+variable "cfg" {
   type = object({
-    passwords = optional(set(string), [])
+    google = object({
+      project_id = string
+    })
+    secrets = object({
+      passwords = optional(set(string), [])
+    })
+    vm = map(object({
+      secrets = optional(set(string), [])
+    }))
   })
-  description = "Secret generation configuration"
-}
-
-variable "vms" {
-  type = map(object({
-    secrets = optional(set(string), [])
-  }))
-  description = "VMs and the secrets they need"
-  default     = {}
 }
 
 variable "service_accounts" {

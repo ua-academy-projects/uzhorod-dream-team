@@ -4,7 +4,11 @@ set -Eeuo pipefail
 scripts=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 project=$(cd "$scripts/../../.." && pwd)
 config=${DEPLOYMENT_CONFIG:-$project/deployment/config/deployment.json}
-registry=$(jq -er '.google.region + "-docker.pkg.dev/" + .google.project_id + "/" + .registry.repository_id' "$config")
+: "${BOOTSTRAP_CONFIG_DIR:?Set BOOTSTRAP_CONFIG_DIR to the directory containing bootstrap.json.}"
+bootstrap=$BOOTSTRAP_CONFIG_DIR/bootstrap.json
+registry=$(jq -er '.google.region + "-docker.pkg.dev/" + .google.project_id' "$bootstrap")
+repository=$(jq -er '.registry.id // "kyiv-air"' "$config")
+registry=$registry/$repository
 version=$(jq -er '.application.image_version' "$config")
 registry_host=${registry%%/*}
 gcloud auth configure-docker "$registry_host" --quiet

@@ -4,11 +4,17 @@ variable "config_path" {
   default     = "../config/deployment.json"
 }
 
+variable "bootstrap_config_path" {
+  type        = string
+  description = "Path to the bootstrap-generated JSON containing Google project and location settings"
+  nullable    = false
+}
+
 variable "cloudflare_zone" {
-  type = string
+  type        = string
   description = "Cloudflare Zone ID"
-  sensitive = true
-  default = null
+  sensitive   = true
+  default     = null
 }
 
 variable "secret_payloads" {

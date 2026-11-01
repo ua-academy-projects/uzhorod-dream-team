@@ -1,15 +1,14 @@
-variable "project_id" {
-  type        = string
-  description = "GCP project_id"
-}
-
-variable "repository" {
+variable "cfg" {
   type = object({
-    id          = optional(string, "kyiv-air")
-    description = optional(string, "Kyiv Air container images")
-    location    = optional(string, "us-central1")
+    registry = object({
+      id          = optional(string, "kyiv-air")
+      description = optional(string, "Kyiv Air container images")
+    })
+    google = object({
+      project_id = string
+      region     = optional(string, "us-central1")
+    })
   })
-  description = "Artifact registry repository config"
 }
 
 variable "readers" {

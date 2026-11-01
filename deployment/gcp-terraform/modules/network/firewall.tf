@@ -1,12 +1,12 @@
 locals {
-  vm_tags = { for name, vm in var.vms : name => vm.tags }
+  vm_tags = { for name, vm in var.cfg.vm : name => vm.tags }
 }
 
 resource "google_compute_firewall" "ingress" {
-  for_each = var.config.firewall_rules
+  for_each = var.cfg.network.firewall_rules
 
-  project   = var.google.project_id
-  name      = "${var.config.name}-${each.key}"
+  project   = var.cfg.google.project_id
+  name      = "${var.cfg.network.name}-${each.key}"
   network   = google_compute_network.main.id
   direction = "INGRESS"
 
