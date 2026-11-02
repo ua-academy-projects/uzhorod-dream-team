@@ -1,3 +1,4 @@
+// TODO remove redundant module wrapper
 resource "google_compute_instance" "this" {
   name         = var.name
   machine_type = var.machine_type
