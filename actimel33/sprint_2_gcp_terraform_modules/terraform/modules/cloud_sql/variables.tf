@@ -1,33 +1,31 @@
 variable "config" {
-  description = "cloud_sql part of config.json"
+  description = "config.json; this module reads project and cloud_sql"
   type = object({
-    name                = string
-    database_version    = string
-    edition             = string
-    tier                = string
-    availability_type   = string
-    disk_size           = number
-    disk_type           = string
-    deletion_protection = bool
-    database            = string
-    user                = string
-    password_secret     = string
-    endpoint            = string
+    project = object({
+      id     = string
+      region = string
+      labels = map(string)
+    })
+    cloud_sql = object({
+      name                = string
+      database_version    = string
+      edition             = string
+      tier                = string
+      availability_type   = string
+      disk_size           = number
+      disk_type           = string
+      deletion_protection = bool
+      database            = string
+      user                = string
+      password_secret     = string
+      endpoint            = string
+    })
   })
 
   validation {
-    condition     = contains(keys(var.secret_versions), var.config.password_secret)
+    condition     = contains(keys(var.secret_versions), var.config.cloud_sql.password_secret)
     error_message = "cloud_sql.password_secret must be a secret in the secrets part of config.json."
   }
-}
-
-variable "project" {
-  description = "project part of config.json"
-  type = object({
-    id     = string
-    region = string
-    labels = map(string)
-  })
 }
 
 variable "network" {

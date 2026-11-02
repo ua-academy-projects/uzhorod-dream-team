@@ -1,16 +1,14 @@
 variable "config" {
-  description = "network part of config.json"
+  description = "config.json; this module reads project.region and network"
   type = object({
-    vpc = string
-    subnets = object({
-      private    = object({ name = string, cidr = string })
-      management = object({ name = string, cidr = string })
+    project = object({ region = string })
+    network = object({
+      vpc = string
+      subnets = object({
+        private    = object({ name = string, cidr = string })
+        management = object({ name = string, cidr = string })
+      })
+      nat_router = string
     })
-    nat_router = string
   })
-}
-
-variable "region" {
-  description = "Region of the subnets and the NAT router"
-  type        = string
 }

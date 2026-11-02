@@ -1,8 +1,8 @@
 locals {
-  rules = merge(var.config.common, var.config[var.backend])
+  rules = merge(var.config.firewall.common, var.config.firewall[var.config.app.backend])
 }
 
-resource "google_compute_firewall" "this" {
+resource "google_compute_firewall" "rule" {
   for_each = local.rules
 
   name      = each.key

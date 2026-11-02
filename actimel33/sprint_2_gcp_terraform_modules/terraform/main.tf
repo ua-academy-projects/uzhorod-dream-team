@@ -5,31 +5,28 @@ locals {
 module "network" {
   source = "./modules/network"
 
-  config = local.config.network
-  region = local.config.project.region
+  config = local.config
 }
 
 module "firewall" {
   source = "./modules/firewall"
 
-  config  = local.config.firewall
-  backend = local.config.app.backend
+  config = local.config
+
   network = module.network.self_link
 }
 
 module "artifact_registry" {
   source = "./modules/artifact_registry"
 
-  config  = local.config.registry
-  project = local.config.project
+  config = local.config
 }
 
 module "vms" {
   source = "./modules/vms"
 
-  config   = local.config.vms
-  project  = local.config.project
-  backend  = local.config.app.backend
+  config = local.config
+
   subnets  = module.network.subnets
   registry = module.artifact_registry.repository
   database = module.cloud_sql.connection
@@ -38,16 +35,16 @@ module "vms" {
 module "secrets" {
   source = "./modules/secrets"
 
-  config   = local.config.secrets
-  readers  = module.vms.service_account_emails
-  vm_names = module.vms.names
+  config = local.config
+
+  readers = module.vms.service_account_emails
 }
 
 module "cloud_sql" {
   source = "./modules/cloud_sql"
 
-  config          = local.config.cloud_sql
-  project         = local.config.project
+  config = local.config
+
   network         = module.network.self_link
   subnets         = module.network.subnets
   secret_versions = module.secrets.versions
@@ -56,14 +53,15 @@ module "cloud_sql" {
 module "load_balancer" {
   source = "./modules/load_balancer"
 
-  config    = local.config.load_balancer
+  config = local.config
+
   instances = module.vms.instances
 }
 
 module "dns" {
   source = "./modules/dns"
 
-  config = local.config.dns
-  domain = module.load_balancer.domain
-  ip     = module.load_balancer.ip
+  config = local.config
+
+  ip = module.load_balancer.ip
 }

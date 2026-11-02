@@ -1,17 +1,14 @@
 locals {
-  # Named port that links the backend service to the port of the instance group.
   port_name = "http"
-  vm        = var.instances[var.config.backend]
+  vm        = var.instances[var.config.load_balancer.backend]
 }
 
-# External static IP of the site
 resource "google_compute_global_address" "lb_public_ip" {
-  name = "${var.config.name}-ip"
+  name = "${var.config.load_balancer.name}-ip"
 }
 
-# The load balancer sends traffic to instance groups only, so the backend VM is put into an unmanaged one.
 resource "google_compute_instance_group" "backend" {
-  name        = "${var.config.name}-group"
+  name        = "${var.config.load_balancer.name}-group"
   zone        = local.vm.zone
   description = "Unmanaged group of instances behind the load balancer"
 
@@ -24,18 +21,18 @@ resource "google_compute_instance_group" "backend" {
 }
 
 resource "google_compute_health_check" "backend" {
-  name               = "${var.config.name}-health-check"
+  name               = "${var.config.load_balancer.name}-health-check"
   check_interval_sec = 5
   timeout_sec        = 5
 
   http_health_check {
     port         = local.vm.port
-    request_path = var.config.health_check_path
+    request_path = var.config.load_balancer.health_check_path
   }
 }
 
 resource "google_compute_backend_service" "backend" {
-  name                  = "${var.config.name}-backend"
+  name                  = "${var.config.load_balancer.name}-backend"
   protocol              = "HTTP"
   port_name             = local.port_name
   load_balancing_scheme = "EXTERNAL_MANAGED"
@@ -49,45 +46,43 @@ resource "google_compute_backend_service" "backend" {
   }
 }
 
-# Free Google-managed certificate. It is issued only after the domain points to lb_public_ip.
-resource "google_compute_managed_ssl_certificate" "this" {
-  name = "${var.config.name}-cert"
+resource "google_compute_managed_ssl_certificate" "https" {
+  name = "${var.config.load_balancer.name}-cert"
 
   managed {
-    domains = [var.config.domain]
+    domains = [var.config.load_balancer.domain]
   }
 }
 
-resource "google_compute_ssl_policy" "this" {
-  name            = "${var.config.name}-ssl-policy"
+resource "google_compute_ssl_policy" "https" {
+  name            = "${var.config.load_balancer.name}-ssl-policy"
   profile         = "MODERN"
   min_tls_version = "TLS_1_2"
 }
 
 resource "google_compute_url_map" "https" {
-  name            = "${var.config.name}-https-map"
+  name            = "${var.config.load_balancer.name}-https-map"
   default_service = google_compute_backend_service.backend.id
 }
 
-# HTTPS proxy terminates TLS with the certificate and routes requests by the URL map.
+
 resource "google_compute_target_https_proxy" "https" {
-  name             = "${var.config.name}-https-proxy"
+  name             = "${var.config.load_balancer.name}-https-proxy"
   url_map          = google_compute_url_map.https.id
-  ssl_certificates = [google_compute_managed_ssl_certificate.this.id]
-  ssl_policy       = google_compute_ssl_policy.this.id
+  ssl_certificates = [google_compute_managed_ssl_certificate.https.id]
+  ssl_policy       = google_compute_ssl_policy.https.id
 }
 
 resource "google_compute_global_forwarding_rule" "https" {
-  name                  = "${var.config.name}-https-rule"
+  name                  = "${var.config.load_balancer.name}-https-rule"
   ip_address            = google_compute_global_address.lb_public_ip.address
   target                = google_compute_target_https_proxy.https.id
   port_range            = "443"
   load_balancing_scheme = "EXTERNAL_MANAGED"
 }
 
-# Plain HTTP only redirects to HTTPS.
 resource "google_compute_url_map" "http_redirect" {
-  name = "${var.config.name}-http-redirect-map"
+  name = "${var.config.load_balancer.name}-http-redirect-map"
 
   default_url_redirect {
     https_redirect         = true
@@ -97,12 +92,12 @@ resource "google_compute_url_map" "http_redirect" {
 }
 
 resource "google_compute_target_http_proxy" "http" {
-  name    = "${var.config.name}-http-proxy"
+  name    = "${var.config.load_balancer.name}-http-proxy"
   url_map = google_compute_url_map.http_redirect.id
 }
 
 resource "google_compute_global_forwarding_rule" "http" {
-  name                  = "${var.config.name}-http-rule"
+  name                  = "${var.config.load_balancer.name}-http-rule"
   ip_address            = google_compute_global_address.lb_public_ip.address
   target                = google_compute_target_http_proxy.http.id
   port_range            = "80"

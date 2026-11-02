@@ -1,10 +1,10 @@
 output "instances" {
   description = "VM name => id, zone, private_ip and port (null when the VM has no port in config.json)"
   value = {
-    for name, vm in module.compute_instances : name => {
-      id         = vm.instance_id
-      zone       = local.machines[name].zone
-      private_ip = vm.private_ip
+    for name, vm in google_compute_instance.vm : name => {
+      id         = vm.id
+      zone       = vm.zone
+      private_ip = vm.network_interface[0].network_ip
       port       = try(local.machines[name].port, null)
     }
   }
@@ -12,15 +12,10 @@ output "instances" {
 
 output "private_ips" {
   description = "VM name => internal IP"
-  value       = { for name, vm in module.compute_instances : name => vm.private_ip }
+  value       = { for name, vm in google_compute_instance.vm : name => vm.network_interface[0].network_ip }
 }
 
 output "service_account_emails" {
   description = "VM name => email of its service account"
-  value       = module.service_accounts.service_account_emails
-}
-
-output "names" {
-  description = "Every VM name in config.json, also VMs not created for this backend"
-  value       = keys(local.all_machines)
+  value       = { for name, account in google_service_account.vm : name => account.email }
 }

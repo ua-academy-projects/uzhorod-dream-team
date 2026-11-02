@@ -1,13 +1,9 @@
 variable "config" {
-  description = "dns part of config.json"
+  description = "config.json; this module reads dns and load_balancer.domain"
   type = object({
-    cloudflare_zone_id = string
+    dns           = object({ cloudflare_zone_id = string })
+    load_balancer = object({ domain = string })
   })
-}
-
-variable "domain" {
-  description = "Full name of the record, from the load_balancer module"
-  type        = string
 }
 
 variable "ip" {

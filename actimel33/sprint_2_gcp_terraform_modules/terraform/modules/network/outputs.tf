@@ -9,6 +9,6 @@ output "subnets" {
     private    = google_compute_subnetwork.private.self_link
     management = google_compute_subnetwork.management.self_link
   }
-  # VMs download Docker through Cloud NAT on the first boot.
+
   depends_on = [google_compute_router_nat.nat]
 }

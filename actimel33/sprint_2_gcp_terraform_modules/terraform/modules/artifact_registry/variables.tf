@@ -1,17 +1,14 @@
 variable "config" {
-  description = "registry part of config.json"
+  description = "config.json; this module reads project and registry"
   type = object({
-    repository_id = string
-    format        = string
-    description   = string
-  })
-}
-
-variable "project" {
-  description = "project part of config.json"
-  type = object({
-    id     = string
-    region = string
-    labels = map(string)
+    project = object({
+      region = string
+      labels = map(string)
+    })
+    registry = object({
+      repository_id = string
+      format        = string
+      description   = string
+    })
   })
 }

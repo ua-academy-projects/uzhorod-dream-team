@@ -1,7 +1,7 @@
-resource "google_artifact_registry_repository" "this" {
-  location      = var.project.region
-  repository_id = var.config.repository_id
-  format        = var.config.format
-  description   = var.config.description
-  labels        = var.project.labels
+resource "google_artifact_registry_repository" "images" {
+  location      = var.config.project.region
+  repository_id = var.config.registry.repository_id
+  format        = var.config.registry.format
+  description   = var.config.registry.description
+  labels        = var.config.project.labels
 }

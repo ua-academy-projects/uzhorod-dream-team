@@ -1,10 +1,12 @@
 variable "config" {
-  description = "load_balancer part of config.json"
+  description = "config.json; this module reads load_balancer"
   type = object({
-    name              = string
-    backend           = string
-    health_check_path = string
-    domain            = string
+    load_balancer = object({
+      name              = string
+      backend           = string
+      health_check_path = string
+      domain            = string
+    })
   })
 }
 
