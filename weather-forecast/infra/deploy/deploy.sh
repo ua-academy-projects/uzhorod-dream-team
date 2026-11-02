@@ -181,7 +181,7 @@ GRANT USAGE ON SCHEMA pgmq TO weather_fetcher;
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA pgmq TO weather_fetcher;
 GRANT SELECT ON pgmq.meta TO weather_fetcher;
 GRANT SELECT, UPDATE, DELETE ON pgmq.q_weather_requests TO weather_fetcher;
-GRANT INSERT ON pgmq.q_weather_responses TO weather_fetcher;
+GRANT SELECT, INSERT ON pgmq.q_weather_responses TO weather_fetcher;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA pgmq TO weather_fetcher;
 SQL
 }
