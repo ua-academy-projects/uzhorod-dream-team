@@ -1,10 +1,9 @@
--- BACKEND=postgres queue on the pgmq extension.
+-- BACKEND=postgres queue on pgmq, installed by 002.
 
--- Databases that ran the removed 002 still have its hand-made queue.
+-- Databases that ran the removed 002_queue.sql still have its hand-made queue.
 DROP TABLE IF EXISTS queue_messages;
 DROP FUNCTION IF EXISTS queue_notify();
 
-CREATE EXTENSION IF NOT EXISTS pgmq;
 SELECT pgmq.create('price_requests');
 SELECT pgmq.create('price_results');
 
@@ -14,7 +13,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_pending_quote
     WHERE message->>'days' IS NULL;
 
 -- The fetcher's login: reads requests, writes results, nothing else.
--- Its password is set by provision-db.sh.
+-- Its password is set by set-db-roles.sh on the history VM.
 DO $$
 BEGIN
     IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'queue_worker') THEN
