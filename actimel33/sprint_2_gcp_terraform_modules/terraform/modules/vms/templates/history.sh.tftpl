@@ -1,3 +1,10 @@
+# CA of the Cloud SQL instance (public data): history and set-db-roles.sh check the server against it.
+mkdir -p /etc/crypto
+cat > /etc/crypto/db-ca.pem <<'PEM'
+${trimspace(database.ca_cert)}
+PEM
+chmod 644 /etc/crypto/db-ca.pem
+
 cat > /usr/local/bin/start-history.sh <<'SCRIPT'
 #!/bin/bash
 set -euo pipefail
@@ -5,18 +12,20 @@ PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin
 
 umask 077
 mkdir -p /run/crypto
-APP_PASSWORD=$(gcloud secrets versions access latest --secret=crypto-db-app-password --project=${project_id})
+APP_PASSWORD=$(gcloud secrets versions access latest --secret=${database.password_secret} --project=${project_id})
 SESSION_SECRET=$(gcloud secrets versions access latest --secret=crypto-session-secret --project=${project_id})
 %{ if backend == "redis" ~}
 REDIS_PASSWORD=$(gcloud secrets versions access latest --secret=crypto-redis-password --project=${project_id})
 %{ endif ~}
+# verify-ca: the server certificate must come from the CA of the instance. The host is an IP, so the
+# name in the certificate is not checked; uselibpqcompat=true makes node-postgres read sslmode like psql.
 cat > /run/crypto/history.env <<EOF
 BACKEND=${backend}
 HISTORY_HOST=0.0.0.0
-DATABASE_URL=postgres://app:$APP_PASSWORD@${hosts.db}:5432/crypto
+DATABASE_URL=postgres://${database.user}:$APP_PASSWORD@${database.host}:5432/${database.name}?uselibpqcompat=true&sslmode=verify-ca&sslrootcert=/certs/db-ca.pem
 SESSION_SECRET=$SESSION_SECRET
 %{ if backend == "redis" ~}
-REDIS_URL=redis://${hosts.db}:6379
+REDIS_URL=redis://${hosts.broker}:6379
 REDIS_PASSWORD=$REDIS_PASSWORD
 %{ endif ~}
 EOF
@@ -24,7 +33,7 @@ EOF
 gcloud auth print-access-token | docker login -u oauth2accesstoken --password-stdin https://${registry_host}
 docker pull ${image}
 docker rm -f crypto_history >/dev/null 2>&1 || true
-exec docker run --rm --name crypto_history --hostname history --read-only --init --env-file /run/crypto/history.env -p 3001:3001 ${image}
+exec docker run --rm --name crypto_history --hostname history --read-only --init --env-file /run/crypto/history.env -v /etc/crypto/db-ca.pem:/certs/db-ca.pem:ro -p 3001:3001 ${image}
 SCRIPT
 chmod 755 /usr/local/bin/start-history.sh
 
@@ -45,5 +54,58 @@ RestartSec=30
 WantedBy=multi-user.target
 UNIT
 
+%{ if backend == "postgres" ~}
+# The fetcher logs in as queue_worker. Cloud SQL would make a user created by Terraform a
+# cloudsqlsuperuser, so the app user creates this role and sets its password here.
+cat > /usr/local/bin/set-db-roles.sh <<'SCRIPT'
+#!/bin/bash
+set -euo pipefail
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin
+
+# This image gets the app password, so it is pinned by digest, not by a tag that can move.
+PSQL_IMAGE=postgres:17-alpine@sha256:266d3c257594e195b309ae9d1805e54c788f1d7b375f56bf6c367aac6c917e7b
+
+# Both passwords reach psql as environment variables: docker run -e NAME passes one on without its value,
+# so they never appear on a command line. psql logs in with PGPASSWORD and reads QUEUE_PASSWORD with \getenv.
+PGPASSWORD=$(gcloud secrets versions access latest --secret=${database.password_secret} --project=${project_id})
+QUEUE_PASSWORD=$(gcloud secrets versions access latest --secret=crypto-db-queue-worker-password --project=${project_id})
+export PGPASSWORD QUEUE_PASSWORD
+
+docker run --rm -i -e PGPASSWORD -e QUEUE_PASSWORD -v /etc/crypto/db-ca.pem:/certs/db-ca.pem:ro "$PSQL_IMAGE" psql -q -v ON_ERROR_STOP=1 "host=${database.host} port=5432 dbname=${database.name} user=${database.user} sslmode=verify-ca sslrootcert=/certs/db-ca.pem" <<'SQL'
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'queue_worker') THEN
+        CREATE ROLE queue_worker LOGIN;
+    END IF;
+END $$;
+\getenv queue_pw QUEUE_PASSWORD
+ALTER ROLE queue_worker PASSWORD :'queue_pw';
+SQL
+SCRIPT
+chmod 755 /usr/local/bin/set-db-roles.sh
+
+cat > /etc/systemd/system/crypto-db-roles.service <<'UNIT'
+[Unit]
+Description=crypto queue_worker role and password in Cloud SQL
+After=docker.service network-online.target
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/set-db-roles.sh
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+%{ endif ~}
 systemctl daemon-reload
 systemctl enable --now crypto-history.service
+%{ if backend == "postgres" ~}
+# In the background: if it fails, history still runs and only the fetcher cannot log in.
+systemctl enable crypto-db-roles.service
+systemctl start --no-block crypto-db-roles.service
+%{ endif ~}

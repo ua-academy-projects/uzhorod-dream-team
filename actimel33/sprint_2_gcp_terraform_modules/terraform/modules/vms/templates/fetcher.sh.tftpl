@@ -1,3 +1,10 @@
+# CA of the Cloud SQL instance (public data): with the postgres backend the fetcher checks the server against it.
+mkdir -p /etc/crypto
+cat > /etc/crypto/db-ca.pem <<'PEM'
+${trimspace(database.ca_cert)}
+PEM
+chmod 644 /etc/crypto/db-ca.pem
+
 cat > /usr/local/bin/start-fetcher.sh <<'SCRIPT'
 #!/bin/bash
 set -euo pipefail
@@ -14,17 +21,17 @@ cat > /run/crypto/fetcher.env <<EOF
 BACKEND=${backend}
 FETCHER_HOST=0.0.0.0
 %{ if backend == "redis" ~}
-REDIS_URL=redis://${hosts.db}:6379
+REDIS_URL=redis://${hosts.broker}:6379
 REDIS_PASSWORD=$REDIS_PASSWORD
 %{ else ~}
-QUEUE_DATABASE_URL=postgres://queue_worker:$QUEUE_PASSWORD@${hosts.db}:5432/crypto
+QUEUE_DATABASE_URL=postgres://queue_worker:$QUEUE_PASSWORD@${database.host}:5432/${database.name}?sslmode=verify-ca&sslrootcert=/certs/db-ca.pem
 %{ endif ~}
 EOF
 
 gcloud auth print-access-token | docker login -u oauth2accesstoken --password-stdin https://${registry_host}
 docker pull ${image}
 docker rm -f crypto_fetcher >/dev/null 2>&1 || true
-exec docker run --rm --name crypto_fetcher --hostname fetcher --read-only --env-file /run/crypto/fetcher.env -p 3002:3002 ${image}
+exec docker run --rm --name crypto_fetcher --hostname fetcher --read-only --env-file /run/crypto/fetcher.env -v /etc/crypto/db-ca.pem:/certs/db-ca.pem:ro -p 3002:3002 ${image}
 SCRIPT
 chmod 755 /usr/local/bin/start-fetcher.sh
 

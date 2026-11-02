@@ -1,7 +1,9 @@
 locals {
+  # Only VMs that exist: a VM with backends in config.json is not created for the other backend.
   grants = merge([
     for secret_id, secret in var.config : {
       for reader in secret.readers : "${secret_id}/${reader}" => { secret_id = secret_id, reader = reader }
+      if contains(keys(var.readers), reader)
     }
   ]...)
 }

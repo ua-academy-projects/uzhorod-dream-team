@@ -1,5 +1,5 @@
 #!/bin/bash
-# Builds the db, history, fetcher and ui images and pushes them to Artifact Registry
+# Builds the history, fetcher and ui images and pushes them to Artifact Registry
 # with the tags from config.json.
 set -euo pipefail
 
@@ -40,7 +40,6 @@ push_image() {
 
 gcloud auth configure-docker "$REGION-docker.pkg.dev" --quiet
 
-push_image db "$DIR/db"
 push_image history "$DIR" "$DIR/services/history/Dockerfile"
 push_image fetcher "$DIR/services/fetcher"
 push_image ui "$DIR/ui"

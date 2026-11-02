@@ -3,7 +3,7 @@
     "title": "crypto-price-service configuration",
     "description": "Read by Terraform (each module gets its own part), bootstrap/bootstrap.sh and build-and-push.sh.",
     "type": "object",
-    "required": ["project", "bootstrap", "app", "network", "firewall", "vms", "secrets", "registry", "load_balancer", "dns", "ssh"],
+    "required": ["project", "bootstrap", "app", "network", "firewall", "vms", "secrets", "cloud_sql", "registry", "load_balancer", "dns", "ssh"],
     "additionalProperties": false,
     "properties": {
         "$schema": { "type": "string" },
@@ -123,6 +123,29 @@
                 }
             }
         },
+        "cloud_sql": {
+            "description": "Postgres of the app in Cloud SQL, reachable only through a Private Service Connect endpoint.",
+            "type": "object",
+            "required": ["name", "database_version", "edition", "tier", "availability_type", "disk_size", "disk_type", "deletion_protection", "database", "user", "password_secret", "endpoint"],
+            "additionalProperties": false,
+            "properties": {
+                "name": {
+                    "description": "Instance name. Terraform adds -<4 hex characters>: a deleted name stays taken for about a week.",
+                    "allOf": [{ "$ref": "#/definitions/name" }, { "maxLength": 58 }]
+                },
+                "database_version": { "description": "e.g. POSTGRES_17.", "type": "string", "pattern": "^POSTGRES_[0-9]+$" },
+                "edition": { "enum": ["ENTERPRISE", "ENTERPRISE_PLUS"] },
+                "tier": { "description": "Machine tier, e.g. db-f1-micro.", "type": "string", "pattern": "^db-[a-z0-9-]+$" },
+                "availability_type": { "description": "ZONAL: one zone. REGIONAL: a standby in a second zone (HA).", "enum": ["ZONAL", "REGIONAL"] },
+                "disk_size": { "description": "Disk size in GB.", "type": "integer", "minimum": 10 },
+                "disk_type": { "enum": ["PD_SSD", "PD_HDD"] },
+                "deletion_protection": { "description": "true blocks terraform destroy of the instance.", "type": "boolean" },
+                "database": { "description": "Database of the app.", "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+                "user": { "description": "Database user of the app, created by Terraform.", "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+                "password_secret": { "description": "Secret in the secrets part with the password of user.", "type": "string", "pattern": "^[A-Za-z0-9_-]+$" },
+                "endpoint": { "description": "Name of the endpoint address and its forwarding rule.", "$ref": "#/definitions/name" }
+            }
+        },
         "registry": {
             "type": "object",
             "required": ["repository_id", "format", "description"],
@@ -209,6 +232,13 @@
                 "subnet": { "enum": ["private", "management"] },
                 "image_tag": { "description": "Tag of the app image; the VM runs its container. Changing it recreates the VM.", "type": "string" },
                 "port": { "description": "Port the container listens on, for the load balancer.", "type": "integer", "minimum": 1, "maximum": 65535 },
+                "backends": {
+                    "description": "Backends this VM is created for; without it the VM always exists.",
+                    "type": "array",
+                    "minItems": 1,
+                    "uniqueItems": true,
+                    "items": { "enum": ["postgres", "redis"] }
+                },
                 "data_disk": {
                     "description": "Separate disk that keeps data when the VM is recreated.",
                     "type": "object",

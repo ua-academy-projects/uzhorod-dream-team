@@ -1,19 +1,5 @@
 # crypto-price-service on GCP
 
-Terraform modules for the crypto-price-service: five VMs (bastion, db, fetcher, history, ui) in a private VPC,
-an HTTPS load balancer in front of ui, and a Cloudflare DNS record for the domain.
-Everything is described in [`../terraform_resources_configuration/config.json`](../terraform_resources_configuration/config.json).
-
-## Layout
-
-| Path | What it does |
-|---|---|
-| `bootstrap/bootstrap.sh` | Day-zero setup: project, billing, APIs, state bucket, the `terraform` service account and your JSON key, the secret for the Cloudflare token. Writes `terraform/backend.hcl` and `terraform/.env`. Safe to re-run. |
-| `terraform/` | `main.tf` only calls modules; each module gets its own part of `config.json`. |
-| `build-and-push.sh` | Builds the app images and pushes them to Artifact Registry with the tags from `config.json`. |
-| `ssh-config.sh` | Writes your SSH config for the VMs. |
-| `../terraform_resources_configuration/config.schema.json` | JSON Schema of `config.json`: editor hints and the pre-commit check. |
-
 ## Requirements
 
 `gcloud`, `terraform` 1.15+, `docker`, `python3`, and `uv` for the pre-commit hook.
@@ -57,8 +43,11 @@ cd .. && ./build-and-push.sh
 ```
 
 Without `source .env`, Terraform runs as you instead of the `terraform` service account.
-The state lives in the bucket, so everyone works with the same state; the bucket lock stops two applies at once.
-The HTTPS certificate becomes ACTIVE 15–60 minutes after the DNS record exists.
+
+Do not run Terraform with `TF_LOG=DEBUG` or `TF_LOG=TRACE`: the log then holds the requests to Google, passwords included.
+
+After pulling changes that need new APIs or roles, re-run `./bootstrap/bootstrap.sh` before `terraform apply`.
+Cloud SQL is such a change: bootstrap enables its APIs and gives the `terraform` account `roles/cloudsql.admin`.
 
 ## SSH
 
@@ -74,7 +63,7 @@ Then:
 ```bash
 ./ssh-config.sh
 ssh bastion
-ssh db
+ssh history
 ```
 
 - The user name comes from the OS Login profile of your `gcloud` account.
@@ -83,11 +72,41 @@ ssh db
   DNS names, so the config stays valid when VMs are recreated.
 - A recreated VM has a new host key. Remove the old one: `ssh-keygen -R <vm>.<zone>.c.<project id>.internal`.
 
+## Database
+
+Postgres runs in Cloud SQL (`cloud_sql` in `config.json`). The `db-f1-micro` instance costs about 9–11 USD a month;
+the Private Service Connect endpoint and the 10 GB disk are billed on top.
+
+- The instance has no public IP. The only way in is a Private Service Connect endpoint: an internal IP in the
+  `private` subnet.
+- TLS is required. history and fetcher check the server certificate against the CA of the instance
+  (`sslmode=verify-ca`); the startup scripts put the CA in `/etc/crypto/db-ca.pem`.
+- Terraform creates the user `app` with the password from the secret `crypto-db-app-password`. With the `postgres`
+  backend, `crypto-db-roles.service` on the history VM creates `queue_worker` for the fetcher.
+- `terraform destroy` deletes the instance with its data: there are no backups.
+- The `db` image is not built any more; `db/Dockerfile` stays in the repository.
+
+To change a database password, raise the `version` of its secret in `config.json` and run `terraform apply`.
+The services read passwords only when they start, so restart them:
+
+- `crypto-db-app-password` (Terraform sets it for `app`): `ssh history sudo systemctl restart crypto-history.service`.
+- `crypto-db-queue-worker-password`: `ssh history sudo systemctl restart crypto-db-roles.service` sets it for
+  `queue_worker`, then `ssh fetcher sudo systemctl restart crypto-fetcher.service`.
+
+To open psql, look up the endpoint IP, then run psql on the history VM:
+
+```bash
+gcloud compute addresses describe crypto-db-psc --region=europe-central2 --project=<project id> --format='value(address)'
+ssh history
+PGPASSWORD=$(gcloud secrets versions access latest --secret=crypto-db-app-password) sudo --preserve-env=PGPASSWORD docker run --rm -it -e PGPASSWORD -v /etc/crypto/db-ca.pem:/certs/db-ca.pem:ro postgres:17-alpine@sha256:266d3c257594e195b309ae9d1805e54c788f1d7b375f56bf6c367aac6c917e7b psql "host=<endpoint IP> dbname=crypto user=app sslmode=verify-ca sslrootcert=/certs/db-ca.pem"
+```
+
 ## Changing the configuration
 
 - Edit `config.json`. VS Code checks it against the schema as you type; the pre-commit hook checks it on commit.
 - `vms.defaults` apply to every VM; a machine lists only what differs.
 - A new `image_tag` or a switch of `app.backend` (`postgres` / `redis`) recreates the affected VMs.
+- A VM with `backends` exists only for those backends: `redis` creates the `broker` VM with Redis, `postgres` removes it.
 
 ## Leaving the project
 

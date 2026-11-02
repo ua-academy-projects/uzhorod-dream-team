@@ -24,14 +24,18 @@
             "iap.googleapis.com",
             "secretmanager.googleapis.com",
             "artifactregistry.googleapis.com",
-            "oslogin.googleapis.com"
+            "oslogin.googleapis.com",
+            "sqladmin.googleapis.com",
+            "servicenetworking.googleapis.com",
+            "networkconnectivity.googleapis.com"
         ],
         "terraform_roles": [
             "roles/compute.admin",
             "roles/iam.serviceAccountAdmin",
             "roles/iam.serviceAccountUser",
             "roles/secretmanager.admin",
-            "roles/artifactregistry.admin"
+            "roles/artifactregistry.admin",
+            "roles/cloudsql.admin"
         ]
     },
     "app": {
@@ -90,18 +94,6 @@
                     "ui-vm"
                 ]
             },
-            "fw-allow-history-to-db": {
-                "protocol": "tcp",
-                "ports": [
-                    "5432"
-                ],
-                "source_tags": [
-                    "history-vm"
-                ],
-                "target_tags": [
-                    "db-vm"
-                ]
-            },
             "fw-allow-ui-to-history": {
                 "protocol": "tcp",
                 "ports": [
@@ -115,20 +107,7 @@
                 ]
             }
         },
-        "postgres": {
-            "fw-allow-fetcher-to-db": {
-                "protocol": "tcp",
-                "ports": [
-                    "5432"
-                ],
-                "source_tags": [
-                    "fetcher-vm"
-                ],
-                "target_tags": [
-                    "db-vm"
-                ]
-            }
-        },
+        "postgres": {},
         "redis": {
             "fw-allow-app-to-redis": {
                 "protocol": "tcp",
@@ -140,7 +119,7 @@
                     "history-vm"
                 ],
                 "target_tags": [
-                    "db-vm"
+                    "broker-vm"
                 ]
             }
         }
@@ -160,24 +139,21 @@
                 "type": "e2-micro",
                 "subnet": "management"
             },
-            "db": {
-                "image_tag": "1.0.0",
-                "data_disk": {
-                    "name": "crypto-db-data-disk",
-                    "size": 10,
-                    "type": "pd-standard",
-                    "device_name": "data-disk"
-                }
-            },
             "fetcher": {
                 "image_tag": "1.0.0"
             },
             "history": {
-                "image_tag": "1.0.0"
+                "image_tag": "1.1.0"
             },
             "ui": {
                 "image_tag": "1.0.0",
                 "port": 5173
+            },
+            "broker": {
+                "type": "e2-micro",
+                "backends": [
+                    "redis"
+                ]
             }
         }
     },
@@ -185,7 +161,6 @@
         "crypto-db-app-password": {
             "length": 16,
             "readers": [
-                "db",
                 "history"
             ],
             "version": 1
@@ -193,7 +168,7 @@
         "crypto-db-queue-worker-password": {
             "length": 16,
             "readers": [
-                "db",
+                "history",
                 "fetcher"
             ],
             "version": 1
@@ -201,7 +176,7 @@
         "crypto-redis-password": {
             "length": 16,
             "readers": [
-                "db",
+                "broker",
                 "history",
                 "fetcher"
             ],
@@ -214,6 +189,20 @@
             ],
             "version": 1
         }
+    },
+    "cloud_sql": {
+        "name": "crypto-db",
+        "database_version": "POSTGRES_17",
+        "edition": "ENTERPRISE",
+        "tier": "db-f1-micro",
+        "availability_type": "ZONAL",
+        "disk_size": 10,
+        "disk_type": "PD_SSD",
+        "deletion_protection": false,
+        "database": "crypto",
+        "user": "app",
+        "password_secret": "crypto-db-app-password",
+        "endpoint": "crypto-db-psc"
     },
     "registry": {
         "repository_id": "crypto-services-repository",

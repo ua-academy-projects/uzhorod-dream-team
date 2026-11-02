@@ -1,0 +1,48 @@
+cat > /usr/local/bin/start-redis.sh <<'SCRIPT'
+#!/bin/bash
+set -euo pipefail
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin
+
+# This image gets the Redis password, so it is pinned by digest, not by a tag that can move.
+REDIS_IMAGE=redis:7-alpine@sha256:8da19c7399dca900c6822a1cf30f9d2285585e2c4b457ff4095b0f4500054d3f
+
+umask 077
+mkdir -p /run/crypto
+REDIS_PASSWORD=$(gcloud secrets versions access latest --secret=crypto-redis-password --project=${project_id})
+cat > /run/crypto/redis.env <<EOF
+REDIS_PASSWORD=$REDIS_PASSWORD
+EOF
+cat > /run/crypto/redis.conf <<EOF
+requirepass $REDIS_PASSWORD
+EOF
+# Redis reads it as the redis user; /run/crypto itself stays root-only.
+chmod 644 /run/crypto/redis.conf
+
+# The append-only file lives on the boot disk: the queue is lost only when the VM is recreated.
+mkdir -p /var/lib/crypto/redis
+
+docker pull "$REDIS_IMAGE"
+docker rm -f crypto_redis >/dev/null 2>&1 || true
+exec docker run --rm --name crypto_redis --env-file /run/crypto/redis.env -v /run/crypto/redis.conf:/usr/local/etc/redis/redis.conf:ro -p 6379:6379 -v /var/lib/crypto/redis:/data --health-cmd 'REDISCLI_AUTH="$REDIS_PASSWORD" redis-cli ping | grep -q PONG' --health-interval 5s "$REDIS_IMAGE" redis-server /usr/local/etc/redis/redis.conf --appendonly yes
+SCRIPT
+chmod 755 /usr/local/bin/start-redis.sh
+
+cat > /etc/systemd/system/crypto-redis.service <<'UNIT'
+[Unit]
+Description=crypto redis container
+After=docker.service network-online.target
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+ExecStart=/usr/local/bin/start-redis.sh
+ExecStop=/usr/bin/docker stop -t 30 crypto_redis
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+systemctl daemon-reload
+systemctl enable --now crypto-redis.service

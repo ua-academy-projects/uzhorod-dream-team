@@ -32,13 +32,25 @@ module "vms" {
   backend  = local.config.app.backend
   subnets  = module.network.subnets
   registry = module.artifact_registry.repository
+  database = module.cloud_sql.connection
 }
 
 module "secrets" {
   source = "./modules/secrets"
 
-  config  = local.config.secrets
-  readers = module.vms.service_account_emails
+  config   = local.config.secrets
+  readers  = module.vms.service_account_emails
+  vm_names = module.vms.names
+}
+
+module "cloud_sql" {
+  source = "./modules/cloud_sql"
+
+  config          = local.config.cloud_sql
+  project         = local.config.project
+  network         = module.network.self_link
+  subnets         = module.network.subnets
+  secret_versions = module.secrets.versions
 }
 
 module "load_balancer" {

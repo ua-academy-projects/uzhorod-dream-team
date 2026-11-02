@@ -19,3 +19,8 @@ output "service_account_emails" {
   description = "VM name => email of its service account"
   value       = module.service_accounts.service_account_emails
 }
+
+output "names" {
+  description = "Every VM name in config.json, also VMs not created for this backend"
+  value       = keys(local.all_machines)
+}

@@ -1,26 +1,38 @@
 locals {
-  machines   = { for name, machine in var.config.machines : name => merge(var.config.defaults, machine) }
+  all_machines = { for name, machine in var.config.machines : name => merge(var.config.defaults, machine) }
+
+  # A VM with backends exists only for those backends; a VM without it always exists.
+  machines = {
+    for name, machine in local.all_machines : name => machine
+    if contains(try(machine.backends, [var.backend]), var.backend)
+  }
   data_disks = { for name, machine in local.machines : name => machine.data_disk if can(machine.data_disk) }
   containers = { for name, machine in local.machines : name => machine if can(machine.image_tag) }
 
   # Built from config: registry_uri is known only after apply.
   registry_host = "${var.project.region}-docker.pkg.dev"
   registry      = "${local.registry_host}/${var.project.id}/${var.registry.repository_id}"
-  hosts         = { for name, machine in local.machines : name => "${name}.${machine.zone}.c.${var.project.id}.internal" }
 
+  # Every VM of the config, created or not: templates name hosts in both branches of %{ if }.
+  hosts = { for name, machine in local.all_machines : name => "${name}.${machine.zone}.c.${var.project.id}.internal" }
+
+  # A VM gets a startup script when it runs an image or has templates/<vm>.sh.tftpl.
+  # A VM with an image but no template fails the plan instead of booting with nothing to run.
   startup_scripts = {
-    for name, machine in local.containers : name => join("\n", [
+    for name, machine in local.machines : name => join("\n", [
       templatefile("${path.module}/templates/common.sh.tftpl", {}),
       templatefile("${path.module}/templates/${name}.sh.tftpl", {
-        image            = "${local.registry}/${name}:${machine.image_tag}"
+        image            = can(machine.image_tag) ? "${local.registry}/${name}:${machine.image_tag}" : ""
         registry_host    = local.registry_host
         project_id       = var.project.id
         backend          = var.backend
         hosts            = local.hosts
+        database         = var.database
         port             = try(machine.port, null)
         data_disk_device = try("/dev/disk/by-id/google-${machine.data_disk.device_name}", "")
       }),
     ])
+    if can(machine.image_tag) || fileexists("${path.module}/templates/${name}.sh.tftpl")
   }
 }
 
