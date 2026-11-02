@@ -12,6 +12,6 @@ infra/**/.terraform/
 *.tfstate.*
 infra/**/.build/
 
-infra/bootstrap/terraform.tfvars
-infra/bootstrap/backend.tf
+infra/bootstrap.env
+infra/terraform.env
 infra/**/backend.hcl

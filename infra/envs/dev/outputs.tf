@@ -13,17 +13,12 @@ output "secret_readers" {
   value       = local.secret_readers
 }
 
-output "fill_secrets" {
-  description = "Run once after the first apply. Reads the values from your shell: set -a; source .env; set +a"
-  value = join("\n", concat(
-    [
-      for name, id in local.secret_ids :
-      # the variable in the project's .env (the tunnel token has a longer name there)
-      "printf '%s' \"$${${name == "TUNNEL_TOKEN" ? "CLOUDFLARE_TUNNEL_TOKEN" : name}}\" | gcloud secrets versions add ${id} --data-file=-"
-      if contains(keys(local.secret_readers), id)
-    ],
-    ["gcloud secrets versions add ${local.ssh_key_secret} --data-file=$HOME/.ssh/citybikes_internal_ed25519"],
-  ))
+output "database" {
+  description = "Cloud SQL: private address only (reachable from our VMs, not from the internet)"
+  value = {
+    instance   = module.cloudsql.instance_name
+    private_ip = module.cloudsql.private_ip
+  }
 }
 
 output "ssh" {

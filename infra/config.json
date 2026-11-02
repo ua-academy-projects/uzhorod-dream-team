@@ -1,10 +1,8 @@
 {
-
   "prefix": "citybikes",
 
   "network": {
-    "subnet_cidr": "10.20.0.0/24",
-    "ssh_allowed_cidrs": ["203.0.113.7/32"]
+    "subnet_cidr": "10.20.0.0/24"
   },
 
   "ssh": {
@@ -18,7 +16,7 @@
       "host": 50,
       "machine_type": "e2-small",
       "disk_size_gb": 20,
-      "services": ["postgres", "redis", "rabbitmq"],
+      "services": ["redis", "rabbitmq"],
       "cloud_logging": true
     },
     "fetcher": {
@@ -46,6 +44,20 @@
       "services": [],
       "bastion": true
     }
+  },
+
+  "database": {
+    "version": "POSTGRES_16",
+    "tier": "db-f1-micro",
+    "disk_size_gb": 10,
+    "private_range": "10.21.0.0/24"
+  },
+
+  "tls": {
+    "vm": "ui",
+    "domain": "citybikes-tracker.pp.ua",
+    "email": "",
+    "staging": false
   },
 
   "app": {

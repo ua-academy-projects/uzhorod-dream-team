@@ -1,7 +1,9 @@
 locals {
-  config  = jsondecode(file("${path.module}/../../config.json"))
-  ssh     = local.config.ssh
-  app     = local.config.app
+  config = jsondecode(file("${path.module}/../../config.json"))
+  ssh    = local.config.ssh
+  app    = local.config.app
+  database = local.config.database
+  
   project = {
     id     = var.project_id
     region = var.region
@@ -11,6 +13,9 @@ locals {
   network = merge(local.config.network, {
     ssh_allowed_cidrs = ["${var.my_ip}/32"]
   })
+
+  tls    = try(local.config.tls, { vm = "", domain = "", email = "", staging = false })
+  tls_on = local.tls.domain != ""
 
   vms = {
     for name, vm in local.config.vms : name => merge({

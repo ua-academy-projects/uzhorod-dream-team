@@ -12,6 +12,23 @@ module "network" {
   }
 }
 
+#db
+module "cloudsql" {
+  source = "../../modules/cloudsql"
+  config = {
+    name          = "${local.project.prefix}-pg"
+    region        = local.project.region
+    zone          = local.project.zone
+    network_id    = module.network.network_id
+    private_range = local.database.private_range
+    version       = local.database.version
+    tier          = local.database.tier
+    disk_size_gb  = local.database.disk_size_gb
+    database      = local.app.db_name
+    labels        = local.labels
+  }
+}
+
 # code
 resource "google_storage_bucket" "code" {
   name                        = "${local.project.id}-${local.project.prefix}-code"
@@ -76,7 +93,17 @@ module "vm" {
         code    = "gs://${google_storage_bucket.code.name}/${google_storage_bucket_object.code.name}"
         compose = local.compose_yaml[each.key]
         secrets = join(" ", [for name in local.vm_secrets[each.key] : "${name}=${local.secret_ids[name]}"])
+        env     = "DB_HOST='${module.cloudsql.private_ip}'"
       } : k => v if length(local.vms[each.key].services) > 0
+    },
+    {
+      for k, v in {
+        cert-script      = file("${path.module}/cert.sh")
+        tls-domain       = local.tls.domain
+        tls-email        = local.tls.email
+        tls-staging      = tostring(local.tls.staging)
+        tls-token-secret = local.tls_secret
+      } : k => v if local.tls_on && each.key == local.tls.vm
     },
 
     { for k, v in { ssh-key-secret = local.ssh_key_secret } : k => v if each.key == local.bastion },

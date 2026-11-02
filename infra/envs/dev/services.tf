@@ -3,27 +3,31 @@
 # for every VM a compose file is built from this catalog and handed to the VM in its metadata.
 #
 # Secrets are never here: "${DB_PASSWORD}" is filled in on the VM from Secret Manager (startup.sh).
+# "${DB_HOST}" too is filled in on the VM: the Cloud SQL address is known only after it is created,
+# and it reaches the VM in its metadata ("env"), so the compose files are fully known at plan time.
 
 locals {
   # where each service runs: service name => private IP of its VM (from config.json)
   at = merge([for vm, cfg in local.vms : { for s in cfg.services : s => local.ip[vm] }]...)
 
-  # Secret Manager
+  # secret placeholder in compose => secret id in Secret Manager
   secret_ids = {
-    DB_PASSWORD       = "${local.project.prefix}-db-password"
+    DB_PASSWORD       = "${local.project.prefix}-db-password" # also the password of the Cloud SQL user
     REDIS_PASSWORD    = "${local.project.prefix}-redis-password"
     RABBITMQ_PASSWORD = "${local.project.prefix}-rabbitmq-password"
     TUNNEL_TOKEN      = "${local.project.prefix}-cloudflare-tunnel-token"
   }
-  ssh_key_secret = "${local.project.prefix}-internal-ssh-key"
+  ssh_key_secret = "${local.project.prefix}-internal-ssh-key"       # read by the bastion only
+  tls_secret     = "${local.project.prefix}-cloudflare-api-token"   # read by the TLS VM only (certbot DNS-01)
 
-  # connection settings
+  # ------------------------------------------------------------ connection settings
   db_env = {
-    DB_HOST     = local.at.postgres
+    DB_HOST     = "$${DB_HOST}" # the private IP of Cloud SQL, see the comment at the top
     DB_PORT     = "5432"
     DB_NAME     = local.app.db_name
     DB_USER     = local.app.db_user
     DB_PASSWORD = "$${DB_PASSWORD}"
+    PGSSLMODE   = "require" # Cloud SQL accepts encrypted connections only (read by libpq itself)
   }
   rabbitmq_env = {
     RABBITMQ_HOST     = local.at.rabbitmq
@@ -45,22 +49,12 @@ locals {
   )
   cache_env = { for k, v in local.redis_env : k => v if local.app.cache_backend == "redis" }
 
+  # ------------------------------------------------------------ hardening (as in the Vagrantfile)
   hardened  = { cap_drop = ["ALL"] }
   read_only = { cap_drop = ["ALL"], read_only = true, tmpfs = ["/tmp"] }
 
-  # the catalog
+  # ------------------------------------------------------------ the catalog
   services = {
-    postgres = {
-      ports   = ["5432:5432"]
-      volumes = ["pgdata:/var/lib/postgresql/data"]
-      environment = {
-        POSTGRES_DB       = local.app.db_name
-        POSTGRES_USER     = local.app.db_user
-        POSTGRES_PASSWORD = "$${DB_PASSWORD}"
-        ALLOWED_CIDR      = local.network.subnet_cidr
-      }
-    }
-
     redis = {
       ports       = ["6379:6379"]
       volumes     = ["redisdata:/data"]
@@ -94,8 +88,10 @@ locals {
       }, local.db_env, local.queue_env, local.cache_env)
     })
 
+    # 8080 = HTTP, 8443 = HTTPS with the Let's Encrypt certificate (certbot puts it in /opt/citybikes/tls)
     ui = merge(local.hardened, {
-      ports       = ["80:8080"]
+      ports       = local.tls_on ? ["80:8080", "443:8443"] : ["80:8080"]
+      volumes     = local.tls_on ? ["/opt/citybikes/tls:/etc/nginx/tls:ro"] : []
       environment = { HISTORY_URL = "http://${local.at.history}:8002" }
     })
 
@@ -107,12 +103,14 @@ locals {
     })
   }
 
-  # compose file per VM
+  # ------------------------------------------------------------ compose file per VM
   compose_defaults = {
     restart      = "unless-stopped"
     security_opt = ["no-new-privileges:true"]
   }
 
+  # where container logs go: Cloud Logging on the VMs with "cloud_logging": true (Docker's own gcplogs
+  # driver, no agent to install), elsewhere only on the VM's disk (rotated, so it never fills up)
   logging = {
     for vm, cfg in local.vms : vm => cfg.cloud_logging
     ? { driver = "gcplogs", options = tomap({ "gcp-log-cmd" = "false" }) }
@@ -148,6 +146,7 @@ locals {
     }))
   }
 
+  # ------------------------------------------------------------ derived from the above
   # which secrets each VM needs = the placeholders that appear in its compose file
   vm_secrets = {
     for vm, yaml in local.compose_yaml : vm => [for name in keys(local.secret_ids) : name if strcontains(yaml, "$${${name}}")]
@@ -160,6 +159,7 @@ locals {
       if anytrue([for names in values(local.vm_secrets) : contains(names, name)])
     },
     { (local.ssh_key_secret) = [local.bastion] },
+    { for k, v in { (local.tls_secret) = [local.tls.vm] } : k => v if local.tls_on },
   )
 
   # the ports the VMs open to each other = the services' published ports

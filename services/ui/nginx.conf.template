@@ -1,6 +1,10 @@
-server {
+
     listen 8080;
     server_name _;
+
+    # HTTPS on 8443, only where a certificate is mounted (GCP: certbot writes /etc/nginx/tls/https.conf).
+    # No file there (e.g. Vagrant) = nothing is included, plain HTTP as before.
+    include /etc/nginx/tls/*.conf;
 
     root /usr/share/nginx/html;
     index index.html;
