@@ -7,4 +7,6 @@ secrets.env
 /.tools/
 /.pytest_cache/
 
-/var/
+/var/deploy/secrets.env
+/var/logs/
+/var/deploy/known_hosts
