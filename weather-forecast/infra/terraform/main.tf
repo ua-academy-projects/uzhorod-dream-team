@@ -27,3 +27,10 @@ module "vms" {
   subnets          = module.network.subnets
   service_accounts = module.service_accounts.emails
 }
+
+module "dns" {
+  source = "./modules/dns"
+
+  config       = local.config
+  external_ips = module.vms.external_ips
+}

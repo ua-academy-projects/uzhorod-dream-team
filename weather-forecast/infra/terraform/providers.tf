@@ -6,6 +6,10 @@ terraform {
       source  = "hashicorp/google"
       version = "~> 6.8"
     }
+    cloudflare = {
+      source  = "cloudflare/cloudflare"
+      version = "~> 5.27.0"
+    }
   }
 }
 
@@ -18,3 +22,5 @@ provider "google" {
   region  = local.config.project.region
   zone    = local.config.project.zone
 }
+
+provider "cloudflare" {}

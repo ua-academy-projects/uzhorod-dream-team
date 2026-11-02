@@ -30,7 +30,7 @@ resource "google_compute_instance" "vm" {
 
   name                      = "${var.config.project.prefix}-${each.key}"
   machine_type              = each.value.machine_type
-  tags                      = each.value.role == "bastion" ? [each.key] : [each.key, "via-bastion"]
+  tags                      = each.value.public_ip ? [each.key] : [each.key, "via-bastion"]
   can_ip_forward            = each.value.role == "bastion"
   allow_stopping_for_update = true
 

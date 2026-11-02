@@ -3,7 +3,7 @@ resource "google_compute_firewall" "external" {
 
   name          = "${var.config.project.prefix}-ext-${each.key}"
   network       = var.networks[each.value.network]
-  source_ranges = [var.my_ip_cidr]
+  source_ranges = try(each.value.source_ranges, [var.my_ip_cidr])
   target_tags   = each.value.to
 
   allow {
