@@ -3,7 +3,7 @@ PubkeyAuthentication yes
 PasswordAuthentication no
 KbdInteractiveAuthentication no
 AuthenticationMethods publickey
-AllowUsers jump ${ssh_user}
+AllowUsers ${jump_user}
 
 UsePAM yes
 X11Forwarding no
@@ -14,9 +14,4 @@ PermitTTY no
 PermitTunnel no
 PermitUserRC no
 MaxSessions 0
-PermitOpen ${permit_open}
-
-Match User ${ssh_user}
-    MaxSessions 10
-    PermitTTY yes
-    PermitOpen any
+PermitOpen *:${port}

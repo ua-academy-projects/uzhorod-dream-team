@@ -1,31 +1,29 @@
-resource "google_compute_instance" "vm" {
-  for_each       = local.vms
-  name           = "${var.prefix}-${each.key}"
-  machine_type   = each.value.type
-  tags           = each.value.tags
-  can_ip_forward = each.key == "bastion"
+module "network" {
+  source = "./modules/network"
 
-  allow_stopping_for_update = true
+  config = local.config
+}
 
-  boot_disk {
-    initialize_params {
-      image = "ubuntu-os-cloud/ubuntu-2404-lts-amd64"
-      size  = each.value.disk
-      type  = "pd-balanced"
-    }
-  }
+module "firewall" {
+  source = "./modules/firewall"
 
-  network_interface {
-    subnetwork = google_compute_subnetwork.subnet.id
-    network_ip = each.value.ip
+  config     = local.config
+  my_ip_cidr = var.my_ip_cidr
+  networks   = module.network.networks
+}
 
-    dynamic "access_config" {
-      for_each = each.key == "bastion" ? [1] : []
-      content {
-        nat_ip = google_compute_address.bastion.address
-      }
-    }
-  }
+module "service_accounts" {
+  source = "./modules/service_accounts"
 
-  metadata = local.metadata[each.key]
+  config     = local.config
+  project_id = var.project_id
+}
+
+module "vms" {
+  source = "./modules/vms"
+
+  config           = local.config
+  networks         = module.network.networks
+  subnets          = module.network.subnets
+  service_accounts = module.service_accounts.emails
 }
