@@ -27,6 +27,9 @@ for name in "${REQUIRED[@]}"; do
   [[ $(secret "$name") =~ ^[A-Za-z0-9._~-]{16,}$ ]] ||
     die "$name must be at least 16 URL-safe characters (letters, digits, . _ ~ -)"
 done
+[[ $(secret CLOUDFLARE_API_TOKEN) =~ ^[A-Za-z0-9_-]{20,}$ ]] ||
+  die "CLOUDFLARE_API_TOKEN must be set (Cloudflare API token with Zone DNS Edit)"
+CLOUDFLARE_API_TOKEN=$(secret CLOUDFLARE_API_TOKEN)
 APP_PASSWORD=$(secret WEATHER_DB_PASSWORD)
 FETCHER_PASSWORD=$(secret WEATHER_FETCHER_DB_PASSWORD)
 RABBITMQ_PASSWORD=$(secret RABBITMQ_PASSWORD)
@@ -45,6 +48,15 @@ FETCHER_IP=$(vm_attr "$FETCHER_VM" ip)
 HISTORY_IP=$(vm_attr "$HISTORY_VM" ip)
 RABBITMQ_IMAGE=$(image_of rabbitmq)
 REDIS_IMAGE=$(image_of redis)
+CERTBOT_IMAGE=$(image_of certbot)
+DOMAIN=$(cfg '.app.domain // error("app.domain is not set")')
+if [[ $(cfg .app.letsencrypt.staging) == true ]]; then
+  CERT_NAME=$DOMAIN-staging
+  STAGING_FLAG=--staging
+else
+  CERT_NAME=$DOMAIN
+  STAGING_FLAG=
+fi
 
 declare -A SOURCES=(
   [weather-postgres]=infra/postgres
@@ -59,12 +71,12 @@ build_images() {
     log "building $image:$TAG"
     docker build --quiet --platform linux/amd64 -t "$image:$TAG" "$ROOT/${SOURCES[$image]}" >/dev/null
   done
-  if [[ $BACKEND == rabbitmq_redis ]]; then
-    for image in "$RABBITMQ_IMAGE" "$REDIS_IMAGE"; do
-      log "pulling $image"
-      docker pull --quiet --platform linux/amd64 "$image" >/dev/null
-    done
-  fi
+  local pulled=("$CERTBOT_IMAGE")
+  [[ $BACKEND == rabbitmq_redis ]] && pulled+=("$RABBITMQ_IMAGE" "$REDIS_IMAGE")
+  for image in "${pulled[@]}"; do
+    log "pulling $image"
+    docker pull --quiet --platform linux/amd64 "$image" >/dev/null
+  done
 }
 
 wait_ready() {
@@ -229,13 +241,52 @@ deploy_service() {
     --env-file "$CONF_DIR/$name.env" "$@" "$name:$TAG"
 }
 
+deploy_certificate() {
+  local certbot="sudo docker run --rm -v weather-letsencrypt:/etc/letsencrypt -v $CONF_DIR/cloudflare.ini:/cloudflare.ini:ro $CERTBOT_IMAGE"
+  ship_image "$UI_VM" "$CERTBOT_IMAGE"
+  put_file "$UI_VM" "$CONF_DIR/cloudflare.ini" 600 <<<"dns_cloudflare_api_token = $CLOUDFLARE_API_TOKEN"
+
+  log "$UI_VM: requesting certificate $CERT_NAME"
+  remote "$UI_VM" "$certbot certonly --dns-cloudflare --dns-cloudflare-credentials /cloudflare.ini \
+    --dns-cloudflare-propagation-seconds 30 -d $DOMAIN --cert-name $CERT_NAME \
+    --non-interactive --agree-tos --register-unsafely-without-email --keep-until-expiring $STAGING_FLAG >/dev/null" ||
+    die "certbot failed on $UI_VM"
+
+  put_file "$UI_VM" /etc/systemd/system/weather-certbot-renew.service 644 <<EOF
+[Unit]
+Description=Renew the Let's Encrypt certificate of the weather UI
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/${certbot#sudo } renew --quiet
+ExecStartPost=/usr/bin/docker exec weather-ui nginx -s reload
+EOF
+  put_file "$UI_VM" /etc/systemd/system/weather-certbot-renew.timer 644 <<'EOF'
+[Unit]
+Description=Daily Let's Encrypt renewal check for the weather UI
+
+[Timer]
+OnCalendar=daily
+RandomizedDelaySec=1h
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+EOF
+  remote "$UI_VM" "sudo systemctl daemon-reload && sudo systemctl enable --now weather-certbot-renew.timer >/dev/null 2>&1"
+}
+
 deploy_ui() {
   local nginx
-  nginx=$(sed "s/@HISTORY_IP@/$HISTORY_IP/" "$DEPLOY_DIR/templates/nginx/default.conf")
+  nginx=$(sed -e "s/@HISTORY_IP@/$HISTORY_IP/" -e "s/@DOMAIN@/$DOMAIN/g" -e "s/@CERT_NAME@/$CERT_NAME/g" \
+    "$DEPLOY_DIR/templates/nginx/default.conf")
   ship_image "$UI_VM" weather-ui:$TAG
   put_file "$UI_VM" "$CONF_DIR/nginx.conf" 644 <<<"$nginx"
   run_container "$UI_VM" weather-ui "$(image_id weather-ui:$TAG) $(sha <<<"$nginx")" \
     -v "$CONF_DIR/nginx.conf:/etc/nginx/conf.d/default.conf:ro" \
+    -v weather-letsencrypt:/etc/letsencrypt:ro \
     weather-ui:$TAG
 }
 
@@ -276,6 +327,7 @@ HISTORY_SERVE_UI=false
 SESSION_COOKIE_SECURE=$(cfg .app.session_cookie_secure)
 $HISTORY_QUEUE_ENV"
 
+deploy_certificate
 deploy_ui
 
 log "done"
