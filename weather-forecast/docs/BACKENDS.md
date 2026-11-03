@@ -1,133 +1,91 @@
 # Selecting the queue and preferences backend
 
-`WEATHER_BACKEND` is read from the host's ignored
-`var/deploy/secrets.env`. It is configuration, not a secret.
+The backend is set by `app.backend` in the config. The deploy script passes it
+to Fetcher and History as `WEATHER_BACKEND`.
 
-| Value | Queue | Preferences | Running DB VM containers |
+| Value | Queue | Preferences | `broker` VM |
 | --- | --- | --- | --- |
-| `rabbitmq_redis` (default when omitted) | RabbitMQ | Redis | PostgreSQL, RabbitMQ, Redis |
-| `postgres` | PGMQ | hstore + TTL | PostgreSQL |
+| `postgres` | PGMQ in Cloud SQL | hstore + TTL in Cloud SQL | not created |
+| `rabbitmq_redis` | RabbitMQ | Redis | created; runs RabbitMQ and Redis |
 
-Write the value without quotes. Editing the host file does not change existing
-containers: provisioning recreates them with the selected environment.
-The same Fetcher and History images support both modes.
+The same Fetcher and History images support both modes. Cloud SQL is used in
+both: it always stores weather records and job state, and the `pgmq` schema
+exists in both modes.
 
 ## Secrets
 
-Keep the existing `WEATHER_DB_PASSWORD`, `RABBITMQ_URL`, and `REDIS_PASSWORD`
-entries so the default mode remains available. PostgreSQL mode also needs
-`WEATHER_FETCHER_DB_PASSWORD`: a separate password with 48 lowercase hexadecimal
-characters. If this key does not exist yet, run this once from the project root
-on the host to append a random value without displaying it:
+Secrets are stored in Secret Manager (see the table in
+[ARCHITECTURE.md](ARCHITECTURE.md#deployment)). Each password must contain at
+least 16 characters from `A-Z a-z 0-9 . _ ~ -`, so it can be used in
+connection URLs without escaping.
 
-```bash
-printf '\nWEATHER_FETCHER_DB_PASSWORD=%s\n' "$(openssl rand -hex 24)" >> var/deploy/secrets.env
-chmod 600 var/deploy/secrets.env
-```
-
-Add or update one selector line in the same file:
-
-```dotenv
-WEATHER_BACKEND=postgres
-```
-
-Vagrant passes the selector as provisioning environment and transfers filtered
-secret files over SSH. In PostgreSQL mode the secret distribution is:
-
-| VM | Values transferred from the host |
+| Secret (`tf-weather-…`) | Needed in |
 | --- | --- |
-| `db` | `WEATHER_DB_PASSWORD`, `WEATHER_FETCHER_DB_PASSWORD` |
-| `history` | `WEATHER_DB_PASSWORD` |
-| `fetcher` | `WEATHER_FETCHER_DB_PASSWORD` |
-| `ui`, `bastion` | No service credentials |
+| `postgres-admin-password` | both modes (database maintenance) |
+| `db-password` | both modes (History's `weather_app` role) |
+| `fetcher-db-password` | `postgres` (Fetcher's `weather_fetcher` role) |
+| `rabbitmq-password` | `rabbitmq_redis` (user `weather`, vhost `weather`) |
+| `redis-password` | `rabbitmq_redis` |
 
-On History, provisioning builds `DATABASE_URL` for `weather_app`; on Fetcher,
-it builds a separate URL for `weather_fetcher`. Root-only files under
-`/etc/weather-forecast/` supply these values to `docker run --env-file`.
-They are not baked into images. PostgreSQL mode does not pass RabbitMQ or
-Redis credentials to the application containers.
+A random value can be generated with `openssl rand -hex 24`.
 
-`weather_fetcher` can consume PGMQ `weather_requests` and publish to
-`weather_responses`, with network login restricted to the Fetcher VM. The DB container also permits loopback
-authentication for provisioning checks. It cannot access weather records,
-job state, or preferences. Existing role passwords are not automatically
-rotated by changing the host file; keep their current values.
+The RabbitMQ and Redis addresses are not secrets: the deploy script builds
+them from the VM addresses in the config (`app.services.<name>.host`).
+Changing a password in Secret Manager and running the deploy again updates the
+role or user and restarts only the containers that use it.
 
-The `postgres` mode uses two persistent PGMQ queues, `weather_requests` and
-`weather_responses`. The database image includes the versioned PGMQ extension;
-provisioning enables it with `CREATE EXTENSION pgmq`. The standard `hstore`
-extension stores theme preferences as key/value pairs in `weather_preferences`.
-`expires_at` provides the 30-day TTL; hstore itself does not expire entries.
-Provisioning converts existing JSONB preferences to hstore without resetting
-sessions or expiry times. Both extensions are available in either backend mode,
-so switching does not require a different PostgreSQL image.
+## RabbitMQ and Redis
 
-## First deployment of this implementation
+- RabbitMQ (`app.services.rabbitmq.image`) runs with the volume
+  `weather-rabbitmq` and the settings from
+  `infra/deploy/templates/rabbitmq/rabbitmq.conf`. Its user and vhost are
+  created on first start; the password is set on every deploy.
+- Redis (`app.services.redis.image`) runs with the volume `weather-redis`. Its
+  password is stored in `/etc/weather-forecast/redis.conf` (mode `600`), not
+  in process arguments or the container environment.
 
-For new VMs, `vagrant up` provisions the selected mode and builds the service
-images. For existing VMs, run the following on the host from `infra/vagrant/`, after
-preparing the configuration above and letting active jobs finish:
+Both images are pulled on the operator's machine and copied to `broker` like
+the application images.
 
-```bash
-vagrant ssh history -c 'sudo docker stop --time 60 weather-history'
-vagrant ssh fetcher -c 'sudo docker stop --time 60 weather-fetcher'
-vagrant rsync
-vagrant provision db
-vagrant provision fetcher
-vagrant provision history
-```
+## Switching modes
 
-The stop commands pause schedulers and workers during the transition. Rsync
-copies the current migrations and application code to the existing VMs.
-DB provisioning builds `weather-postgres:dev`, enables PGMQ 1.13.0 and hstore,
-and applies migrations and grants before the new workers start.
-Run these steps sequentially. The first deployment must build the updated
-images; do not skip the build yet.
-
-## Switching modes with existing images
-
-Let active jobs finish, stop History and Fetcher as above, and change
-`WEATHER_BACKEND` in the host file. Then, from `infra/vagrant/`, run:
+Let active jobs finish, change `app.backend`, then apply Terraform and deploy
+from the project root:
 
 ```bash
-WEATHER_SKIP_BUILD=1 vagrant provision db
-WEATHER_SKIP_BUILD=1 vagrant provision fetcher
-WEATHER_SKIP_BUILD=1 vagrant provision history
+terraform -chdir=infra/terraform apply
+infra/deploy/deploy.sh
 ```
 
-`WEATHER_SKIP_BUILD=1` requires existing local images and recreates
-containers without building. Omit this flag when deploying changed source
-code; sync the source with `vagrant rsync` before building. The flag also applies
-to PostgreSQL and UI image provisioning, although switching backends does not require UI changes.
+Switching to `rabbitmq_redis` creates the `broker` VM; switching to
+`postgres` destroys it together with the RabbitMQ and Redis volumes. Cloud SQL
+keeps its data in both modes.
 
-In PostgreSQL mode, DB provisioning stops existing RabbitMQ/Redis containers
-and preserves their volumes. Switching back recreates and starts them using
-those volumes. PostgreSQL data remains in its volume in both modes.
-
-Pending messages and cached preferences are not transferred between backends.
-An old unfinished job can block a new collection until its deadline expires.
-The same browser cookie can have independent theme preferences in each backend.
-PGMQ queues and hstore preference tables are included in the existing database
-backup and restore; their original deadlines and expiry timestamps remain valid.
+Pending messages and stored preferences are not transferred between backends.
+An unfinished job from the previous mode can block a new collection until its
+deadline expires. The same browser cookie can have different theme preferences
+in each backend.
 
 ## Verification
 
-From the host, check the active DB containers and the site:
+In `rabbitmq_redis` mode check the containers on `broker`:
 
 ```bash
-vagrant ssh db -c 'sudo docker ps --format "table {{.Names}}\t{{.Status}}"'
-curl -i -X POST http://127.0.0.1:8080/api/collect
+ssh gcp-tf-broker 'sudo docker ps --format "table {{.Names}}\t{{.Status}}"'
+```
+
+`weather-rabbitmq` and `weather-redis` must be running. In `postgres` mode
+`gcloud compute instances list` shows no `broker` VM.
+
+Start a collection through the public site:
+
+```bash
+curl -i -X POST https://app.weather-lab.pp.ua/api/collect
 ```
 
 Use the returned `request_id` with `/api/jobs/<request_id>` and wait for
-`completed`. Check `/api/latest`, the hourly chart, and the saved theme after
-reopening the page. In PostgreSQL mode only PostgreSQL should be running on DB;
-RabbitMQ/Redis can still appear as stopped containers in `docker ps -a`.
-
-To confirm application images were reused, compare their IDs before and after
-the switch with `sudo docker image inspect weather-fetcher:dev --format '{{.Id}}'`
-on Fetcher and the equivalent command for `weather-history:dev` on History.
-
+`completed`. Then check `/api/latest`, the hourly chart, and that the theme is
+kept after reopening the page.
 
 ## Integration tests
 
