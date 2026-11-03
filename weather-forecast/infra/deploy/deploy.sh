@@ -3,7 +3,6 @@ source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
 TAG=deploy
 CONF_DIR=/etc/weather-forecast
-DB_NAME=weather_history
 BROKER_USER=weather
 BROKER_VHOST=weather
 
@@ -13,11 +12,16 @@ done
 : "${PROJECT_ID:?set PROJECT_ID in $ENV_FILE}"
 SECRET_NAMES=$(terraform -chdir="$TF_DIR" output -json secrets 2>/dev/null) ||
   die "no secrets in Terraform outputs; run terraform apply in $TF_DIR"
+CLOUDSQL=$(terraform -chdir="$TF_DIR" output -json cloudsql 2>/dev/null) ||
+  die "no Cloud SQL in Terraform outputs; run terraform apply in $TF_DIR"
+DB_IP=$(jq -r .private_ip <<<"$CLOUDSQL")
+DB_INSTANCE=$(jq -r .instance <<<"$CLOUDSQL")
+DB_NAME=$(cfg '.cloudsql.database // error("cloudsql.database is not set")')
 
 BACKEND=$(cfg .app.backend)
 case $BACKEND in
-  postgres) REQUIRED=(db-password fetcher-db-password) ;;
-  rabbitmq_redis) REQUIRED=(db-password rabbitmq-password redis-password) ;;
+  postgres) REQUIRED=(postgres-admin-password db-password fetcher-db-password) ;;
+  rabbitmq_redis) REQUIRED=(postgres-admin-password db-password rabbitmq-password redis-password) ;;
   *) die "app.backend must be postgres or rabbitmq_redis" ;;
 esac
 
@@ -41,25 +45,27 @@ done
 CLOUDFLARE_API_TOKEN=$(secret cloudflare-api-token) || die "cannot read secret cloudflare-api-token from Secret Manager"
 [[ $CLOUDFLARE_API_TOKEN =~ ^[A-Za-z0-9_-]{20,}$ ]] ||
   die "cloudflare-api-token must be a Cloudflare API token with Zone DNS Edit"
+ADMIN_PASSWORD=${SECRET[postgres-admin-password]}
 APP_PASSWORD=${SECRET[db-password]}
 FETCHER_PASSWORD=${SECRET[fetcher-db-password]:-}
 RABBITMQ_PASSWORD=${SECRET[rabbitmq-password]:-}
 REDIS_PASSWORD=${SECRET[redis-password]:-}
 unset value
 
-DB_VM=$(host_of postgres)
-RABBITMQ_VM=$(host_of rabbitmq)
-REDIS_VM=$(host_of redis)
 FETCHER_VM=$(host_of fetcher)
 HISTORY_VM=$(host_of history)
 UI_VM=$(host_of ui)
-DB_IP=$(vm_attr "$DB_VM" ip)
-RABBITMQ_IP=$(vm_attr "$RABBITMQ_VM" ip)
-REDIS_IP=$(vm_attr "$REDIS_VM" ip)
-FETCHER_IP=$(vm_attr "$FETCHER_VM" ip)
 HISTORY_IP=$(vm_attr "$HISTORY_VM" ip)
-RABBITMQ_IMAGE=$(image_of rabbitmq)
-REDIS_IMAGE=$(image_of redis)
+VMS=("$FETCHER_VM" "$HISTORY_VM" "$UI_VM")
+if [[ $BACKEND == rabbitmq_redis ]]; then
+  RABBITMQ_VM=$(host_of rabbitmq)
+  REDIS_VM=$(host_of redis)
+  RABBITMQ_IP=$(vm_attr "$RABBITMQ_VM" ip)
+  REDIS_IP=$(vm_attr "$REDIS_VM" ip)
+  RABBITMQ_IMAGE=$(image_of rabbitmq)
+  REDIS_IMAGE=$(image_of redis)
+  VMS+=("$RABBITMQ_VM" "$REDIS_VM")
+fi
 CERTBOT_IMAGE=$(image_of certbot)
 DOMAIN=$(cfg '.app.public.domain // error("app.public.domain is not set")')
 if [[ $(cfg .app.public.letsencrypt_staging) == true ]]; then
@@ -127,14 +133,6 @@ run_container() {
   remote "$vm" "sudo docker stop -t 60 $name >/dev/null 2>&1; sudo docker rm -f $name >/dev/null 2>&1; sudo docker run -d --name $name --restart unless-stopped --network host --label weather_spec=$spec $(printf '%q ' "$@") >/dev/null"
 }
 
-remove_container() {
-  local vm=$1 name=$2
-  if remote "$vm" "sudo docker container inspect $name >/dev/null 2>&1"; then
-    log "$vm: removing $name, its volume is kept"
-    remote "$vm" "sudo docker stop -t 60 $name >/dev/null; sudo docker rm $name >/dev/null"
-  fi
-}
-
 wait_for() {
   local vm=$1 what=$2 check=$3
   log "$vm: waiting for $what"
@@ -143,26 +141,27 @@ wait_for() {
 }
 
 db_psql() {
-  remote "$DB_VM" "sudo docker exec -i weather-postgres psql -X -q -v ON_ERROR_STOP=1 -U postgres -d $DB_NAME $*"
+  remote "$HISTORY_VM" "sudo docker run --rm -i --network host -v $CONF_DIR/pgpass:/pgpass:ro -e PGPASSFILE=/pgpass \
+    weather-postgres:$TAG psql -X -q -v ON_ERROR_STOP=1 'host=$DB_IP dbname=$DB_NAME user=postgres sslmode=require' $*"
 }
 
-deploy_postgres() {
-  local hba
-  hba=$(sed -e "s/@HISTORY_IP@/$HISTORY_IP/" -e "s/@FETCHER_IP@/$FETCHER_IP/" "$DEPLOY_DIR/templates/postgres/pg_hba.conf")
-  ship_image "$DB_VM" weather-postgres:$TAG
-  put_file "$DB_VM" "$CONF_DIR/pg_hba.conf" 644 <<<"$hba"
-  run_container "$DB_VM" weather-postgres "$(image_id weather-postgres:$TAG) $(sha <<<"$hba")" \
-    -v weather-postgres:/var/lib/postgresql \
-    -v "$CONF_DIR/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro" \
-    -e POSTGRES_DB=$DB_NAME \
-    -e POSTGRES_HOST_AUTH_METHOD=trust \
-    weather-postgres:$TAG \
-    -c hba_file=/etc/postgresql/pg_hba.conf \
-    -c "listen_addresses=127.0.0.1,$DB_IP"
-  wait_for "$DB_VM" PostgreSQL "sudo docker exec weather-postgres pg_isready -q -h 127.0.0.1 -U postgres"
+deploy_database() {
+  ship_image "$HISTORY_VM" weather-postgres:$TAG
+  put_file "$HISTORY_VM" "$CONF_DIR/pgpass" 600 <<<"$DB_IP:5432:*:postgres:$ADMIN_PASSWORD"
+
+  if ! db_psql <<<'SELECT 1' >/dev/null 2>&1; then
+    log "Cloud SQL: setting the postgres password"
+    gcloud sql users set-password postgres --instance="$DB_INSTANCE" --password="$ADMIN_PASSWORD" \
+      --project="$PROJECT_ID" --quiet >/dev/null 2>&1 || die "cannot set the postgres password on $DB_INSTANCE"
+    db_psql <<<'SELECT 1' >/dev/null || die "cannot connect to Cloud SQL at $DB_IP from $HISTORY_VM"
+  fi
+
+  if [[ -z $(db_psql -At <<<"SELECT 1 FROM pg_namespace WHERE nspname = 'pgmq'") ]]; then
+    log "Cloud SQL: installing pgmq"
+    db_psql -f /usr/local/share/postgresql/extension/pgmq--1.13.0.sql </dev/null >/dev/null
+  fi
 
   db_psql <<'SQL'
-CREATE EXTENSION IF NOT EXISTS pgmq;
 CREATE EXTENSION IF NOT EXISTS hstore;
 CREATE TABLE IF NOT EXISTS schema_migrations (
     version TEXT PRIMARY KEY,
@@ -175,7 +174,7 @@ SQL
   for file in "$ROOT"/infra/postgres/migrations/*.sql; do
     version=$(basename "$file" .sql)
     grep -qxF "$version" <<<"$applied" && continue
-    log "$DB_VM: applying migration $version"
+    log "Cloud SQL: applying migration $version"
     { echo 'BEGIN;'; cat "$file"; printf "\nINSERT INTO schema_migrations (version) VALUES ('%s');\nCOMMIT;\n" "$version"; } | db_psql
   done
 
@@ -185,7 +184,7 @@ SQL
     fetcher_login=NOLOGIN
   fi
 
-  log "$DB_VM: configuring roles"
+  log "Cloud SQL: configuring roles"
   db_psql <<SQL
 SELECT format('CREATE ROLE %I', r) FROM unnest(ARRAY['weather_app', 'weather_fetcher']) AS r
 WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = r) \gexec
@@ -304,13 +303,13 @@ deploy_ui() {
 
 build_images
 
-for vm in $(printf '%s\n' "$DB_VM" "$RABBITMQ_VM" "$REDIS_VM" "$FETCHER_VM" "$HISTORY_VM" "$UI_VM" | sort -u); do
+for vm in $(printf '%s\n' "${VMS[@]}" | sort -u); do
   wait_ready "$vm"
 done
 
-deploy_postgres
+deploy_database
 
-DATABASE_URL="postgresql://weather_app:$APP_PASSWORD@$DB_IP:5432/$DB_NAME"
+DATABASE_URL="postgresql://weather_app:$APP_PASSWORD@$DB_IP:5432/$DB_NAME?sslmode=require"
 if [[ $BACKEND == rabbitmq_redis ]]; then
   deploy_rabbitmq
   deploy_redis
@@ -322,10 +321,8 @@ FETCHER_HOST=127.0.0.1"
 REDIS_ADDR=$REDIS_IP:6379
 REDIS_PASSWORD=$REDIS_PASSWORD"
 else
-  remove_container "$RABBITMQ_VM" weather-rabbitmq
-  remove_container "$REDIS_VM" weather-redis
   FETCHER_ENV="WEATHER_BACKEND=postgres
-DATABASE_URL=postgresql://weather_fetcher:$FETCHER_PASSWORD@$DB_IP:5432/$DB_NAME
+DATABASE_URL=postgresql://weather_fetcher:$FETCHER_PASSWORD@$DB_IP:5432/$DB_NAME?sslmode=require
 FETCHER_HOST=127.0.0.1"
   HISTORY_QUEUE_ENV=""
 fi
