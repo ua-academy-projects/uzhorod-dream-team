@@ -105,60 +105,6 @@ APP_BACKEND=postgres python -m pytest -q
 ```
 
 
-## UI через Nginx і Cloudflare Tunnel (опціонально)
-
-Для цього альтернативного режиму задайте `ip_https: false` та ім’я секрету
-токена в UI startup, а також `tunnel_token_secret_id` у secret_manager.
-Тоді на UI VM Terraform запускає Compose profiles `ui` і `tunnel`:
-`Cloudflare HTTPS → cloudflared → http://nginx:80 → ui:8000`.
-Nginx і UI публікують діагностичні порти лише на localhost VM
-(8080 і 8000). Відкривати зовнішні порти 80/443 для тунелю не потрібно.
-
-Перед запуском нової інфраструктури:
-
-1. У Cloudflare створіть remotely-managed Cloudflare Tunnel.
-2. Додайте published application route для свого домену з service URL
-   `http://nginx:80` (контейнери працюють в одній Docker network).
-3. Підготуйте GCP Secret Manager secret `datamonitor-cloudflare-tunnel-token`
-   і додайте версію з токеном тунелю. Terraform описує контейнер секрету
-   та IAM-доступ, але значення токена не зберігає. Якщо секрет створений
-   вручну перед першим apply, імпортуйте його в Terraform:
-
-   ```bash
-   terraform -chdir=gcp-terra import \
-     'module.secrets.google_secret_manager_secret.tunnel_token[0]' \
-     projects/PROJECT_ID/secrets/datamonitor-cloudflare-tunnel-token
-   ```
-
-   Або спочатку створіть секрет через окремий підготовчий apply модуля:
-
-   ```bash
-   terraform -chdir=gcp-terra apply -target=module.secrets
-   ```
-
-   Після цього додайте версію через Google Cloud Console, а тоді виконайте
-   звичайний plan/apply всієї конфігурації. Не передавайте токен у Git,
-   config.json, startup metadata або аргументах команд.
-4. Наявний секрет `datamonitor-env` також має містити робочий `.env`.
-
-Ім'я секрету токена налаштовується у `secret_manager.tunnel_token_secret_id`
-та `compute.instances.ui.startup.tunnel_token_secret_id`; вони мають збігатися.
-Токен отримує лише UI startup script. Поточний service account спільний для
-прикладних VM, тому IAM технічно дозволяє йому читати цей секрет на всіх цих VM.
-На UI VM токен зберігається у файлі з правами 0400 і монтується лише в cloudflared.
-Для HTTPS через тунель startup script виставляє `COOKIE_SECURE=true`.
-
-Terraform вбудовує локальні Compose і Nginx конфігурації в startup script;
-код застосунку, як і раніше, клонується з налаштованої у скрипті Git-гілки.
-Заміна токена в Secret Manager застосовується після повторного запуску
-startup script або перезапуску VM; автоматичного оновлення токена немає.
-
-Для локального запуску лише UI і Nginx використовуйте profile `ui`.
-Для тунелю додайте profile `tunnel` і `CLOUDFLARE_TUNNEL_TOKEN_FILE` — шлях
-до локального файла токена. `NGINX_CONFIG_DIR` дозволяє перевизначити каталог
-із Nginx конфігурацією.
-
-
 ## Поточний режим: HTTPS на статичній IP без домену
 
 У `config.json` для UI встановлено `startup.ip_https: true`.
@@ -202,3 +148,74 @@ docker logs datamonitor-nginx --tail 50
 Відкрийте `http://UI_IP/`: очікується перенаправлення на `https://UI_IP/`.
 Початкова видача сертифіката виконується у startup script;
 `terraform apply` сам по собі не підтверджує, що вона вже завершилась.
+
+## Cloud SQL over private IP
+
+History and Fetcher use the Cloud SQL Go Connector when
+`INSTANCE_CONNECTION_NAME=PROJECT:REGION:INSTANCE` is set. Leave it empty for
+local/Vagrant PostgreSQL. Compose passes this variable to both applications.
+The value is read from the environment secret together with the database
+credentials; it is not duplicated in Terraform startup metadata.
+
+The connector always uses private IP and supplies authenticated TLS. The VM must
+have a network route to Cloud SQL and a service account with `roles/cloudsql.client`;
+Cloud SQL Admin API must be enabled. On Compute Engine credentials come from the
+attached service account, so do not copy service account keys into containers.
+
+Set `POSTGRES_DB=history` and `FETCHER_POSTGRES_DB=history`, the Cloud SQL database
+user/password in `POSTGRES_USER`/`POSTGRES_PASSWORD`, and a distinct worker password
+in `FETCHER_POSTGRES_PASSWORD` in the environment secret. The PostgreSQL host is
+ignored by the connector. Start History first: it configures `fetcher_worker` and
+the schema using a database user with role creation and schema privileges. Then
+start Fetcher. Keep `APP_BACKEND=hybrid`: the `postgres` backend requires the pgmq
+extension, which is not available as a supported Cloud SQL extension.
+
+Both Go modules and Docker builders use Go 1.26 or later. The final images include
+CA certificates for the connector's Google API HTTPS requests. Private VM egress
+must allow Google APIs on TCP 443 and Cloud SQL on TCP 3307.
+
+After deployment check the History and Fetcher logs and create/read a history
+record. Updating the secret alone does not update existing containers: download
+the new environment and recreate the services. Previous PostgreSQL history is
+not being migrated. Its VM still runs RabbitMQ and Redis.
+
+## VM startup and deployment
+
+Terraform stores a short bootstrap in `metadata["startup-script"]`. It keeps
+non-secret deployment settings in `/etc/datamonitor/deploy.env`, obtains the
+configured Git ref on first boot, and invokes `gcp-terra/scripts/deploy.sh` from
+that checkout. Compose, Nginx, HTTPS setup and application source all come from
+the same Git revision. Publish these files to the configured repository before
+using the new bootstrap.
+
+A regular reboot keeps the current checkout and existing images, refreshes the
+environment secret, and runs Compose without rebuilding. Docker packages are
+installed only when Docker/Compose is missing. A changed Git revision triggers
+an image build; the deployment marker is written only after a successful start.
+For an explicit update on the VM run:
+
+```bash
+sudo bash /opt/datamonitor/gcp-terra/scripts/deploy.sh --update
+```
+
+`compute.application.repo_branch` accepts a branch, tag or commit supported by
+`git fetch origin REF`. Use a fixed tag or commit when a reproducible version is
+required. Updating startup metadata does not execute the script automatically;
+reboot the VM or run `sudo google_metadata_script_runner startup` after applying
+an intentional metadata change.
+
+The `database` VM role starts only RabbitMQ and Redis. The local PostgreSQL
+service remains in Compose for local development. Old PostgreSQL data is not
+needed. Explicitly disable its old restart policy and stop it on the existing
+VM; its data volumes are retained. The deployment scripts do not stop it for you.
+
+The initial migration from `metadata_startup_script` to `metadata["startup-script"]`
+requires special care: the checked Terraform plan currently proposes replacing
+all five VMs because the old attribute is removed. Do not apply that plan until
+VM data (especially RabbitMQ/Redis on the database VM) is backed up or a state
+migration preserving the VMs has been reviewed. No apply was performed.
+
+Startup receives only the service role, GCP project, environment secret ID,
+HTTPS toggle, repository URL and Git ref. Cloudflare Tunnel is not supported by
+the current deployment path. Cloud SQL connection settings come from Secret
+Manager. No old PostgreSQL history needs to be imported into Cloud SQL.

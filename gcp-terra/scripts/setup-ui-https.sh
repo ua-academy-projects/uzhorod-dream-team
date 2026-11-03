@@ -2,8 +2,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-COMPOSE_DIR=/opt/datamonitor/DataFetcher
-export NGINX_CONFIG_DIR="${SCRIPT_DIR}/nginx"
+COMPOSE_DIR="$(cd "${SCRIPT_DIR}/../../DataFetcher" && pwd)"
+export NGINX_CONFIG_DIR=/var/lib/datamonitor/nginx
 export UI_HTTP_BIND=0.0.0.0:80
 export UI_HTTPS_BIND=0.0.0.0:443
 export COOKIE_SECURE=true
@@ -20,7 +20,7 @@ PY
 
 compose() {
   docker compose --env-file "${COMPOSE_DIR}/.env" \
-    --project-directory "${COMPOSE_DIR}" -f "${SCRIPT_DIR}/compose.yml" \
+    --project-directory "${COMPOSE_DIR}" -f "${COMPOSE_DIR}/docker-compose.yml" \
     --profile ui "$@"
 }
 
@@ -39,14 +39,14 @@ install -d -m 755 /var/lib/letsencrypt /etc/letsencrypt "${NGINX_CONFIG_DIR}"
 # Start HTTP challenge serving before requesting the first certificate.
 # Keep HTTPS on subsequent runs when a certificate already exists.
 render_config() {
-  python3 - "${SCRIPT_DIR}" "${PUBLIC_IP}" "$1" <<'PY'
+  python3 - "${COMPOSE_DIR}/nginx" "${NGINX_CONFIG_DIR}" "${PUBLIC_IP}" "$1" <<'PY'
 from pathlib import Path
 import sys
-root, address, tls = Path(sys.argv[1]), sys.argv[2], sys.argv[3] == 'true'
+root, output, address, tls = Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3], sys.argv[4] == 'true'
 config = (root / 'ip-http.conf.template').read_text()
 if tls:
     config += '\n' + (root / 'ip-https.conf.template').read_text()
-p = root / 'nginx/default.conf'
+p = output / 'default.conf'
 tmp = p.with_suffix('.tmp')
 tmp.write_text(config.replace('__PUBLIC_IP__', address))
 tmp.replace(p)
@@ -59,7 +59,11 @@ if [[ -s "/etc/letsencrypt/live/${PUBLIC_IP}/fullchain.pem" && \
   TLS_READY=true
 fi
 render_config "${TLS_READY}"
-compose up -d --build ui nginx
+if [[ "${BUILD_IMAGES:-false}" == true ]]; then
+  compose up -d --build ui nginx
+else
+  compose up -d --no-build ui nginx
+fi
 # Ensure a running container picks up the current configuration.
 docker exec datamonitor-nginx nginx -t
 docker exec datamonitor-nginx nginx -s reload

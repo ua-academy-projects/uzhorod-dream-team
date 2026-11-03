@@ -51,6 +51,13 @@ func main() {
 		env("POSTGRES_PASSWORD", "postgres"),
 	)
 
+	config, closeConnector, err := database.PoolConfig(ctx, dsn, os.Getenv("INSTANCE_CONNECTION_NAME"))
+	if err != nil {
+		logger.Error("database configuration failed", "error", err)
+		return
+	}
+	defer closeConnector()
+
 	var db *database.Store
 
 	for attempt := 0; ; attempt++ {
@@ -61,7 +68,7 @@ func main() {
 		connectCtx, done := context.WithTimeout(ctx, 5*time.Second)
 		var err error
 
-		db, err = database.Connect(connectCtx, dsn)
+		db, err = database.Connect(connectCtx, config)
 		done()
 
 		if err == nil {
@@ -89,7 +96,7 @@ func main() {
 		logger.Error("fetcher database role configuration failed", "error", err)
 		return
 	}
-	err := db.Init(initCtx, backend == "postgres")
+	err = db.Init(initCtx, backend == "postgres")
 	initDone()
 
 	if err != nil {

@@ -18,8 +18,8 @@ type Store struct {
 	PGMQ bool
 }
 
-func Connect(ctx context.Context, dsn string) (*Store, error) {
-	pool, err := pgxpool.New(ctx, dsn)
+func Connect(ctx context.Context, config *pgxpool.Config) (*Store, error) {
+	pool, err := pgxpool.NewWithConfig(ctx, config)
 	if err != nil {
 		return nil, err
 	}

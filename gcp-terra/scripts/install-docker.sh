@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
+  systemctl enable --now docker
+  exit 0
+fi
+
 export DEBIAN_FRONTEND=noninteractive
 
 

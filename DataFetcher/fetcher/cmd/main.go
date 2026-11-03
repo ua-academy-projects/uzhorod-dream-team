@@ -18,6 +18,7 @@ import (
 	"github.com/rabbitmq/amqp091-go"
 
 	"data-monitor/fetcher/internal/client"
+	"data-monitor/fetcher/internal/database"
 	"data-monitor/fetcher/internal/server"
 )
 
@@ -137,8 +138,14 @@ func runPostgresFallbackLoop(
 	store *server.Store,
 	usePGMQ bool,
 ) {
+	config, closeConnector, err := database.PoolConfig(ctx, dsn, os.Getenv("INSTANCE_CONNECTION_NAME"))
+	if err != nil {
+		logger.Error("PostgreSQL fallback configuration failed", "error", err)
+		return
+	}
+	defer closeConnector()
 	for attempt := 0; ctx.Err() == nil; attempt++ {
-		pool, err := pgxpool.New(ctx, dsn)
+		pool, err := pgxpool.NewWithConfig(ctx, config)
 
 		if err == nil {
 			pingCtx, pingCancel := context.WithTimeout(

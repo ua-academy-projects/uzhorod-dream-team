@@ -61,24 +61,20 @@ resource "google_compute_instance" "instances" {
     }
   }
 
-  metadata_startup_script = each.value.startup.type == "none" ? null : (
-    each.value.startup.type == "bastion" ? templatefile("${path.module}/scripts/bastion.sh.tftpl", { ssh_port = each.value.startup.ssh_port }) : templatefile(
-      "${path.module}/scripts/vm-startup.sh.tftpl",
-      {
-        install_docker_script  = file("${path.module}/scripts/install-docker.sh")
-        startup_service_script = file("${path.module}/scripts/start-service.sh")
-        service_role           = each.value.startup.service_role
-        project_id             = var.project_id
-        tunnel_token_secret_id = each.value.startup.tunnel_token_secret_id
-        compose_config         = file("${path.module}/../../../DataFetcher/docker-compose.yml")
-        ip_https               = each.value.startup.ip_https
-        setup_https_script     = file("${path.module}/scripts/setup-ui-https.sh")
-        nginx_http_template    = file("${path.module}/../../../DataFetcher/nginx/ip-http.conf.template")
-        nginx_https_template   = file("${path.module}/../../../DataFetcher/nginx/ip-https.conf.template")
-        nginx_config           = file("${path.module}/../../../DataFetcher/nginx/default.conf")
-      }
-    )
-  )
+  metadata = each.value.startup.type == "none" ? {} : {
+    startup-script = each.value.startup.type == "bastion" ? templatefile(
+      "${path.module}/scripts/bastion.sh.tftpl", { ssh_port = each.value.startup.ssh_port }
+      ) : templatefile("${path.module}/scripts/vm-startup.sh.tftpl", {
+        startup_exports = join("\n", [for name, value in {
+          SERVICE_ROLE  = each.value.startup.service_role
+          PROJECT_ID    = var.project_id
+          ENV_SECRET_ID = var.env_secret_id
+          IP_HTTPS      = tostring(each.value.startup.ip_https)
+          REPO_URL      = var.config.application.repo_url
+          REPO_REF      = var.config.application.repo_branch
+        } : "export ${name}='${replace(value, "'", "'\"'\"'")}'"])
+    })
+  }
 
   lifecycle {
     ignore_changes = [metadata["ssh-keys"]]

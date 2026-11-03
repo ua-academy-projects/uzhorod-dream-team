@@ -16,10 +16,15 @@ Bash-скрипт готує GCP для Terraform: створює відсутн
 gcloud auth login
 bash gcp-terra/bootstrap/bootstrap.sh
 source gcp-terra/bootstrap/terraform.env.sh
+cd gcp-terra
+terraform init -backend-config=bootstrap/backend.hcl -migrate-state
 ```
 
 Локальний конфіг, `.credentials/`, `terraform.env.sh` і `backend.hcl`
-виключені з Git. Не комітьте ключ.
+виключені з Git. Не комітьте ключ. `terraform init` перенесе наявний локальний
+state у спільний GCS backend; підтвердіть перенесення, коли Terraform запитає.
+Для інших робочих копій спочатку підготуйте доступ до ключа, потім виконайте
+`terraform init -backend-config=bootstrap/backend.hcl` без `-migrate-state`.
 
-State залишається локальним. Для іншого проєкту також оновіть project/region/zone
-в основному `config.json` перед запуском Terraform.
+Для іншого проєкту також оновіть project/region/zone в основному `config.json`
+перед запуском Terraform.

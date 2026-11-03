@@ -1,4 +1,6 @@
 terraform {
+  backend "gcs" {}
+
   required_providers {
     google = {
       source  = "hashicorp/google"
@@ -46,6 +48,7 @@ module "compute" {
   region                = local.config.region
   subnet_id             = module.network.subnet_id
   service_account_email = module.secrets.service_account_email
+  env_secret_id         = module.secrets.env_secret_id
 
   depends_on = [
     module.network,

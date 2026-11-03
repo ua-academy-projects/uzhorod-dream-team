@@ -1,11 +1,12 @@
-
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROLE="${1:?Missing service role}"
-PROJECT_ID="${2:?Missing GCP project ID}"
-
+ROLE="${SERVICE_ROLE:?Missing service role}"
+: "${PROJECT_ID:?Missing GCP project ID}"
+: "${ENV_SECRET_ID:?Missing environment secret ID}"
+IP_HTTPS="${IP_HTTPS:-false}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+COMPOSE_DIR="$(cd "${SCRIPT_DIR}/../../DataFetcher" && pwd)"
 
 case "${ROLE}" in
   database|fetcher|history|ui) ;;
@@ -17,35 +18,7 @@ esac
 
 echo "=== Starting Data Monitor: ${ROLE} ==="
 
-# 1. Install Docker
-bash "${SCRIPT_DIR}/install-docker.sh"
-
-# 2. Install deployment dependencies
-export DEBIAN_FRONTEND=noninteractive
-apt-get install -y git curl python3
-
-# 3. Clone or update project
-APP_DIR="/opt/datamonitor"
-REPO_URL="https://github.com/ua-academy-projects/uzhorod-dream-team.git"
-BRANCH="dmytro/btc-eth-price-analyzer"
-
-if [[ -d "${APP_DIR}/.git" ]]; then
-  git -C "${APP_DIR}" fetch origin "${BRANCH}"
-  git -C "${APP_DIR}" checkout "${BRANCH}"
-  git -C "${APP_DIR}" pull --ff-only origin "${BRANCH}"
-else
-  git clone --branch "${BRANCH}" --single-branch \
-    "${REPO_URL}" "${APP_DIR}"
-fi
-
-COMPOSE_DIR="${APP_DIR}/DataFetcher"
-
-if [[ ! -f "${COMPOSE_DIR}/docker-compose.yml" ]]; then
-  echo "ERROR: docker-compose.yml not found"
-  exit 1
-fi
-
-# 4. Get VM service account access token
+# Get the attached VM service account access token.
 METADATA_URL="http://metadata.google.internal/computeMetadata/v1"
 
 get_token() {
@@ -55,8 +28,8 @@ get_token() {
     python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])'
 }
 
-# 5. Download .env from Secret Manager
-SECRET_URL="https://secretmanager.googleapis.com/v1/projects/${PROJECT_ID}/secrets/datamonitor-env/versions/latest:access"
+# Refresh the environment from Secret Manager.
+SECRET_URL="https://secretmanager.googleapis.com/v1/projects/${PROJECT_ID}/secrets/${ENV_SECRET_ID}/versions/latest:access"
 
 ENV_FILE="${COMPOSE_DIR}/.env"
 TMP_FILE="$(mktemp "${COMPOSE_DIR}/.env.XXXXXX")"
@@ -100,36 +73,37 @@ fi
 mv -f "${TMP_FILE}" "${ENV_FILE}"
 chmod 600 "${ENV_FILE}"
 
-# 6. Start Docker Compose
+COMPOSE_BUILD_ARGS=(--no-build)
+if [[ "${BUILD_IMAGES:-false}" == true ]]; then
+  COMPOSE_BUILD_ARGS=(--build)
+fi
+if [[ "${ROLE}" == ui ]]; then
+  export NGINX_CONFIG_DIR=/var/lib/datamonitor/nginx
+  install -d "${NGINX_CONFIG_DIR}"
+  install -m 644 "${COMPOSE_DIR}/nginx/default.conf" "${NGINX_CONFIG_DIR}/default.conf"
+fi
+
+if [[ "${ROLE}" == ui && "${IP_HTTPS}" == true ]]; then
+  export COOKIE_SECURE=true
+  bash "${SCRIPT_DIR}/setup-ui-https.sh"
+  export UI_HTTP_BIND=0.0.0.0:80
+  export UI_HTTPS_BIND=0.0.0.0:443
+fi
+
+# Start the services from the same checkout as their deployment scripts.
 cd "${COMPOSE_DIR}"
+
+# Cloud deployments keep RabbitMQ/Redis here; PostgreSQL lives in Cloud SQL.
+SERVICES=()
+if [[ "${ROLE}" == database ]]; then
+  SERVICES=(rabbitmq redis)
+fi
 
 docker compose \
   --env-file .env \
-  -f docker-compose.yml \
+  --project-directory "${COMPOSE_DIR}" \
+  -f "${COMPOSE_DIR}/docker-compose.yml" \
   --profile "${ROLE}" \
-  up -d --build
-
-
-if [[ "${ROLE}" == "database" ]]; then
-  set -a
-  source "${ENV_FILE}"
-  set +a
-
-  for attempt in $(seq 1 60); do
-    if docker exec datamonitor-postgres \
-      pg_isready -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" \
-      >/dev/null 2>&1; then
-      break
-    fi
-    sleep 2
-  done
-
-  docker exec -i datamonitor-postgres \
-    psql -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" \
-    -v ON_ERROR_STOP=1 \
-    -v "worker_password=${FETCHER_POSTGRES_PASSWORD}" <<'SQL'
-ALTER ROLE fetcher_worker WITH LOGIN PASSWORD :'worker_password';
-SQL
-fi
+  up -d "${COMPOSE_BUILD_ARGS[@]}" "${SERVICES[@]}"
 
 echo "=== Deployment completed: ${ROLE} ==="

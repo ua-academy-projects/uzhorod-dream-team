@@ -158,6 +158,10 @@
         "public_ip": true,
         "static_public_ip": true
       }
+    },
+    "application": {
+      "repo_url": "https://github.com/ua-academy-projects/uzhorod-dream-team.git",
+      "repo_branch": "dmytro/btc-eth-price-analyzer"
     }
   }
 }
