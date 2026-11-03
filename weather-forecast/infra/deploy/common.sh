@@ -4,7 +4,8 @@ set -euo pipefail
 DEPLOY_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 ROOT=$(cd "$DEPLOY_DIR/../.." && pwd)
 CONFIG=${WEATHER_CONFIG:-$HOME/.config/weather-forecast/deployment.json}
-SECRETS=${WEATHER_SECRETS:-$ROOT/var/deploy/secrets.env}
+ENV_FILE=${WEATHER_ENV:-$HOME/.config/weather-forecast/local.env}
+[[ -f $ENV_FILE ]] && source "$ENV_FILE"
 TF_DIR=$ROOT/infra/terraform
 KEY=${WEATHER_SSH_KEY:-$HOME/.ssh/weather_vm}
 KNOWN_HOSTS=$ROOT/var/deploy/known_hosts

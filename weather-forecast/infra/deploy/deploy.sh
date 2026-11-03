@@ -7,33 +7,45 @@ DB_NAME=weather_history
 BROKER_USER=weather
 BROKER_VHOST=weather
 
-command -v docker >/dev/null || die "docker is required"
-[[ -r $SECRETS ]] || die "secrets not found: $SECRETS"
+for cmd in docker gcloud; do
+  command -v "$cmd" >/dev/null || die "$cmd is required"
+done
+: "${PROJECT_ID:?set PROJECT_ID in $ENV_FILE}"
+SECRET_NAMES=$(terraform -chdir="$TF_DIR" output -json secrets 2>/dev/null) ||
+  die "no secrets in Terraform outputs; run terraform apply in $TF_DIR"
 
 BACKEND=$(cfg .app.backend)
 case $BACKEND in
-  postgres) REQUIRED=(WEATHER_DB_PASSWORD WEATHER_FETCHER_DB_PASSWORD) ;;
-  rabbitmq_redis) REQUIRED=(WEATHER_DB_PASSWORD RABBITMQ_PASSWORD REDIS_PASSWORD) ;;
+  postgres) REQUIRED=(db-password fetcher-db-password) ;;
+  rabbitmq_redis) REQUIRED=(db-password rabbitmq-password redis-password) ;;
   *) die "app.backend must be postgres or rabbitmq_redis" ;;
 esac
 
-secret() { sed -n "s/^$1=//p" "$SECRETS" | tail -n 1; }
+secret() {
+  local name
+  name=$(jq -er --arg key "$1" '.[$key] // error("secret \($key) is not in config.secrets")' <<<"$SECRET_NAMES") || return 1
+  gcloud secrets versions access latest --secret="$name" --project="$PROJECT_ID"
+}
 host_of() { cfg --arg s "$1" '.app.services[$s].host // error("app.services.\($s).host is not set")'; }
 image_of() { cfg --arg s "$1" '.app.services[$s].image // error("app.services.\($s).image is not set")'; }
 sha() { sha256sum | cut -c1-16; }
 image_id() { docker image inspect -f '{{.Id}}' "$1"; }
 
-for name in "${REQUIRED[@]}"; do
-  [[ $(secret "$name") =~ ^[A-Za-z0-9._~-]{16,}$ ]] ||
-    die "$name must be at least 16 URL-safe characters (letters, digits, . _ ~ -)"
+declare -A SECRET
+for key in "${REQUIRED[@]}"; do
+  value=$(secret "$key") || die "cannot read secret $key from Secret Manager"
+  [[ $value =~ ^[A-Za-z0-9._~-]{16,}$ ]] ||
+    die "$key must be at least 16 URL-safe characters (letters, digits, . _ ~ -)"
+  SECRET[$key]=$value
 done
-[[ $(secret CLOUDFLARE_API_TOKEN) =~ ^[A-Za-z0-9_-]{20,}$ ]] ||
-  die "CLOUDFLARE_API_TOKEN must be set (Cloudflare API token with Zone DNS Edit)"
-CLOUDFLARE_API_TOKEN=$(secret CLOUDFLARE_API_TOKEN)
-APP_PASSWORD=$(secret WEATHER_DB_PASSWORD)
-FETCHER_PASSWORD=$(secret WEATHER_FETCHER_DB_PASSWORD)
-RABBITMQ_PASSWORD=$(secret RABBITMQ_PASSWORD)
-REDIS_PASSWORD=$(secret REDIS_PASSWORD)
+CLOUDFLARE_API_TOKEN=$(secret cloudflare-api-token) || die "cannot read secret cloudflare-api-token from Secret Manager"
+[[ $CLOUDFLARE_API_TOKEN =~ ^[A-Za-z0-9_-]{20,}$ ]] ||
+  die "cloudflare-api-token must be a Cloudflare API token with Zone DNS Edit"
+APP_PASSWORD=${SECRET[db-password]}
+FETCHER_PASSWORD=${SECRET[fetcher-db-password]:-}
+RABBITMQ_PASSWORD=${SECRET[rabbitmq-password]:-}
+REDIS_PASSWORD=${SECRET[redis-password]:-}
+unset value
 
 DB_VM=$(host_of postgres)
 RABBITMQ_VM=$(host_of rabbitmq)
