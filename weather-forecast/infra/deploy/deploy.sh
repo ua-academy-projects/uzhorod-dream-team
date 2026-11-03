@@ -18,8 +18,8 @@ case $BACKEND in
 esac
 
 secret() { sed -n "s/^$1=//p" "$SECRETS" | tail -n 1; }
-host_of() { cfg --arg s "$1" '.app.hosts[$s] // error("app.hosts.\($s) is not set")'; }
-image_of() { cfg --arg s "$1" '.app.images[$s] // error("app.images.\($s) is not set")'; }
+host_of() { cfg --arg s "$1" '.app.services[$s].host // error("app.services.\($s).host is not set")'; }
+image_of() { cfg --arg s "$1" '.app.services[$s].image // error("app.services.\($s).image is not set")'; }
 sha() { sha256sum | cut -c1-16; }
 image_id() { docker image inspect -f '{{.Id}}' "$1"; }
 
@@ -49,8 +49,8 @@ HISTORY_IP=$(vm_attr "$HISTORY_VM" ip)
 RABBITMQ_IMAGE=$(image_of rabbitmq)
 REDIS_IMAGE=$(image_of redis)
 CERTBOT_IMAGE=$(image_of certbot)
-DOMAIN=$(cfg '.app.domain // error("app.domain is not set")')
-if [[ $(cfg .app.letsencrypt.staging) == true ]]; then
+DOMAIN=$(cfg '.app.public.domain // error("app.public.domain is not set")')
+if [[ $(cfg .app.public.letsencrypt_staging) == true ]]; then
   CERT_NAME=$DOMAIN-staging
   STAGING_FLAG=--staging
 else
