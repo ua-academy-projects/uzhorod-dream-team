@@ -9,5 +9,5 @@ variable "my_ip_cidr" {
 
 variable "config_path" {
   type    = string
-  default = "../../config/deployment.json"
+  default = "~/.config/weather-forecast/deployment.json"
 }
