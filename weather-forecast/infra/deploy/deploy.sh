@@ -81,7 +81,7 @@ build_images() {
   local image
   for image in "${!SOURCES[@]}"; do
     log "building $image:$TAG"
-    docker build --quiet --platform linux/amd64 -t "$image:$TAG" "$ROOT/${SOURCES[$image]}" >/dev/null
+    docker build --quiet --provenance=false  --platform linux/amd64 -t "$image:$TAG" "$ROOT/${SOURCES[$image]}" >/dev/null
   done
   local pulled=("$CERTBOT_IMAGE")
   [[ $BACKEND == rabbitmq_redis ]] && pulled+=("$RABBITMQ_IMAGE" "$REDIS_IMAGE")
