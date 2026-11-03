@@ -1,6 +1,7 @@
 locals {
   vms_with_defaults = {
     for name, vm in var.config.vms.instances : name => merge(var.config.vms.defaults, vm)
+    if try(vm.only_for_backend, var.config.app.backend) == var.config.app.backend
   }
 }
 
