@@ -5,3 +5,7 @@ output "networks" {
 output "subnets" {
   value = { for key, subnet in google_compute_subnetwork.subnet : key => subnet.id }
 }
+
+output "network_ids" {
+  value = { for key, network in google_compute_network.vpc : key => network.id }
+}

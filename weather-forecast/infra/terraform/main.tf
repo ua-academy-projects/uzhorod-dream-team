@@ -41,3 +41,10 @@ module "dns" {
   config       = local.config
   external_ips = module.vms.external_ips
 }
+
+module "cloudsql" {
+  source = "./modules/cloudsql"
+
+  config   = local.config
+  networks = module.network.network_ids
+}
