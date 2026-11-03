@@ -19,6 +19,13 @@ module "service_accounts" {
   project_id = var.project_id
 }
 
+module "secrets" {
+  source = "./modules/secrets"
+
+  config           = local.config
+  service_accounts = module.service_accounts.emails
+}
+
 module "vms" {
   source = "./modules/vms"
 

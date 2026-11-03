@@ -5,3 +5,7 @@ output "external_ips" {
 output "internal_ips" {
   value = module.vms.internal_ips
 }
+
+output "secrets" {
+  value = module.secrets.names
+}
