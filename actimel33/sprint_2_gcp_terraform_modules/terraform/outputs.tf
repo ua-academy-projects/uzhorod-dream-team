@@ -13,6 +13,17 @@ output "load_balancer_ip" {
   value       = module.load_balancer.ip
 }
 
+locals {
+  # Postgres in Cloud SQL or on the db VM (app.database), with the same fields for both.
+  database = local.config.app.database == "cloud_sql" ? module.cloud_sql[0].connection : {
+    host            = "db.${module.vms.instances["db"].zone}.c.${local.config.project.id}.internal"
+    ca_cert         = ""
+    name            = local.config.cloud_sql.database
+    user            = local.config.cloud_sql.user
+    password_secret = local.config.cloud_sql.password_secret
+  }
+}
+
 resource "local_file" "inventory" {
   filename        = "${path.module}/../ansible/inventory/inventory.ini"
   file_permission = "0644"
@@ -21,7 +32,9 @@ resource "local_file" "inventory" {
     vms               = module.vms.instances
     project_id        = local.config.project.id
     backend           = local.config.app.backend
-    database          = module.cloud_sql.connection
+    database_type     = local.config.app.database
+    database          = local.database
+    db_disk           = try("/dev/disk/by-id/google-${local.config.vms.machines.db.data_disk.device_name}", "")
     repository_id     = local.config.registry.repository_id
     history_image_tag = local.config.vms.machines.history.image_tag
     fetcher_image_tag = local.config.vms.machines.fetcher.image_tag
@@ -31,7 +44,9 @@ resource "local_file" "inventory" {
 }
 
 resource "local_file" "db_ca" {
+  count = local.config.app.database == "cloud_sql" ? 1 : 0
+
   filename        = "${path.module}/../ansible/files/db-ca.pem"
   file_permission = "0644"
-  content         = module.cloud_sql.connection.ca_cert
+  content         = module.cloud_sql[0].connection.ca_cert
 }

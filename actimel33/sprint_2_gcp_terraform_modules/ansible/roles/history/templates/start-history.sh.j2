@@ -15,7 +15,11 @@ REDIS_PASSWORD=$(gcloud secrets versions access latest --secret=crypto-redis-pas
 cat > /run/crypto/history.env <<EOF
 BACKEND={{ backend }}
 HISTORY_HOST=0.0.0.0
+{% if database == "cloud_sql" -%}
 DATABASE_URL=postgres://{{ db_user }}:$APP_PASSWORD@{{ db_host }}:5432/{{ db_name }}?uselibpqcompat=true&sslmode=verify-ca&sslrootcert=/certs/db-ca.pem
+{% else -%}
+DATABASE_URL=postgres://{{ db_user }}:$APP_PASSWORD@{{ db_host }}:5432/{{ db_name }}
+{% endif -%}
 SESSION_SECRET=$SESSION_SECRET
 
 {% if backend == 'redis' -%}
@@ -33,5 +37,7 @@ exec docker run --rm \
 --hostname history \
 --read-only --init \
 --env-file /run/crypto/history.env \
+{% if database == "cloud_sql" -%}
 -v /etc/crypto/db-ca.pem:/certs/db-ca.pem:ro \
+{% endif -%}
 -p 3001:3001 {{ history_image }}

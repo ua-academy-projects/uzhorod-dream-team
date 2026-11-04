@@ -48,8 +48,9 @@ ansible-playbook site.yml
 
 - Terraform creates the VMs empty. Ansible installs Docker and starts the services on them; it connects through
   the SSH config from `ssh-config.sh` (see [SSH](#ssh)).
-- `terraform apply` writes the inventory `ansible/inventory/inventory.ini` and the CA of the database
-  `ansible/files/db-ca.pem`. Both are git-ignored: run `terraform apply` before Ansible.
+- `terraform apply` writes the inventory `ansible/inventory/inventory.ini`. With `app.database = cloud_sql`,
+  `terraform apply` also writes the CA of the database to `ansible/files/db-ca.pem`. Both are git-ignored:
+  run `terraform apply` before Ansible.
 - A second `ansible-playbook site.yml` run must show `changed=0`.
 
 Without `source .env`, Terraform runs as you instead of the `terraform` service account.
@@ -84,6 +85,17 @@ ssh history
 
 ## Database
 
+`app.database` in `config.json` picks where Postgres runs:
+
+- `cloud_sql`: Cloud SQL, see below.
+- `vm`: Postgres 17 in Docker on the `db` VM, as before Cloud SQL. See [On the db VM](#on-the-db-vm).
+
+To switch, change `app.database`, then run `terraform apply` and `ansible-playbook site.yml`.
+Switching deletes the old database: the Cloud SQL instance, or the `db` VM with its data disk. The data is not
+moved, so the new database starts empty.
+
+### Cloud SQL
+
 Postgres runs in Cloud SQL (`cloud_sql` in `config.json`). The `db-f1-micro` instance costs about 9–11 USD a month;
 the Private Service Connect endpoint and the 10 GB disk are billed on top.
 
@@ -111,12 +123,31 @@ ssh history
 PGPASSWORD=$(gcloud secrets versions access latest --secret=crypto-db-app-password) sudo --preserve-env=PGPASSWORD docker run --rm -it -e PGPASSWORD -v /etc/crypto/db-ca.pem:/certs/db-ca.pem:ro postgres:17-alpine@sha256:266d3c257594e195b309ae9d1805e54c788f1d7b375f56bf6c367aac6c917e7b psql "host=<endpoint IP> dbname=crypto user=app sslmode=verify-ca sslrootcert=/certs/db-ca.pem"
 ```
 
+### On the db VM
+
+- The `db` VM exists only with `app.database = vm` (`databases` in `vms.machines.db`). The `postgres` role
+  formats its data disk `crypto-db-data-disk` once, mounts it at `/mnt/data` and runs `crypto-db.service`.
+- The data disk keeps the data when the VM is recreated; `terraform destroy` deletes it.
+- Only history and fetcher reach port 5432 (`firewall.vm`). They connect inside the private subnet without TLS.
+- `app` is the superuser of this Postgres, as before Cloud SQL. Postgres sets its password from
+  `crypto-db-app-password` only when the data disk is new, so a new version of that secret does not reach a
+  database that already exists.
+  `crypto-db-queue-worker-password` works as with Cloud SQL.
+
+To open psql:
+
+```bash
+ssh db
+sudo docker exec -it crypto_db psql -U app -d crypto
+```
+
 ## Changing the configuration
 
 - Edit `config.json`. VS Code checks it against the schema as you type; the pre-commit hook checks it on commit.
 - `vms.defaults` apply to every VM; a machine lists only what differs.
-- After a change, run `terraform apply`, then `ansible-playbook site.yml`: a new `image_tag` or a switch of
-  `app.backend` (`postgres` / `redis`) reaches the VMs only through Ansible.
+- After a change, run `terraform apply`, then `ansible-playbook site.yml`: a new `image_tag`, a switch of
+  `app.backend` (`postgres` / `redis`) or a switch of `app.database` (see [Database](#database)) reaches the VMs
+  only through Ansible.
 - A VM with `backends` exists only for those backends: `redis` creates the `broker` VM with Redis, `postgres` removes it.
 
 ## Leaving the project

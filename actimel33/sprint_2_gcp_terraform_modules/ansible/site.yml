@@ -1,5 +1,5 @@
 ---
-- name: Install docker to fetcher, history, ui, broker
+- name: Install docker to fetcher, history, ui, broker, db
   hosts: private
   gather_facts: true
   become: true
@@ -11,6 +11,12 @@
   become: true
   roles:
     - redis
+
+- name: DB VM provision
+  hosts: db
+  become: true
+  roles:
+    - postgres
 
 - name: History VM provision
   hosts: history

@@ -51,10 +51,11 @@
         },
         "app": {
             "type": "object",
-            "required": ["backend"],
+            "required": ["backend", "database"],
             "additionalProperties": false,
             "properties": {
-                "backend": { "description": "Queue backend of the app. Picks the firewall group and the containers on the VMs.", "enum": ["postgres", "redis"] }
+                "backend": { "description": "Queue backend of the app. Picks the firewall group and the containers on the VMs.", "enum": ["postgres", "redis"] },
+                "database": { "description": "Where Postgres runs: cloud_sql (Cloud SQL) or vm (Postgres in Docker on the db VM).", "enum": ["cloud_sql", "vm"] }
             }
         },
         "network": {
@@ -77,14 +78,15 @@
             }
         },
         "firewall": {
-            "description": "Rule name => rule. common applies to every backend, postgres and redis only to that backend.",
+            "description": "Rule name => rule. common applies always, postgres and redis only to that backend, vm only with app.database = vm.",
             "type": "object",
-            "required": ["common", "postgres", "redis"],
+            "required": ["common", "postgres", "redis", "vm"],
             "additionalProperties": false,
             "properties": {
                 "common": { "$ref": "#/definitions/firewall_rules" },
                 "postgres": { "$ref": "#/definitions/firewall_rules" },
-                "redis": { "$ref": "#/definitions/firewall_rules" }
+                "redis": { "$ref": "#/definitions/firewall_rules" },
+                "vm": { "$ref": "#/definitions/firewall_rules" }
             }
         },
         "vms": {
@@ -230,7 +232,7 @@
                 "disk_size": { "description": "Boot disk size in GB.", "type": "integer", "minimum": 10 },
                 "disk_type": { "$ref": "#/definitions/disk_type" },
                 "subnet": { "enum": ["private", "management"] },
-                "image_tag": { "description": "Tag of the app image; the VM runs its container. Changing it recreates the VM.", "type": "string" },
+                "image_tag": { "description": "Tag of the app image; Ansible runs its container on the VM.", "type": "string" },
                 "port": { "description": "Port the container listens on, for the load balancer.", "type": "integer", "minimum": 1, "maximum": 65535 },
                 "backends": {
                     "description": "Backends this VM is created for; without it the VM always exists.",
@@ -238,6 +240,13 @@
                     "minItems": 1,
                     "uniqueItems": true,
                     "items": { "enum": ["postgres", "redis"] }
+                },
+                "databases": {
+                    "description": "Values of app.database this VM is created for; without it the VM always exists.",
+                    "type": "array",
+                    "minItems": 1,
+                    "uniqueItems": true,
+                    "items": { "enum": ["cloud_sql", "vm"] }
                 },
                 "data_disk": {
                     "description": "Separate disk that keeps data when the VM is recreated.",

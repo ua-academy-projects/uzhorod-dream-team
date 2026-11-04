@@ -1,0 +1,41 @@
+---
+- name: Format the data disk if it has no filesystem
+  community.general.filesystem:
+    dev: "{{ db_disk }}"
+    fstype: ext4
+
+- name: Mount the data disk at /mnt/data
+  ansible.posix.mount:
+    path: /mnt/data
+    src: "{{ db_disk }}"
+    fstype: ext4
+    opts: defaults,nofail
+    state: mounted
+
+- name: Generate start-db.sh from template
+  ansible.builtin.template:
+    src: start-db.sh.j2
+    dest: /usr/local/bin/start-db.sh
+    owner: root
+    group: root
+    mode: "0755"
+  notify: Restart crypto-db service
+
+- name: Create crypto-db systemd service unit
+  ansible.builtin.template:
+    src: crypto-db.service.j2
+    dest: /etc/systemd/system/crypto-db.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart crypto-db service
+
+- name: Start crypto-db the first time through its handler, not twice
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable and start crypto-db service
+  ansible.builtin.systemd_service:
+    name: crypto-db.service
+    daemon_reload: true
+    enabled: true
+    state: started

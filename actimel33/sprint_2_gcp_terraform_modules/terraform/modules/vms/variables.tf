@@ -1,13 +1,13 @@
 variable "config" {
-  description = "config.json; this module reads project, app.backend and vms: service_account_prefix, defaults and machines (each lists only what differs from defaults)"
+  description = "config.json; this module reads project, app (backend and database) and vms: service_account_prefix, defaults and machines (each lists only what differs from defaults)"
   type        = any
 
   validation {
     condition = alltrue([
       for machine in values(var.config.vms.machines) :
-      length(setsubtract(keys(machine), ["type", "zone", "image", "disk_size", "disk_type", "subnet", "image_tag", "port", "data_disk", "backends"])) == 0
+      length(setsubtract(keys(machine), ["type", "zone", "image", "disk_size", "disk_type", "subnet", "image_tag", "port", "data_disk", "backends", "databases"])) == 0
     ])
-    error_message = "vms.machines: allowed keys are type, zone, image, disk_size, disk_type, subnet, image_tag, port, data_disk, backends."
+    error_message = "vms.machines: allowed keys are type, zone, image, disk_size, disk_type, subnet, image_tag, port, data_disk, backends, databases."
   }
 
   validation {
@@ -16,6 +16,14 @@ variable "config" {
       length(setsubtract(machine.backends, ["postgres", "redis"])) == 0 if can(machine.backends)
     ])
     error_message = "vms.machines.<vm>.backends may only list postgres and redis."
+  }
+
+  validation {
+    condition = alltrue([
+      for machine in values(var.config.vms.machines) :
+      length(setsubtract(machine.databases, ["cloud_sql", "vm"])) == 0 if can(machine.databases)
+    ])
+    error_message = "vms.machines.<vm>.databases may only list cloud_sql and vm."
   }
 
   validation {

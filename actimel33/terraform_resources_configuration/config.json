@@ -39,7 +39,8 @@
         ]
     },
     "app": {
-        "backend": "postgres"
+        "backend": "postgres",
+        "database": "cloud_sql"
     },
     "network": {
         "vpc": "crypto-vpc",
@@ -122,6 +123,21 @@
                     "broker-vm"
                 ]
             }
+        },
+        "vm": {
+            "fw-allow-app-to-db": {
+                "protocol": "tcp",
+                "ports": [
+                    "5432"
+                ],
+                "source_tags": [
+                    "fetcher-vm",
+                    "history-vm"
+                ],
+                "target_tags": [
+                    "db-vm"
+                ]
+            }
         }
     },
     "vms": {
@@ -154,6 +170,17 @@
                 "backends": [
                     "redis"
                 ]
+            },
+            "db": {
+                "databases": [
+                    "vm"
+                ],
+                "data_disk": {
+                    "name": "crypto-db-data-disk",
+                    "size": 10,
+                    "type": "pd-standard",
+                    "device_name": "data-disk"
+                }
             }
         }
     },
@@ -161,6 +188,7 @@
         "crypto-db-app-password": {
             "length": 16,
             "readers": [
+                "db",
                 "history"
             ],
             "version": 1

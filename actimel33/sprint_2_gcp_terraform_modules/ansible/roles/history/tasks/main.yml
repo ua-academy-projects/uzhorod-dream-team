@@ -15,6 +15,7 @@
     group: root
     mode: "0644"
   notify: Restart crypto-history service
+  when: database == "cloud_sql"
 
 - name: Generate start-history.sh from template
   ansible.builtin.template:

@@ -1,5 +1,5 @@
 locals {
-  rules = merge(var.config.firewall.common, var.config.firewall[var.config.app.backend])
+  rules = merge(var.config.firewall.common, var.config.firewall[var.config.app.backend], lookup(var.config.firewall, var.config.app.database, {}))
 }
 
 resource "google_compute_firewall" "rule" {

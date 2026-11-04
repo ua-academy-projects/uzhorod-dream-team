@@ -1,7 +1,7 @@
 variable "config" {
-  description = "config.json; this module reads app.backend and firewall: group (common for every backend, postgres, redis) => rule name => rule"
+  description = "config.json; this module reads app and firewall: group (common, postgres, redis, vm) => rule name => rule"
   type = object({
-    app = object({ backend = string })
+    app = object({ backend = string, database = string })
     firewall = map(map(object({
       protocol      = string
       ports         = list(string)
@@ -14,6 +14,11 @@ variable "config" {
   validation {
     condition     = contains(["postgres", "redis"], var.config.app.backend)
     error_message = "app.backend must be postgres or redis."
+  }
+
+  validation {
+    condition     = contains(["cloud_sql", "vm"], var.config.app.database)
+    error_message = "app.database must be cloud_sql or vm."
   }
 
   validation {

@@ -1,10 +1,11 @@
 locals {
   backend      = var.config.app.backend
+  database     = var.config.app.database
   all_machines = { for name, machine in var.config.vms.machines : name => merge(var.config.vms.defaults, machine) }
 
   machines = {
     for name, machine in local.all_machines : name => machine
-    if contains(try(machine.backends, [local.backend]), local.backend)
+    if contains(try(machine.backends, [local.backend]), local.backend) && contains(try(machine.databases, [local.database]), local.database)
   }
   data_disks = { for name, machine in local.machines : name => machine.data_disk if can(machine.data_disk) }
   containers = { for name, machine in local.machines : name => machine if can(machine.image_tag) }

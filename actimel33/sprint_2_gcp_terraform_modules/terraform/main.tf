@@ -41,6 +41,7 @@ module "secrets" {
 
 module "cloud_sql" {
   source = "./modules/cloud_sql"
+  count  = local.config.app.database == "cloud_sql" ? 1 : 0
 
   config = local.config
 

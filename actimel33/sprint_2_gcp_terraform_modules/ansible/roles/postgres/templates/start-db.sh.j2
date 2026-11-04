@@ -1,0 +1,30 @@
+#!/bin/bash
+set -euo pipefail
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin
+
+POSTGRES_IMAGE=postgres:17-alpine@sha256:266d3c257594e195b309ae9d1805e54c788f1d7b375f56bf6c367aac6c917e7b
+
+umask 077
+mkdir -p /run/crypto
+
+APP_PASSWORD=$(gcloud secrets versions access latest --secret="{{ db_password_secret }}" --project="{{ project_id }}")
+
+cat > /run/crypto/db.env <<EOF
+POSTGRES_USER={{ db_user }}
+POSTGRES_DB={{ db_name }}
+POSTGRES_PASSWORD=$APP_PASSWORD
+EOF
+
+mkdir -p /mnt/data/pgdata
+
+docker pull "$POSTGRES_IMAGE"
+docker rm -f crypto_db >/dev/null 2>&1 || true
+
+exec docker run --rm \
+--name crypto_db \
+--env-file /run/crypto/db.env \
+-p 5432:5432 \
+-v /mnt/data/pgdata:/var/lib/postgresql/data \
+--health-cmd 'pg_isready -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' \
+--health-interval 5s \
+"$POSTGRES_IMAGE"

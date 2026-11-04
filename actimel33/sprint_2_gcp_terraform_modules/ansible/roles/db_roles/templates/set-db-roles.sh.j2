@@ -8,10 +8,16 @@ QUEUE_PASSWORD=$(gcloud secrets versions access latest --secret=crypto-db-queue-
 
 export PGPASSWORD QUEUE_PASSWORD
 
+{% if database == "cloud_sql" -%}
 docker run --rm -i -e PGPASSWORD -e QUEUE_PASSWORD \
 -v /etc/crypto/db-ca.pem:/certs/db-ca.pem:ro "$PSQL_IMAGE" psql -q \
 -v ON_ERROR_STOP=1 \
 "host={{ db_host }} port=5432 dbname={{ db_name }} user={{ db_user }} sslmode=verify-ca sslrootcert=/certs/db-ca.pem" <<'SQL'
+{% else -%}
+docker run --rm -i -e PGPASSWORD -e QUEUE_PASSWORD "$PSQL_IMAGE" psql -q \
+-v ON_ERROR_STOP=1 \
+"host={{ db_host }} port=5432 dbname={{ db_name }} user={{ db_user }}" <<'SQL'
+{% endif -%}
 DO $$
 BEGIN
     IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'queue_worker') THEN

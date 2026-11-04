@@ -1,0 +1,15 @@
+[Unit]
+Description=crypto db container
+After=docker.service network-online.target
+Wants=network-online.target
+Requires=docker.service
+RequiresMountsFor=/mnt/data
+
+[Service]
+ExecStart=/usr/local/bin/start-db.sh
+ExecStop=/usr/bin/docker stop -t 30 crypto_db
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target

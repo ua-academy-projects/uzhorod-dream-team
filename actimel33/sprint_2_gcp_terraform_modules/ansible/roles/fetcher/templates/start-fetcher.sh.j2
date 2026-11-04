@@ -17,8 +17,10 @@ FETCHER_HOST=0.0.0.0
 {% if backend == "redis" -%}
 REDIS_URL=redis://{{ hosts_broker }}:6379
 REDIS_PASSWORD=$REDIS_PASSWORD
-{% else -%}
+{% elif database == "cloud_sql" -%}
 QUEUE_DATABASE_URL=postgres://queue_worker:$QUEUE_PASSWORD@{{ db_host }}:5432/{{ db_name }}?sslmode=verify-ca&sslrootcert=/certs/db-ca.pem
+{% else -%}
+QUEUE_DATABASE_URL=postgres://queue_worker:$QUEUE_PASSWORD@{{ db_host }}:5432/{{ db_name }}
 {% endif -%}
 EOF
 
@@ -28,5 +30,7 @@ docker rm -f crypto_fetcher >/dev/null 2>&1 || true
 
 exec docker run --rm --name crypto_fetcher \
 --hostname fetcher --read-only --env-file /run/crypto/fetcher.env \
+{% if database == "cloud_sql" -%}
 -v /etc/crypto/db-ca.pem:/certs/db-ca.pem:ro \
+{% endif -%}
 -p 3002:3002 {{ fetcher_image }}
