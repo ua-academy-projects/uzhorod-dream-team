@@ -1,7 +1,7 @@
 variable "config" {
   description = "The private network and who may reach what"
   type = object({
-    name              = string       # VPC name
+    name              = string # VPC name
     region            = string
     subnet_cidr       = string
     ssh_allowed_cidrs = list(string)

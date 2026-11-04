@@ -3,6 +3,7 @@ import logging
 import math
 import time
 import uuid
+from pathlib import Path
 
 from db import DatabaseUnavailable
 
@@ -90,14 +91,22 @@ REPLIES = "fetch_replies"
 STALE_AFTER = 60       # seconds: a message older than this was abandoned by its sender
 REPLY_VT = 30          # visibility timeout (s) of a reply while History holds it; it is deleted right after
 
-SCHEMA = f"""
-SELECT pg_advisory_xact_lock(727401);  -- History and Fetcher may both set up at start
-CREATE EXTENSION IF NOT EXISTS pgmq;
-SELECT pgmq.create('{REQUESTS}');
-SELECT pgmq.create('{REPLIES}')
-"""
-# Nobody ever consumes the answer to a request that History gave up on (and the other way round after a
-# crash), so abandoned messages are removed here. pgmq keeps them in the ordinary tables pgmq.q_<queue>.
+PGMQ_SQL = Path(__file__).with_name("pgmq--1.13.0.sql")
+LOCK = "SELECT pg_advisory_xact_lock(727401)"
+FIND_PGMQ = ("SELECT to_regnamespace('pgmq') IS NOT NULL, "
+             "EXISTS (SELECT 1 FROM pg_available_extensions WHERE name = 'pgmq')")
+CREATE_EXTENSION = "CREATE EXTENSION IF NOT EXISTS pgmq"
+QUEUES = f"SELECT pgmq.create('{REQUESTS}'); SELECT pgmq.create('{REPLIES}')"
+
+
+def install_pgmq(cur):
+    cur.execute(LOCK)
+    cur.execute(FIND_PGMQ)
+    installed, available = cur.fetchone()
+    if not installed:
+        cur.execute(CREATE_EXTENSION if available else PGMQ_SQL.read_text())
+    cur.execute(QUEUES)
+
 CLEANUP = (f"DELETE FROM pgmq.q_{REQUESTS} WHERE enqueued_at < now() - interval '{STALE_AFTER} seconds'; "
            f"DELETE FROM pgmq.q_{REPLIES} WHERE enqueued_at < now() - interval '{STALE_AFTER} seconds'")
 SEND = f"SELECT pgmq.send('{REQUESTS}', %s::jsonb)"
@@ -116,7 +125,7 @@ class PostgresRequester:
     def _ensure_schema(self, conn):
         if not self._schema_ready:
             with conn.cursor() as cur:
-                cur.execute(SCHEMA)
+                install_pgmq(cur)
             self._schema_ready = True
 
     def request(self, timeout):

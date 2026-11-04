@@ -1,7 +1,7 @@
 variable "config" {
   description = "A private Cloud SQL for PostgreSQL instance and its database"
   type = object({
-    name          = string 
+    name          = string
     region        = string
     zone          = string
     network_id    = string

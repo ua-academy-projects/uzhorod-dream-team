@@ -1,0 +1,1312 @@
+terraform_data.config_check: Refreshing state... [id=053e2c7e-8c56-9fac-c35a-5806a25b3937]
+google_storage_bucket_iam_member.code["db"]: Refreshing state... [id=b/citybikes-gcp-512800-citybikes-code/roles/storage.objectViewer/serviceAccount:citybikes-db@citybikes-gcp-512800.iam.gserviceaccount.com]
+module.service_accounts.google_service_account.sa["db"]: Refreshing state... [id=projects/citybikes-gcp-512800/serviceAccounts/citybikes-db@citybikes-gcp-512800.iam.gserviceaccount.com]
+module.service_accounts.google_service_account.sa["history"]: Refreshing state... [id=projects/citybikes-gcp-512800/serviceAccounts/citybikes-history@citybikes-gcp-512800.iam.gserviceaccount.com]
+google_storage_bucket_iam_member.code["fetcher"]: Refreshing state... [id=b/citybikes-gcp-512800-citybikes-code/roles/storage.objectViewer/serviceAccount:citybikes-fetcher@citybikes-gcp-512800.iam.gserviceaccount.com]
+google_storage_bucket_iam_member.code["ui"]: Refreshing state... [id=b/citybikes-gcp-512800-citybikes-code/roles/storage.objectViewer/serviceAccount:citybikes-ui@citybikes-gcp-512800.iam.gserviceaccount.com]
+module.network.google_compute_network.vpc: Refreshing state... [id=projects/citybikes-gcp-512800/global/networks/citybikes-vpc]
+google_storage_bucket_iam_member.code["bastion"]: Refreshing state... [id=b/citybikes-gcp-512800-citybikes-code/roles/storage.objectViewer/serviceAccount:citybikes-bastion@citybikes-gcp-512800.iam.gserviceaccount.com]
+module.service_accounts.google_service_account.sa["bastion"]: Refreshing state... [id=projects/citybikes-gcp-512800/serviceAccounts/citybikes-bastion@citybikes-gcp-512800.iam.gserviceaccount.com]
+google_storage_bucket_iam_member.code["history"]: Refreshing state... [id=b/citybikes-gcp-512800-citybikes-code/roles/storage.objectViewer/serviceAccount:citybikes-history@citybikes-gcp-512800.iam.gserviceaccount.com]
+google_storage_bucket_object.code: Refreshing state... [id=citybikes-gcp-512800-citybikes-code-services-3b595c0d3defcb3e568ca8833e83fb00.zip]
+module.service_accounts.google_service_account.sa["ui"]: Refreshing state... [id=projects/citybikes-gcp-512800/serviceAccounts/citybikes-ui@citybikes-gcp-512800.iam.gserviceaccount.com]
+module.service_accounts.google_service_account.sa["fetcher"]: Refreshing state... [id=projects/citybikes-gcp-512800/serviceAccounts/citybikes-fetcher@citybikes-gcp-512800.iam.gserviceaccount.com]
+google_storage_bucket.code: Refreshing state... [id=citybikes-gcp-512800-citybikes-code]
+module.network.google_compute_router.router: Refreshing state... [id=projects/citybikes-gcp-512800/regions/europe-central2/routers/citybikes-vpc-router]
+module.network.google_compute_firewall.ssh_from_bastion: Refreshing state... [id=projects/citybikes-gcp-512800/global/firewalls/citybikes-vpc-ssh-from-bastion]
+module.network.google_compute_firewall.ssh_to_bastion: Refreshing state... [id=projects/citybikes-gcp-512800/global/firewalls/citybikes-vpc-ssh-to-bastion]
+module.network.google_compute_firewall.internal: Refreshing state... [id=projects/citybikes-gcp-512800/global/firewalls/citybikes-vpc-internal]
+module.network.google_compute_subnetwork.private: Refreshing state... [id=projects/citybikes-gcp-512800/regions/europe-central2/subnetworks/citybikes-vpc-private]
+module.network.google_compute_router_nat.nat: Refreshing state... [id=citybikes-gcp-512800/europe-central2/citybikes-vpc-router/citybikes-vpc-nat]
+module.cloudsql.google_compute_global_address.private_range: Refreshing state... [id=projects/citybikes-gcp-512800/global/addresses/citybikes-pg-private-range]
+module.service_accounts.google_project_iam_member.role["db/roles/logging.logWriter"]: Refreshing state... [id=citybikes-gcp-512800/roles/logging.logWriter/serviceAccount:citybikes-db@citybikes-gcp-512800.iam.gserviceaccount.com]
+module.secrets.google_secret_manager_secret.secret["citybikes-db-password"]: Refreshing state... [id=projects/citybikes-gcp-512800/secrets/citybikes-db-password]
+module.secrets.google_secret_manager_secret.secret["citybikes-rabbitmq-password"]: Refreshing state... [id=projects/citybikes-gcp-512800/secrets/citybikes-rabbitmq-password]
+module.secrets.google_secret_manager_secret.secret["citybikes-internal-ssh-key"]: Refreshing state... [id=projects/citybikes-gcp-512800/secrets/citybikes-internal-ssh-key]
+module.secrets.google_secret_manager_secret.secret["citybikes-cloudflare-tunnel-token"]: Refreshing state... [id=projects/citybikes-gcp-512800/secrets/citybikes-cloudflare-tunnel-token]
+module.secrets.google_secret_manager_secret.secret["citybikes-cloudflare-api-token"]: Refreshing state... [id=projects/citybikes-gcp-512800/secrets/citybikes-cloudflare-api-token]
+module.secrets.google_secret_manager_secret.secret["citybikes-redis-password"]: Refreshing state... [id=projects/citybikes-gcp-512800/secrets/citybikes-redis-password]
+module.vm["ui"].google_compute_address.internal: Refreshing state... [id=projects/citybikes-gcp-512800/regions/europe-central2/addresses/citybikes-ui-internal]
+module.vm["history"].google_compute_address.internal: Refreshing state... [id=projects/citybikes-gcp-512800/regions/europe-central2/addresses/citybikes-history-internal]
+module.vm["bastion"].google_compute_address.internal: Refreshing state... [id=projects/citybikes-gcp-512800/regions/europe-central2/addresses/citybikes-bastion-internal]
+module.vm["fetcher"].google_compute_address.internal: Refreshing state... [id=projects/citybikes-gcp-512800/regions/europe-central2/addresses/citybikes-fetcher-internal]
+module.vm["db"].google_compute_address.internal: Refreshing state... [id=projects/citybikes-gcp-512800/regions/europe-central2/addresses/citybikes-db-internal]
+module.vm["bastion"].google_compute_address.external[0]: Refreshing state... [id=projects/citybikes-gcp-512800/regions/europe-central2/addresses/citybikes-bastion-external]
+module.secrets.google_secret_manager_secret_iam_member.reader["citybikes-internal-ssh-key/bastion"]: Refreshing state... [id=projects/citybikes-gcp-512800/secrets/citybikes-internal-ssh-key/roles/secretmanager.secretAccessor/serviceAccount:citybikes-bastion@citybikes-gcp-512800.iam.gserviceaccount.com]
+module.secrets.google_secret_manager_secret_iam_member.reader["citybikes-rabbitmq-password/history"]: Refreshing state... [id=projects/citybikes-gcp-512800/secrets/citybikes-rabbitmq-password/roles/secretmanager.secretAccessor/serviceAccount:citybikes-history@citybikes-gcp-512800.iam.gserviceaccount.com]
+module.secrets.google_secret_manager_secret_iam_member.reader["citybikes-rabbitmq-password/fetcher"]: Refreshing state... [id=projects/citybikes-gcp-512800/secrets/citybikes-rabbitmq-password/roles/secretmanager.secretAccessor/serviceAccount:citybikes-fetcher@citybikes-gcp-512800.iam.gserviceaccount.com]
+module.secrets.google_secret_manager_secret_iam_member.reader["citybikes-cloudflare-tunnel-token/ui"]: Refreshing state... [id=projects/citybikes-gcp-512800/secrets/citybikes-cloudflare-tunnel-token/roles/secretmanager.secretAccessor/serviceAccount:citybikes-ui@citybikes-gcp-512800.iam.gserviceaccount.com]
+module.secrets.google_secret_manager_secret_iam_member.reader["citybikes-redis-password/db"]: Refreshing state... [id=projects/citybikes-gcp-512800/secrets/citybikes-redis-password/roles/secretmanager.secretAccessor/serviceAccount:citybikes-db@citybikes-gcp-512800.iam.gserviceaccount.com]
+module.secrets.google_secret_manager_secret_iam_member.reader["citybikes-rabbitmq-password/db"]: Refreshing state... [id=projects/citybikes-gcp-512800/secrets/citybikes-rabbitmq-password/roles/secretmanager.secretAccessor/serviceAccount:citybikes-db@citybikes-gcp-512800.iam.gserviceaccount.com]
+module.secrets.google_secret_manager_secret_iam_member.reader["citybikes-db-password/history"]: Refreshing state... [id=projects/citybikes-gcp-512800/secrets/citybikes-db-password/roles/secretmanager.secretAccessor/serviceAccount:citybikes-history@citybikes-gcp-512800.iam.gserviceaccount.com]
+module.secrets.google_secret_manager_secret_iam_member.reader["citybikes-cloudflare-api-token/ui"]: Refreshing state... [id=projects/citybikes-gcp-512800/secrets/citybikes-cloudflare-api-token/roles/secretmanager.secretAccessor/serviceAccount:citybikes-ui@citybikes-gcp-512800.iam.gserviceaccount.com]
+module.secrets.google_secret_manager_secret_iam_member.reader["citybikes-redis-password/history"]: Refreshing state... [id=projects/citybikes-gcp-512800/secrets/citybikes-redis-password/roles/secretmanager.secretAccessor/serviceAccount:citybikes-history@citybikes-gcp-512800.iam.gserviceaccount.com]
+module.cloudsql.google_service_networking_connection.private: Refreshing state... [id=projects%2Fcitybikes-gcp-512800%2Fglobal%2Fnetworks%2Fcitybikes-vpc:servicenetworking.googleapis.com]
+module.vm["bastion"].google_compute_instance.vm: Refreshing state... [id=projects/citybikes-gcp-512800/zones/europe-central2-a/instances/citybikes-bastion]
+module.vm["ui"].google_compute_instance.vm: Refreshing state... [id=projects/citybikes-gcp-512800/zones/europe-central2-a/instances/citybikes-ui]
+module.vm["db"].google_compute_instance.vm: Refreshing state... [id=projects/citybikes-gcp-512800/zones/europe-central2-a/instances/citybikes-db]
+module.vm["history"].google_compute_instance.vm: Refreshing state... [id=projects/citybikes-gcp-512800/zones/europe-central2-a/instances/citybikes-history]
+module.vm["fetcher"].google_compute_instance.vm: Refreshing state... [id=projects/citybikes-gcp-512800/zones/europe-central2-a/instances/citybikes-fetcher]
+module.cloudsql.google_sql_database_instance.pg: Refreshing state... [id=citybikes-pg]
+module.cloudsql.google_sql_database.app: Refreshing state... [id=projects/citybikes-gcp-512800/instances/citybikes-pg/databases/citybikes]
+
+Terraform used the selected providers to generate the following execution
+plan. Resource actions are indicated with the following symbols:
+  + create
+  ~ update in-place
+  - destroy
+
+Terraform will perform the following actions:
+
+  # google_storage_bucket.code will be destroyed
+  # (because google_storage_bucket.code is not in configuration)
+  - resource "google_storage_bucket" "code" {
+      - default_event_based_hold    = false -> null
+      - deletion_policy             = "DELETE" -> null
+      - effective_labels            = {
+          - "app"                        = "citybikes"
+          - "env"                        = "dev"
+          - "goog-terraform-provisioned" = "true"
+          - "managed-by"                 = "terraform"
+        } -> null
+      - enable_object_retention     = false -> null
+      - force_destroy               = true -> null
+      - id                          = "citybikes-gcp-512800-citybikes-code" -> null
+      - labels                      = {
+          - "app"        = "citybikes"
+          - "env"        = "dev"
+          - "managed-by" = "terraform"
+        } -> null
+      - location                    = "EUROPE-CENTRAL2" -> null
+      - name                        = "citybikes-gcp-512800-citybikes-code" -> null
+      - project                     = "citybikes-gcp-512800" -> null
+      - project_number              = 690568722477 -> null
+      - public_access_prevention    = "enforced" -> null
+      - requester_pays              = false -> null
+      - self_link                   = "https://www.googleapis.com/storage/v1/b/citybikes-gcp-512800-citybikes-code" -> null
+      - storage_class               = "STANDARD" -> null
+      - terraform_labels            = {
+          - "app"                        = "citybikes"
+          - "env"                        = "dev"
+          - "goog-terraform-provisioned" = "true"
+          - "managed-by"                 = "terraform"
+        } -> null
+      - time_created                = "2026-10-28T05:50:16.507Z" -> null
+      - uniform_bucket_level_access = true -> null
+      - updated                     = "2026-10-28T05:52:18.928Z" -> null
+      - url                         = "gs://citybikes-gcp-512800-citybikes-code" -> null
+
+      - hierarchical_namespace {
+          - enabled = false -> null
+        }
+
+      - soft_delete_policy {
+          - effective_time             = "2026-10-28T05:50:16.507Z" -> null
+          - retention_duration_seconds = 604800 -> null
+        }
+    }
+
+  # google_storage_bucket_iam_member.code["bastion"] will be destroyed
+  # (because google_storage_bucket_iam_member.code is not in configuration)
+  - resource "google_storage_bucket_iam_member" "code" {
+      - bucket = "b/citybikes-gcp-512800-citybikes-code" -> null
+      - etag   = "CAY=" -> null
+      - id     = "b/citybikes-gcp-512800-citybikes-code/roles/storage.objectViewer/serviceAccount:citybikes-bastion@citybikes-gcp-512800.iam.gserviceaccount.com" -> null
+      - member = "serviceAccount:citybikes-bastion@citybikes-gcp-512800.iam.gserviceaccount.com" -> null
+      - role   = "roles/storage.objectViewer" -> null
+    }
+
+  # google_storage_bucket_iam_member.code["db"] will be destroyed
+  # (because google_storage_bucket_iam_member.code is not in configuration)
+  - resource "google_storage_bucket_iam_member" "code" {
+      - bucket = "b/citybikes-gcp-512800-citybikes-code" -> null
+      - etag   = "CAY=" -> null
+      - id     = "b/citybikes-gcp-512800-citybikes-code/roles/storage.objectViewer/serviceAccount:citybikes-db@citybikes-gcp-512800.iam.gserviceaccount.com" -> null
+      - member = "serviceAccount:citybikes-db@citybikes-gcp-512800.iam.gserviceaccount.com" -> null
+      - role   = "roles/storage.objectViewer" -> null
+    }
+
+  # google_storage_bucket_iam_member.code["fetcher"] will be destroyed
+  # (because google_storage_bucket_iam_member.code is not in configuration)
+  - resource "google_storage_bucket_iam_member" "code" {
+      - bucket = "b/citybikes-gcp-512800-citybikes-code" -> null
+      - etag   = "CAY=" -> null
+      - id     = "b/citybikes-gcp-512800-citybikes-code/roles/storage.objectViewer/serviceAccount:citybikes-fetcher@citybikes-gcp-512800.iam.gserviceaccount.com" -> null
+      - member = "serviceAccount:citybikes-fetcher@citybikes-gcp-512800.iam.gserviceaccount.com" -> null
+      - role   = "roles/storage.objectViewer" -> null
+    }
+
+  # google_storage_bucket_iam_member.code["history"] will be destroyed
+  # (because google_storage_bucket_iam_member.code is not in configuration)
+  - resource "google_storage_bucket_iam_member" "code" {
+      - bucket = "b/citybikes-gcp-512800-citybikes-code" -> null
+      - etag   = "CAY=" -> null
+      - id     = "b/citybikes-gcp-512800-citybikes-code/roles/storage.objectViewer/serviceAccount:citybikes-history@citybikes-gcp-512800.iam.gserviceaccount.com" -> null
+      - member = "serviceAccount:citybikes-history@citybikes-gcp-512800.iam.gserviceaccount.com" -> null
+      - role   = "roles/storage.objectViewer" -> null
+    }
+
+  # google_storage_bucket_iam_member.code["ui"] will be destroyed
+  # (because google_storage_bucket_iam_member.code is not in configuration)
+  - resource "google_storage_bucket_iam_member" "code" {
+      - bucket = "b/citybikes-gcp-512800-citybikes-code" -> null
+      - etag   = "CAY=" -> null
+      - id     = "b/citybikes-gcp-512800-citybikes-code/roles/storage.objectViewer/serviceAccount:citybikes-ui@citybikes-gcp-512800.iam.gserviceaccount.com" -> null
+      - member = "serviceAccount:citybikes-ui@citybikes-gcp-512800.iam.gserviceaccount.com" -> null
+      - role   = "roles/storage.objectViewer" -> null
+    }
+
+  # google_storage_bucket_object.code will be destroyed
+  # (because google_storage_bucket_object.code is not in configuration)
+  - resource "google_storage_bucket_object" "code" {
+      - bucket              = "citybikes-gcp-512800-citybikes-code" -> null
+      - content_type        = "application/zip" -> null
+      - crc32c              = "w2lpog==" -> null
+      - deletion_policy     = "DELETE" -> null
+      - detect_md5hash      = "O1lcDT3vyz5WjKiDPoP7AA==" -> null
+      - event_based_hold    = false -> null
+      - generation          = 1793614894797623 -> null
+      - id                  = "citybikes-gcp-512800-citybikes-code-services-3b595c0d3defcb3e568ca8833e83fb00.zip" -> null
+      - md5hash             = "O1lcDT3vyz5WjKiDPoP7AA==" -> null
+      - md5hexhash          = "3b595c0d3defcb3e568ca8833e83fb00" -> null
+      - media_link          = "https://storage.googleapis.com/download/storage/v1/b/citybikes-gcp-512800-citybikes-code/o/services-3b595c0d3defcb3e568ca8833e83fb00.zip?generation=1793614894797623&alt=media" -> null
+      - metadata            = {} -> null
+      - name                = "services-3b595c0d3defcb3e568ca8833e83fb00.zip" -> null
+      - output_name         = "services-3b595c0d3defcb3e568ca8833e83fb00.zip" -> null
+      - self_link           = "https://www.googleapis.com/storage/v1/b/citybikes-gcp-512800-citybikes-code/o/services-3b595c0d3defcb3e568ca8833e83fb00.zip" -> null
+      - source              = "./.build/services.zip" -> null
+      - storage_class       = "STANDARD" -> null
+      - temporary_hold      = false -> null
+        # (6 unchanged attributes hidden)
+    }
+
+  # terraform_data.config_check will be destroyed
+  # (because terraform_data.config_check is not in configuration)
+  - resource "terraform_data" "config_check" {
+      - id = "053e2c7e-8c56-9fac-c35a-5806a25b3937" -> null
+    }
+
+  # module.cloudsql.google_service_networking_connection.private will be updated in-place
+  ~ resource "google_service_networking_connection" "private" {
+      ~ deletion_policy         = "ABANDON" -> "DELETE"
+        id                      = "projects%2Fcitybikes-gcp-512800%2Fglobal%2Fnetworks%2Fcitybikes-vpc:servicenetworking.googleapis.com"
+        # (4 unchanged attributes hidden)
+    }
+
+  # module.network.google_compute_firewall.ssh_to_bastion will be updated in-place
+  ~ resource "google_compute_firewall" "ssh_to_bastion" {
+        id                      = "projects/citybikes-gcp-512800/global/firewalls/citybikes-vpc-ssh-to-bastion"
+        name                    = "citybikes-vpc-ssh-to-bastion"
+      ~ source_ranges           = [
+          - "203.0.113.7/32",
+          + "85.114.203.153/32",
+        ]
+        # (14 unchanged attributes hidden)
+
+        # (1 unchanged block hidden)
+    }
+
+  # module.secrets.google_secret_manager_secret_iam_member.reader["citybikes-db-password/fetcher"] will be created
+  + resource "google_secret_manager_secret_iam_member" "reader" {
+      + etag      = (known after apply)
+      + id        = (known after apply)
+      + member    = "serviceAccount:citybikes-fetcher@citybikes-gcp-512800.iam.gserviceaccount.com"
+      + project   = (known after apply)
+      + role      = "roles/secretmanager.secretAccessor"
+      + secret_id = "projects/citybikes-gcp-512800/secrets/citybikes-db-password"
+    }
+
+  # module.service_accounts.google_service_account.sa["bastion"] will be updated in-place
+  ~ resource "google_service_account" "sa" {
+      ~ display_name    = "VM-citybikes-bastion" -> "VM citybikes-bastion"
+        id              = "projects/citybikes-gcp-512800/serviceAccounts/citybikes-bastion@citybikes-gcp-512800.iam.gserviceaccount.com"
+        name            = "projects/citybikes-gcp-512800/serviceAccounts/citybikes-bastion@citybikes-gcp-512800.iam.gserviceaccount.com"
+        # (8 unchanged attributes hidden)
+    }
+
+  # module.service_accounts.google_service_account.sa["db"] will be updated in-place
+  ~ resource "google_service_account" "sa" {
+      ~ display_name    = "VM-citybikes-db" -> "VM citybikes-db"
+        id              = "projects/citybikes-gcp-512800/serviceAccounts/citybikes-db@citybikes-gcp-512800.iam.gserviceaccount.com"
+        name            = "projects/citybikes-gcp-512800/serviceAccounts/citybikes-db@citybikes-gcp-512800.iam.gserviceaccount.com"
+        # (8 unchanged attributes hidden)
+    }
+
+  # module.service_accounts.google_service_account.sa["fetcher"] will be updated in-place
+  ~ resource "google_service_account" "sa" {
+      ~ display_name    = "VM-citybikes-fetcher" -> "VM citybikes-fetcher"
+        id              = "projects/citybikes-gcp-512800/serviceAccounts/citybikes-fetcher@citybikes-gcp-512800.iam.gserviceaccount.com"
+        name            = "projects/citybikes-gcp-512800/serviceAccounts/citybikes-fetcher@citybikes-gcp-512800.iam.gserviceaccount.com"
+        # (8 unchanged attributes hidden)
+    }
+
+  # module.service_accounts.google_service_account.sa["history"] will be updated in-place
+  ~ resource "google_service_account" "sa" {
+      ~ display_name    = "VM-citybikes-history" -> "VM citybikes-history"
+        id              = "projects/citybikes-gcp-512800/serviceAccounts/citybikes-history@citybikes-gcp-512800.iam.gserviceaccount.com"
+        name            = "projects/citybikes-gcp-512800/serviceAccounts/citybikes-history@citybikes-gcp-512800.iam.gserviceaccount.com"
+        # (8 unchanged attributes hidden)
+    }
+
+  # module.service_accounts.google_service_account.sa["ui"] will be updated in-place
+  ~ resource "google_service_account" "sa" {
+      ~ display_name    = "VM-citybikes-ui" -> "VM citybikes-ui"
+        id              = "projects/citybikes-gcp-512800/serviceAccounts/citybikes-ui@citybikes-gcp-512800.iam.gserviceaccount.com"
+        name            = "projects/citybikes-gcp-512800/serviceAccounts/citybikes-ui@citybikes-gcp-512800.iam.gserviceaccount.com"
+        # (8 unchanged attributes hidden)
+    }
+
+  # module.vm["bastion"].google_compute_instance.vm will be updated in-place
+  ~ resource "google_compute_instance" "vm" {
+        id                         = "projects/citybikes-gcp-512800/zones/europe-central2-a/instances/citybikes-bastion"
+      ~ metadata                   = {
+          - "ssh-key-secret"         = "citybikes-internal-ssh-key" -> null
+          - "ssh-user"               = "citybikes" -> null
+          - "startup-script"         = <<-EOT
+                #!/bin/bash
+                set -euo pipefail
+                
+                readonly APP_DIR=/opt/citybikes
+                readonly CERT_SCRIPT=/usr/local/sbin/citybikes-cert
+                readonly SYSTEMD_DIR=/etc/systemd/system
+                
+                meta() {
+                  curl -sf -H "Metadata-Flavor: Google" \
+                    "http://metadata.google.internal/computeMetadata/v1/instance/attributes/$1" || true
+                }
+                
+                read_secret() {
+                  until gcloud secrets versions access latest --secret="$1" 2>/dev/null; do
+                    echo "waiting for a value of the secret $1" >&2
+                    sleep 30
+                  done
+                }
+                
+                ensure_gcloud() {
+                  command -v gcloud >/dev/null || snap install google-cloud-cli --classic
+                }
+                
+                is_bastion() {
+                  [ -n "$(meta ssh-key-secret)" ]
+                }
+                
+                has_services() {
+                  [ -n "$(meta compose)" ]
+                }
+                
+                serves_site() {
+                  [ -n "$(meta tls-domain)" ]
+                }
+                
+                install_internal_ssh_key() {
+                  local user home
+                  user=$(meta ssh-user)
+                  until id "$user" >/dev/null 2>&1; do sleep 5; done
+                  home="/home/$user"
+                
+                  install -d -m 700 -o "$user" -g "$user" "$home/.ssh"
+                  read_secret "$(meta ssh-key-secret)" > "$home/.ssh/id_ed25519"
+                  chown "$user:$user" "$home/.ssh/id_ed25519"
+                  chmod 600 "$home/.ssh/id_ed25519"
+                }
+                
+                install_docker() {
+                  command -v docker >/dev/null && return
+                  apt-get update
+                  apt-get install -y docker.io docker-compose-v2 unzip
+                }
+                
+                install_certificate_renewal() {
+                  meta cert-script > "$CERT_SCRIPT"
+                  chmod 700 "$CERT_SCRIPT"
+                
+                  cat > "$SYSTEMD_DIR/citybikes-cert.service" <<EOF
+                [Unit]
+                Description=Renew the site's TLS certificate (certbot, DNS-01)
+                [Service]
+                Type=oneshot
+                ExecStart=$CERT_SCRIPT
+                EOF
+                
+                  cat > "$SYSTEMD_DIR/citybikes-cert.timer" <<'EOF'
+                [Timer]
+                OnCalendar=*-*-* 03,15:00
+                RandomizedDelaySec=1h
+                Persistent=true
+                [Install]
+                WantedBy=timers.target
+                EOF
+                
+                  systemctl daemon-reload
+                  systemctl enable --now citybikes-cert.timer
+                }
+                
+                obtain_certificate() {
+                  "$CERT_SCRIPT"
+                }
+                
+                fetch_code() {
+                  rm -rf "$APP_DIR/services"
+                  gcloud storage cp "$(meta code)" "$APP_DIR/code.zip"
+                  unzip -q "$APP_DIR/code.zip" -d "$APP_DIR/services"
+                  rm "$APP_DIR/code.zip"
+                }
+                
+                write_compose_file() {
+                  meta compose > "$APP_DIR/compose.yaml"
+                }
+                
+                write_env_file() {
+                  local env_file="$APP_DIR/.env" pair
+                  install -m 600 /dev/null "$env_file"
+                
+                  for pair in $(meta secrets); do
+                    echo "${pair%%=*}='$(read_secret "${pair#*=}")'" >> "$env_file"
+                  done
+                
+                  meta env >> "$env_file"
+                  echo >> "$env_file"
+                }
+                
+                start_services() {
+                  docker compose --project-directory "$APP_DIR" -f "$APP_DIR/compose.yaml" \
+                    up -d --build --remove-orphans --wait
+                }
+                
+                main() {
+                  ensure_gcloud
+                
+                  if is_bastion; then
+                    install_internal_ssh_key
+                  fi
+                
+                  has_services || exit 0
+                
+                  install_docker
+                
+                  if serves_site; then
+                    install_certificate_renewal
+                    obtain_certificate
+                  fi
+                
+                  mkdir -p "$APP_DIR"
+                  fetch_code
+                  write_compose_file
+                  write_env_file
+                  start_services
+                }
+                
+                main "$@"
+            EOT -> null
+            # (3 unchanged elements hidden)
+        }
+        name                       = "citybikes-bastion"
+        tags                       = [
+            "bastion",
+        ]
+        # (24 unchanged attributes hidden)
+
+        # (5 unchanged blocks hidden)
+    }
+
+  # module.vm["db"].google_compute_instance.vm will be updated in-place
+  ~ resource "google_compute_instance" "vm" {
+        id                         = "projects/citybikes-gcp-512800/zones/europe-central2-a/instances/citybikes-db"
+      ~ metadata                   = {
+          - "code"                   = "gs://citybikes-gcp-512800-citybikes-code/services-3b595c0d3defcb3e568ca8833e83fb00.zip" -> null
+          - "compose"                = <<-EOT
+                "name": "citybikes"
+                "services":
+                  "rabbitmq":
+                    "build": "./services/rabbitmq"
+                    "container_name": "rabbitmq"
+                    "environment":
+                      "RABBITMQ_DEFAULT_PASS": "${RABBITMQ_PASSWORD}"
+                      "RABBITMQ_DEFAULT_USER": "citybikes"
+                      "RABBITMQ_DEFAULT_VHOST": "citybikes"
+                    "hostname": "rabbitmq-citybikes"
+                    "image": "citybikes/rabbitmq"
+                    "logging":
+                      "driver": "gcplogs"
+                      "options":
+                        "gcp-log-cmd": "false"
+                    "ports":
+                    - "5672:5672"
+                    - "15672:15672"
+                    "restart": "unless-stopped"
+                    "security_opt":
+                    - "no-new-privileges:true"
+                    "volumes":
+                    - "rabbitmqdata:/var/lib/rabbitmq"
+                  "redis":
+                    "build": "./services/redis"
+                    "container_name": "redis"
+                    "environment":
+                      "REDIS_PASSWORD": "${REDIS_PASSWORD}"
+                    "image": "citybikes/redis"
+                    "logging":
+                      "driver": "gcplogs"
+                      "options":
+                        "gcp-log-cmd": "false"
+                    "ports":
+                    - "6379:6379"
+                    "restart": "unless-stopped"
+                    "security_opt":
+                    - "no-new-privileges:true"
+                    "volumes":
+                    - "redisdata:/data"
+                "volumes":
+                  "rabbitmqdata": {}
+                  "redisdata": {}
+            EOT -> null
+          - "env"                    = "DB_HOST='10.21.0.3'" -> null
+          - "secrets"                = "RABBITMQ_PASSWORD=citybikes-rabbitmq-password REDIS_PASSWORD=citybikes-redis-password" -> null
+          - "ssh-user"               = "citybikes" -> null
+          - "startup-script"         = <<-EOT
+                #!/bin/bash
+                set -euo pipefail
+                
+                readonly APP_DIR=/opt/citybikes
+                readonly CERT_SCRIPT=/usr/local/sbin/citybikes-cert
+                readonly SYSTEMD_DIR=/etc/systemd/system
+                
+                meta() {
+                  curl -sf -H "Metadata-Flavor: Google" \
+                    "http://metadata.google.internal/computeMetadata/v1/instance/attributes/$1" || true
+                }
+                
+                read_secret() {
+                  until gcloud secrets versions access latest --secret="$1" 2>/dev/null; do
+                    echo "waiting for a value of the secret $1" >&2
+                    sleep 30
+                  done
+                }
+                
+                ensure_gcloud() {
+                  command -v gcloud >/dev/null || snap install google-cloud-cli --classic
+                }
+                
+                is_bastion() {
+                  [ -n "$(meta ssh-key-secret)" ]
+                }
+                
+                has_services() {
+                  [ -n "$(meta compose)" ]
+                }
+                
+                serves_site() {
+                  [ -n "$(meta tls-domain)" ]
+                }
+                
+                install_internal_ssh_key() {
+                  local user home
+                  user=$(meta ssh-user)
+                  until id "$user" >/dev/null 2>&1; do sleep 5; done
+                  home="/home/$user"
+                
+                  install -d -m 700 -o "$user" -g "$user" "$home/.ssh"
+                  read_secret "$(meta ssh-key-secret)" > "$home/.ssh/id_ed25519"
+                  chown "$user:$user" "$home/.ssh/id_ed25519"
+                  chmod 600 "$home/.ssh/id_ed25519"
+                }
+                
+                install_docker() {
+                  command -v docker >/dev/null && return
+                  apt-get update
+                  apt-get install -y docker.io docker-compose-v2 unzip
+                }
+                
+                install_certificate_renewal() {
+                  meta cert-script > "$CERT_SCRIPT"
+                  chmod 700 "$CERT_SCRIPT"
+                
+                  cat > "$SYSTEMD_DIR/citybikes-cert.service" <<EOF
+                [Unit]
+                Description=Renew the site's TLS certificate (certbot, DNS-01)
+                [Service]
+                Type=oneshot
+                ExecStart=$CERT_SCRIPT
+                EOF
+                
+                  cat > "$SYSTEMD_DIR/citybikes-cert.timer" <<'EOF'
+                [Timer]
+                OnCalendar=*-*-* 03,15:00
+                RandomizedDelaySec=1h
+                Persistent=true
+                [Install]
+                WantedBy=timers.target
+                EOF
+                
+                  systemctl daemon-reload
+                  systemctl enable --now citybikes-cert.timer
+                }
+                
+                obtain_certificate() {
+                  "$CERT_SCRIPT"
+                }
+                
+                fetch_code() {
+                  rm -rf "$APP_DIR/services"
+                  gcloud storage cp "$(meta code)" "$APP_DIR/code.zip"
+                  unzip -q "$APP_DIR/code.zip" -d "$APP_DIR/services"
+                  rm "$APP_DIR/code.zip"
+                }
+                
+                write_compose_file() {
+                  meta compose > "$APP_DIR/compose.yaml"
+                }
+                
+                write_env_file() {
+                  local env_file="$APP_DIR/.env" pair
+                  install -m 600 /dev/null "$env_file"
+                
+                  for pair in $(meta secrets); do
+                    echo "${pair%%=*}='$(read_secret "${pair#*=}")'" >> "$env_file"
+                  done
+                
+                  meta env >> "$env_file"
+                  echo >> "$env_file"
+                }
+                
+                start_services() {
+                  docker compose --project-directory "$APP_DIR" -f "$APP_DIR/compose.yaml" \
+                    up -d --build --remove-orphans --wait
+                }
+                
+                main() {
+                  ensure_gcloud
+                
+                  if is_bastion; then
+                    install_internal_ssh_key
+                  fi
+                
+                  has_services || exit 0
+                
+                  install_docker
+                
+                  if serves_site; then
+                    install_certificate_renewal
+                    obtain_certificate
+                  fi
+                
+                  mkdir -p "$APP_DIR"
+                  fetch_code
+                  write_compose_file
+                  write_env_file
+                  start_services
+                }
+                
+                main "$@"
+            EOT -> null
+            # (3 unchanged elements hidden)
+        }
+        name                       = "citybikes-db"
+        tags                       = []
+        # (24 unchanged attributes hidden)
+
+        # (5 unchanged blocks hidden)
+    }
+
+  # module.vm["fetcher"].google_compute_instance.vm will be updated in-place
+  ~ resource "google_compute_instance" "vm" {
+        id                         = "projects/citybikes-gcp-512800/zones/europe-central2-a/instances/citybikes-fetcher"
+      ~ metadata                   = {
+          - "code"                   = "gs://citybikes-gcp-512800-citybikes-code/services-3b595c0d3defcb3e568ca8833e83fb00.zip" -> null
+          - "compose"                = <<-EOT
+                "name": "citybikes"
+                "services":
+                  "fetcher":
+                    "build": "./services/fetcher"
+                    "cap_drop":
+                    - "ALL"
+                    "container_name": "fetcher"
+                    "environment":
+                      "CITYBIKES_NETWORK_ID": "pittsburgh"
+                      "QUEUE_BACKEND": "rabbitmq"
+                      "RABBITMQ_HOST": "10.20.0.50"
+                      "RABBITMQ_PASSWORD": "${RABBITMQ_PASSWORD}"
+                      "RABBITMQ_PORT": "5672"
+                      "RABBITMQ_USER": "citybikes"
+                      "RABBITMQ_VHOST": "citybikes"
+                    "image": "citybikes/fetcher"
+                    "logging":
+                      "driver": "json-file"
+                      "options":
+                        "max-file": "3"
+                        "max-size": "10m"
+                    "read_only": true
+                    "restart": "unless-stopped"
+                    "security_opt":
+                    - "no-new-privileges:true"
+                    "tmpfs":
+                    - "/tmp"
+                "volumes": {}
+            EOT -> null
+          - "env"                    = "DB_HOST='10.21.0.3'" -> null
+          - "secrets"                = "RABBITMQ_PASSWORD=citybikes-rabbitmq-password" -> null
+          - "ssh-user"               = "citybikes" -> null
+          - "startup-script"         = <<-EOT
+                #!/bin/bash
+                set -euo pipefail
+                
+                readonly APP_DIR=/opt/citybikes
+                readonly CERT_SCRIPT=/usr/local/sbin/citybikes-cert
+                readonly SYSTEMD_DIR=/etc/systemd/system
+                
+                meta() {
+                  curl -sf -H "Metadata-Flavor: Google" \
+                    "http://metadata.google.internal/computeMetadata/v1/instance/attributes/$1" || true
+                }
+                
+                read_secret() {
+                  until gcloud secrets versions access latest --secret="$1" 2>/dev/null; do
+                    echo "waiting for a value of the secret $1" >&2
+                    sleep 30
+                  done
+                }
+                
+                ensure_gcloud() {
+                  command -v gcloud >/dev/null || snap install google-cloud-cli --classic
+                }
+                
+                is_bastion() {
+                  [ -n "$(meta ssh-key-secret)" ]
+                }
+                
+                has_services() {
+                  [ -n "$(meta compose)" ]
+                }
+                
+                serves_site() {
+                  [ -n "$(meta tls-domain)" ]
+                }
+                
+                install_internal_ssh_key() {
+                  local user home
+                  user=$(meta ssh-user)
+                  until id "$user" >/dev/null 2>&1; do sleep 5; done
+                  home="/home/$user"
+                
+                  install -d -m 700 -o "$user" -g "$user" "$home/.ssh"
+                  read_secret "$(meta ssh-key-secret)" > "$home/.ssh/id_ed25519"
+                  chown "$user:$user" "$home/.ssh/id_ed25519"
+                  chmod 600 "$home/.ssh/id_ed25519"
+                }
+                
+                install_docker() {
+                  command -v docker >/dev/null && return
+                  apt-get update
+                  apt-get install -y docker.io docker-compose-v2 unzip
+                }
+                
+                install_certificate_renewal() {
+                  meta cert-script > "$CERT_SCRIPT"
+                  chmod 700 "$CERT_SCRIPT"
+                
+                  cat > "$SYSTEMD_DIR/citybikes-cert.service" <<EOF
+                [Unit]
+                Description=Renew the site's TLS certificate (certbot, DNS-01)
+                [Service]
+                Type=oneshot
+                ExecStart=$CERT_SCRIPT
+                EOF
+                
+                  cat > "$SYSTEMD_DIR/citybikes-cert.timer" <<'EOF'
+                [Timer]
+                OnCalendar=*-*-* 03,15:00
+                RandomizedDelaySec=1h
+                Persistent=true
+                [Install]
+                WantedBy=timers.target
+                EOF
+                
+                  systemctl daemon-reload
+                  systemctl enable --now citybikes-cert.timer
+                }
+                
+                obtain_certificate() {
+                  "$CERT_SCRIPT"
+                }
+                
+                fetch_code() {
+                  rm -rf "$APP_DIR/services"
+                  gcloud storage cp "$(meta code)" "$APP_DIR/code.zip"
+                  unzip -q "$APP_DIR/code.zip" -d "$APP_DIR/services"
+                  rm "$APP_DIR/code.zip"
+                }
+                
+                write_compose_file() {
+                  meta compose > "$APP_DIR/compose.yaml"
+                }
+                
+                write_env_file() {
+                  local env_file="$APP_DIR/.env" pair
+                  install -m 600 /dev/null "$env_file"
+                
+                  for pair in $(meta secrets); do
+                    echo "${pair%%=*}='$(read_secret "${pair#*=}")'" >> "$env_file"
+                  done
+                
+                  meta env >> "$env_file"
+                  echo >> "$env_file"
+                }
+                
+                start_services() {
+                  docker compose --project-directory "$APP_DIR" -f "$APP_DIR/compose.yaml" \
+                    up -d --build --remove-orphans --wait
+                }
+                
+                main() {
+                  ensure_gcloud
+                
+                  if is_bastion; then
+                    install_internal_ssh_key
+                  fi
+                
+                  has_services || exit 0
+                
+                  install_docker
+                
+                  if serves_site; then
+                    install_certificate_renewal
+                    obtain_certificate
+                  fi
+                
+                  mkdir -p "$APP_DIR"
+                  fetch_code
+                  write_compose_file
+                  write_env_file
+                  start_services
+                }
+                
+                main "$@"
+            EOT -> null
+            # (3 unchanged elements hidden)
+        }
+        name                       = "citybikes-fetcher"
+        tags                       = []
+        # (24 unchanged attributes hidden)
+
+        # (5 unchanged blocks hidden)
+    }
+
+  # module.vm["history"].google_compute_instance.vm will be updated in-place
+  ~ resource "google_compute_instance" "vm" {
+        id                         = "projects/citybikes-gcp-512800/zones/europe-central2-a/instances/citybikes-history"
+      ~ metadata                   = {
+          - "code"                   = "gs://citybikes-gcp-512800-citybikes-code/services-3b595c0d3defcb3e568ca8833e83fb00.zip" -> null
+          - "compose"                = <<-EOT
+                "name": "citybikes"
+                "services":
+                  "history":
+                    "build": "./services/history"
+                    "cap_drop":
+                    - "ALL"
+                    "container_name": "history"
+                    "environment":
+                      "CACHE_BACKEND": "redis"
+                      "DB_HOST": "${DB_HOST}"
+                      "DB_NAME": "citybikes"
+                      "DB_PASSWORD": "${DB_PASSWORD}"
+                      "DB_PORT": "5432"
+                      "DB_USER": "citybikes_app"
+                      "PGSSLMODE": "require"
+                      "POLL_INTERVAL": "60"
+                      "QUEUE_BACKEND": "rabbitmq"
+                      "RABBITMQ_HOST": "10.20.0.50"
+                      "RABBITMQ_PASSWORD": "${RABBITMQ_PASSWORD}"
+                      "RABBITMQ_PORT": "5672"
+                      "RABBITMQ_USER": "citybikes"
+                      "RABBITMQ_VHOST": "citybikes"
+                      "REDIS_HOST": "10.20.0.50"
+                      "REDIS_PASSWORD": "${REDIS_PASSWORD}"
+                      "REDIS_PORT": "6379"
+                    "image": "citybikes/history"
+                    "logging":
+                      "driver": "json-file"
+                      "options":
+                        "max-file": "3"
+                        "max-size": "10m"
+                    "ports":
+                    - "8002:8002"
+                    "read_only": true
+                    "restart": "unless-stopped"
+                    "security_opt":
+                    - "no-new-privileges:true"
+                    "tmpfs":
+                    - "/tmp"
+                "volumes": {}
+            EOT -> null
+          - "env"                    = "DB_HOST='10.21.0.3'" -> null
+          - "secrets"                = "DB_PASSWORD=citybikes-db-password RABBITMQ_PASSWORD=citybikes-rabbitmq-password REDIS_PASSWORD=citybikes-redis-password" -> null
+          - "ssh-user"               = "citybikes" -> null
+          - "startup-script"         = <<-EOT
+                #!/bin/bash
+                set -euo pipefail
+                
+                readonly APP_DIR=/opt/citybikes
+                readonly CERT_SCRIPT=/usr/local/sbin/citybikes-cert
+                readonly SYSTEMD_DIR=/etc/systemd/system
+                
+                meta() {
+                  curl -sf -H "Metadata-Flavor: Google" \
+                    "http://metadata.google.internal/computeMetadata/v1/instance/attributes/$1" || true
+                }
+                
+                read_secret() {
+                  until gcloud secrets versions access latest --secret="$1" 2>/dev/null; do
+                    echo "waiting for a value of the secret $1" >&2
+                    sleep 30
+                  done
+                }
+                
+                ensure_gcloud() {
+                  command -v gcloud >/dev/null || snap install google-cloud-cli --classic
+                }
+                
+                is_bastion() {
+                  [ -n "$(meta ssh-key-secret)" ]
+                }
+                
+                has_services() {
+                  [ -n "$(meta compose)" ]
+                }
+                
+                serves_site() {
+                  [ -n "$(meta tls-domain)" ]
+                }
+                
+                install_internal_ssh_key() {
+                  local user home
+                  user=$(meta ssh-user)
+                  until id "$user" >/dev/null 2>&1; do sleep 5; done
+                  home="/home/$user"
+                
+                  install -d -m 700 -o "$user" -g "$user" "$home/.ssh"
+                  read_secret "$(meta ssh-key-secret)" > "$home/.ssh/id_ed25519"
+                  chown "$user:$user" "$home/.ssh/id_ed25519"
+                  chmod 600 "$home/.ssh/id_ed25519"
+                }
+                
+                install_docker() {
+                  command -v docker >/dev/null && return
+                  apt-get update
+                  apt-get install -y docker.io docker-compose-v2 unzip
+                }
+                
+                install_certificate_renewal() {
+                  meta cert-script > "$CERT_SCRIPT"
+                  chmod 700 "$CERT_SCRIPT"
+                
+                  cat > "$SYSTEMD_DIR/citybikes-cert.service" <<EOF
+                [Unit]
+                Description=Renew the site's TLS certificate (certbot, DNS-01)
+                [Service]
+                Type=oneshot
+                ExecStart=$CERT_SCRIPT
+                EOF
+                
+                  cat > "$SYSTEMD_DIR/citybikes-cert.timer" <<'EOF'
+                [Timer]
+                OnCalendar=*-*-* 03,15:00
+                RandomizedDelaySec=1h
+                Persistent=true
+                [Install]
+                WantedBy=timers.target
+                EOF
+                
+                  systemctl daemon-reload
+                  systemctl enable --now citybikes-cert.timer
+                }
+                
+                obtain_certificate() {
+                  "$CERT_SCRIPT"
+                }
+                
+                fetch_code() {
+                  rm -rf "$APP_DIR/services"
+                  gcloud storage cp "$(meta code)" "$APP_DIR/code.zip"
+                  unzip -q "$APP_DIR/code.zip" -d "$APP_DIR/services"
+                  rm "$APP_DIR/code.zip"
+                }
+                
+                write_compose_file() {
+                  meta compose > "$APP_DIR/compose.yaml"
+                }
+                
+                write_env_file() {
+                  local env_file="$APP_DIR/.env" pair
+                  install -m 600 /dev/null "$env_file"
+                
+                  for pair in $(meta secrets); do
+                    echo "${pair%%=*}='$(read_secret "${pair#*=}")'" >> "$env_file"
+                  done
+                
+                  meta env >> "$env_file"
+                  echo >> "$env_file"
+                }
+                
+                start_services() {
+                  docker compose --project-directory "$APP_DIR" -f "$APP_DIR/compose.yaml" \
+                    up -d --build --remove-orphans --wait
+                }
+                
+                main() {
+                  ensure_gcloud
+                
+                  if is_bastion; then
+                    install_internal_ssh_key
+                  fi
+                
+                  has_services || exit 0
+                
+                  install_docker
+                
+                  if serves_site; then
+                    install_certificate_renewal
+                    obtain_certificate
+                  fi
+                
+                  mkdir -p "$APP_DIR"
+                  fetch_code
+                  write_compose_file
+                  write_env_file
+                  start_services
+                }
+                
+                main "$@"
+            EOT -> null
+            # (3 unchanged elements hidden)
+        }
+        name                       = "citybikes-history"
+        tags                       = []
+        # (24 unchanged attributes hidden)
+
+        # (5 unchanged blocks hidden)
+    }
+
+  # module.vm["ui"].google_compute_instance.vm will be updated in-place
+  ~ resource "google_compute_instance" "vm" {
+        id                         = "projects/citybikes-gcp-512800/zones/europe-central2-a/instances/citybikes-ui"
+      ~ metadata                   = {
+          - "cert-script"            = <<-EOT
+                #!/bin/bash
+                set -euo pipefail
+                
+                readonly LE_DIR=/etc/letsencrypt
+                readonly NGINX_TLS_DIR=/opt/citybikes/tls
+                readonly CERTBOT_IMAGE=certbot/dns-cloudflare:v3.0.1
+                readonly CLOUDFLARE_INI=cloudflare.ini
+                readonly NGINX_UID=101
+                
+                meta() {
+                  curl -sf -H "Metadata-Flavor: Google" \
+                    "http://metadata.google.internal/computeMetadata/v1/instance/attributes/$1" || true
+                }
+                
+                read_secret() {
+                  local name=$1 value
+                  until value=$(gcloud secrets versions access latest --secret="$name" 2>/dev/null); do
+                    echo "waiting for a value of the secret $name" >&2
+                    sleep 30
+                  done
+                  printf '%s' "$value"
+                }
+                
+                write_cloudflare_credentials() {
+                  local token
+                  token=$(read_secret "$(meta tls-token-secret)")
+                  install -d -m 700 "$LE_DIR"
+                  (umask 077; printf 'dns_cloudflare_api_token = %s\n' "$token" > "$LE_DIR/$CLOUDFLARE_INI")
+                }
+                
+                certbot() {
+                  docker run --rm -v "$LE_DIR:/etc/letsencrypt" "$CERTBOT_IMAGE" "$@"
+                }
+                
+                has_certificate() {
+                  [ -f "$LE_DIR/live/$DOMAIN/fullchain.pem" ]
+                }
+                
+                issue_certificate() {
+                  local args=(
+                    certonly --non-interactive --agree-tos -d "$DOMAIN"
+                    --dns-cloudflare
+                    --dns-cloudflare-credentials "/etc/letsencrypt/$CLOUDFLARE_INI"
+                    --dns-cloudflare-propagation-seconds 30
+                  )
+                  if [ -n "$EMAIL" ]; then
+                    args+=(-m "$EMAIL")
+                  else
+                    args+=(--register-unsafely-without-email)
+                  fi
+                  if [ "$STAGING" = "true" ]; then
+                    args+=(--staging)
+                  fi
+                  certbot "${args[@]}"
+                }
+                
+                renew_certificate() {
+                  certbot renew --non-interactive
+                }
+                
+                certificate_changed() {
+                  ! cmp -s "$LE_DIR/live/$DOMAIN/fullchain.pem" "$NGINX_TLS_DIR/fullchain.pem"
+                }
+                
+                install_certificate_for_nginx() {
+                  install -d -m 755 "$NGINX_TLS_DIR"
+                  install -m 644 "$LE_DIR/live/$DOMAIN/fullchain.pem" "$NGINX_TLS_DIR/fullchain.pem"
+                  install -m 600 -o "$NGINX_UID" -g "$NGINX_UID" "$LE_DIR/live/$DOMAIN/privkey.pem" "$NGINX_TLS_DIR/privkey.pem"
+                }
+                
+                write_nginx_https_config() {
+                  cat > "$NGINX_TLS_DIR/https.conf" <<'EOF'
+                listen 8443 ssl;
+                ssl_certificate     /etc/nginx/tls/fullchain.pem;
+                ssl_certificate_key /etc/nginx/tls/privkey.pem;
+                ssl_protocols       TLSv1.2 TLSv1.3;
+                EOF
+                }
+                
+                reload_nginx() {
+                  docker exec ui nginx -s reload 2>/dev/null || true
+                }
+                
+                main() {
+                  DOMAIN=$(meta tls-domain)
+                  EMAIL=$(meta tls-email)
+                  STAGING=$(meta tls-staging)
+                
+                  write_cloudflare_credentials
+                
+                  if has_certificate; then
+                    renew_certificate
+                  else
+                    issue_certificate
+                  fi
+                
+                  if certificate_changed; then
+                    install_certificate_for_nginx
+                    write_nginx_https_config
+                    reload_nginx
+                    echo "certificate for $DOMAIN installed"
+                  fi
+                }
+                
+                main "$@"
+            EOT -> null
+          - "code"                   = "gs://citybikes-gcp-512800-citybikes-code/services-3b595c0d3defcb3e568ca8833e83fb00.zip" -> null
+          - "compose"                = <<-EOT
+                "name": "citybikes"
+                "services":
+                  "cloudflared":
+                    "build": "./services/cloudflared"
+                    "cap_drop":
+                    - "ALL"
+                    "container_name": "cloudflared"
+                    "environment":
+                      "TUNNEL_TOKEN": "${TUNNEL_TOKEN}"
+                      "TUNNEL_TRANSPORT_PROTOCOL": "auto"
+                    "image": "citybikes/cloudflared"
+                    "logging":
+                      "driver": "json-file"
+                      "options":
+                        "max-file": "3"
+                        "max-size": "10m"
+                    "read_only": true
+                    "restart": "unless-stopped"
+                    "security_opt":
+                    - "no-new-privileges:true"
+                    "tmpfs":
+                    - "/tmp"
+                  "ui":
+                    "build": "./services/ui"
+                    "cap_drop":
+                    - "ALL"
+                    "container_name": "ui"
+                    "environment":
+                      "HISTORY_URL": "http://10.20.0.52:8002"
+                    "image": "citybikes/ui"
+                    "logging":
+                      "driver": "json-file"
+                      "options":
+                        "max-file": "3"
+                        "max-size": "10m"
+                    "ports":
+                    - "80:8080"
+                    - "443:8443"
+                    "restart": "unless-stopped"
+                    "security_opt":
+                    - "no-new-privileges:true"
+                    "volumes":
+                    - "/opt/citybikes/tls:/etc/nginx/tls:ro"
+                "volumes": {}
+            EOT -> null
+          - "env"                    = "DB_HOST='10.21.0.3'" -> null
+          - "secrets"                = "TUNNEL_TOKEN=citybikes-cloudflare-tunnel-token" -> null
+          - "ssh-user"               = "citybikes" -> null
+          - "startup-script"         = <<-EOT
+                #!/bin/bash
+                set -euo pipefail
+                
+                readonly APP_DIR=/opt/citybikes
+                readonly CERT_SCRIPT=/usr/local/sbin/citybikes-cert
+                readonly SYSTEMD_DIR=/etc/systemd/system
+                
+                meta() {
+                  curl -sf -H "Metadata-Flavor: Google" \
+                    "http://metadata.google.internal/computeMetadata/v1/instance/attributes/$1" || true
+                }
+                
+                read_secret() {
+                  until gcloud secrets versions access latest --secret="$1" 2>/dev/null; do
+                    echo "waiting for a value of the secret $1" >&2
+                    sleep 30
+                  done
+                }
+                
+                ensure_gcloud() {
+                  command -v gcloud >/dev/null || snap install google-cloud-cli --classic
+                }
+                
+                is_bastion() {
+                  [ -n "$(meta ssh-key-secret)" ]
+                }
+                
+                has_services() {
+                  [ -n "$(meta compose)" ]
+                }
+                
+                serves_site() {
+                  [ -n "$(meta tls-domain)" ]
+                }
+                
+                install_internal_ssh_key() {
+                  local user home
+                  user=$(meta ssh-user)
+                  until id "$user" >/dev/null 2>&1; do sleep 5; done
+                  home="/home/$user"
+                
+                  install -d -m 700 -o "$user" -g "$user" "$home/.ssh"
+                  read_secret "$(meta ssh-key-secret)" > "$home/.ssh/id_ed25519"
+                  chown "$user:$user" "$home/.ssh/id_ed25519"
+                  chmod 600 "$home/.ssh/id_ed25519"
+                }
+                
+                install_docker() {
+                  command -v docker >/dev/null && return
+                  apt-get update
+                  apt-get install -y docker.io docker-compose-v2 unzip
+                }
+                
+                install_certificate_renewal() {
+                  meta cert-script > "$CERT_SCRIPT"
+                  chmod 700 "$CERT_SCRIPT"
+                
+                  cat > "$SYSTEMD_DIR/citybikes-cert.service" <<EOF
+                [Unit]
+                Description=Renew the site's TLS certificate (certbot, DNS-01)
+                [Service]
+                Type=oneshot
+                ExecStart=$CERT_SCRIPT
+                EOF
+                
+                  cat > "$SYSTEMD_DIR/citybikes-cert.timer" <<'EOF'
+                [Timer]
+                OnCalendar=*-*-* 03,15:00
+                RandomizedDelaySec=1h
+                Persistent=true
+                [Install]
+                WantedBy=timers.target
+                EOF
+                
+                  systemctl daemon-reload
+                  systemctl enable --now citybikes-cert.timer
+                }
+                
+                obtain_certificate() {
+                  "$CERT_SCRIPT"
+                }
+                
+                fetch_code() {
+                  rm -rf "$APP_DIR/services"
+                  gcloud storage cp "$(meta code)" "$APP_DIR/code.zip"
+                  unzip -q "$APP_DIR/code.zip" -d "$APP_DIR/services"
+                  rm "$APP_DIR/code.zip"
+                }
+                
+                write_compose_file() {
+                  meta compose > "$APP_DIR/compose.yaml"
+                }
+                
+                write_env_file() {
+                  local env_file="$APP_DIR/.env" pair
+                  install -m 600 /dev/null "$env_file"
+                
+                  for pair in $(meta secrets); do
+                    echo "${pair%%=*}='$(read_secret "${pair#*=}")'" >> "$env_file"
+                  done
+                
+                  meta env >> "$env_file"
+                  echo >> "$env_file"
+                }
+                
+                start_services() {
+                  docker compose --project-directory "$APP_DIR" -f "$APP_DIR/compose.yaml" \
+                    up -d --build --remove-orphans --wait
+                }
+                
+                main() {
+                  ensure_gcloud
+                
+                  if is_bastion; then
+                    install_internal_ssh_key
+                  fi
+                
+                  has_services || exit 0
+                
+                  install_docker
+                
+                  if serves_site; then
+                    install_certificate_renewal
+                    obtain_certificate
+                  fi
+                
+                  mkdir -p "$APP_DIR"
+                  fetch_code
+                  write_compose_file
+                  write_env_file
+                  start_services
+                }
+                
+                main "$@"
+            EOT -> null
+          - "tls-domain"             = "citybikes-tracker.pp.ua" -> null
+          - "tls-email"              = null
+          - "tls-staging"            = "false" -> null
+          - "tls-token-secret"       = "citybikes-cloudflare-api-token" -> null
+            # (3 unchanged elements hidden)
+        }
+        name                       = "citybikes-ui"
+        tags                       = []
+        # (24 unchanged attributes hidden)
+
+        # (5 unchanged blocks hidden)
+    }
+
+Plan: 1 to add, 12 to change, 8 to destroy.
+
+Changes to Outputs:
+  ~ secret_readers = {
+      ~ citybikes-db-password             = [
+          + "fetcher",
+            "history",
+        ]
+        # (5 unchanged attributes hidden)
+    }
+
+─────────────────────────────────────────────────────────────────────────────
+
+Note: You didn't use the -out option to save this plan, so Terraform can't
+guarantee to take exactly these actions if you run "terraform apply" now.

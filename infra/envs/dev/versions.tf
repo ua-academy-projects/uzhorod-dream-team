@@ -6,10 +6,6 @@ terraform {
       source  = "hashicorp/google"
       version = ">= 6.0, < 8.0"
     }
-    archive = {
-      source  = "hashicorp/archive"
-      version = "~> 2.4"
-    }
   }
 
   # terraform init -backend-config=backend.hcl
@@ -19,7 +15,7 @@ terraform {
 }
 
 provider "google" {
-  project = local.project.id
-  region  = local.project.region
-  zone    = local.project.zone
+  project = var.project_id
+  region  = var.region
+  zone    = var.zone
 }

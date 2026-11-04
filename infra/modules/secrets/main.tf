@@ -3,16 +3,18 @@
 locals {
   cfg = var.config
 
-  # one permission per (secret, VM). Keyed by VM NAMES: they are known before apply
+  access  = { for vm, cfg in local.cfg.vms : vm => [for s in cfg.secrets : "${local.cfg.prefix}-${s}"] }
+  secrets = toset(flatten(values(local.access)))
+
   grants = merge([
-    for secret, vms in local.cfg.readers : {
-      for vm in vms : "${secret}/${vm}" => { secret = secret, vm = vm }
+    for vm, secrets in local.access : {
+      for secret in secrets : "${secret}/${vm}" => { secret = secret, vm = vm }
     }
   ]...)
 }
 
 resource "google_secret_manager_secret" "secret" {
-  for_each  = local.cfg.readers
+  for_each  = local.secrets
   secret_id = each.key
   labels    = local.cfg.labels
 

@@ -15,16 +15,15 @@ resource "google_service_networking_connection" "private" {
   network                 = local.cfg.network_id
   service                 = "servicenetworking.googleapis.com"
   reserved_peering_ranges = [google_compute_global_address.private_range.name]
-  deletion_policy         = "ABANDON"
 }
 
 resource "google_sql_database_instance" "pg" {
-      name                = local.cfg.name
+  name                = local.cfg.name
   region              = local.cfg.region
   database_version    = local.cfg.version
   deletion_protection = true
-    
-    settings {
+
+  settings {
     edition           = "ENTERPRISE"
     tier              = local.cfg.tier
     availability_type = "ZONAL"

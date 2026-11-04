@@ -3,10 +3,9 @@ output "internal_ip" {
 }
 
 output "external_ip" {
-  value = local.cfg.public ? google_compute_address.external[0].address : null
+  value = local.cfg.bastion ? google_compute_address.external[0].address : null
 }
 
-output "member" {
-  description = "The VM's service account as an IAM member"
-  value       = "serviceAccount:${google_service_account.vm.email}"
+output "bastion" {
+  value = local.cfg.bastion
 }

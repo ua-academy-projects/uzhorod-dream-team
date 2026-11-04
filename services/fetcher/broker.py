@@ -100,8 +100,17 @@ REQUESTS = "fetch_requests"
 REPLIES = "fetch_replies"
 
 SCHEMA = f"""
-SELECT pg_advisory_xact_lock(727401);  -- History and Fetcher may both set up at start
-CREATE EXTENSION IF NOT EXISTS pgmq;
+SELECT pg_advisory_xact_lock(727401);
+DO $$
+BEGIN
+  IF to_regnamespace('pgmq') IS NULL THEN
+    IF NOT EXISTS (SELECT 1 FROM pg_available_extensions WHERE name = 'pgmq') THEN
+      RAISE EXCEPTION 'pgmq is not installed yet (History installs it at its first request)';
+    END IF;
+    CREATE EXTENSION pgmq;
+  END IF;
+END
+$$;
 SELECT pgmq.create('{REQUESTS}');
 SELECT pgmq.create('{REPLIES}')
 """

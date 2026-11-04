@@ -1,13 +1,9 @@
-# One VM: its own service account (identity), a fixed private address, optionally a fixed public
-# address, and the metadata (SSH keys, startup script, compose file) that the caller hands in.
-
 locals {
   cfg = var.config
-}
 
-resource "google_service_account" "vm" {
-  account_id   = local.cfg.name
-  display_name = "VM-${local.cfg.name}"
+  internal_ip = cidrhost(local.cfg.subnet_cidr, local.cfg.host)
+
+  ssh_key = trimspace(file(pathexpand(local.cfg.bastion ? local.cfg.ssh.user_public_key_file : local.cfg.ssh.internal_public_key_file)))
 }
 
 resource "google_compute_address" "internal" {
@@ -15,11 +11,11 @@ resource "google_compute_address" "internal" {
   region       = local.cfg.region
   subnetwork   = local.cfg.subnetwork_id
   address_type = "INTERNAL"
-  address      = local.cfg.internal_ip
+  address      = local.internal_ip
 }
 
 resource "google_compute_address" "external" {
-  count  = local.cfg.public ? 1 : 0
+  count  = local.cfg.bastion ? 1 : 0
   name   = "${local.cfg.name}-external"
   region = local.cfg.region
 }
@@ -28,7 +24,7 @@ resource "google_compute_instance" "vm" {
   name         = local.cfg.name
   zone         = local.cfg.zone
   machine_type = local.cfg.machine_type
-  tags         = local.cfg.tags
+  tags         = local.cfg.bastion ? [local.cfg.bastion_tag] : []
   labels       = local.cfg.labels
 
   boot_disk {
@@ -43,20 +39,23 @@ resource "google_compute_instance" "vm" {
     subnetwork = local.cfg.subnetwork_id
     network_ip = google_compute_address.internal.address
 
-    dynamic "access_config" { # public address only where asked
-      for_each = local.cfg.public ? [1] : []
+    dynamic "access_config" {
+      for_each = local.cfg.bastion ? [1] : []
       content {
         nat_ip = google_compute_address.external[0].address
       }
     }
   }
 
-  # a change here updates the VM in place (no re-creation); the startup script reads it at boot
-  metadata = var.metadata
+  metadata = {
+    ssh-keys               = "${local.cfg.ssh.user}:${local.ssh_key}"
+    block-project-ssh-keys = "true"
+    enable-oslogin         = "FALSE"
+  }
 
   service_account {
-    email  = google_service_account.vm.email
-    scopes = ["cloud-platform"] # what the VM may really do is decided by IAM
+    email  = local.cfg.service_account
+    scopes = ["cloud-platform"]
   }
 
   shielded_instance_config {

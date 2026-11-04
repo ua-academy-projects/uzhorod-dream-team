@@ -13,7 +13,7 @@ ENV PYTHONUNBUFFERED=1 \
 RUN useradd --system --uid 10001 --no-create-home --shell /usr/sbin/nologin app
 COPY --from=build /opt/venv /opt/venv
 WORKDIR /app
-COPY app.py broker.py db.py kvstore.py poller.py settings.py healthcheck.py ./
+COPY app.py broker.py db.py kvstore.py poller.py settings.py healthcheck.py gmq--1.13.0.sql ./
 USER 10001
 
 EXPOSE 8002
