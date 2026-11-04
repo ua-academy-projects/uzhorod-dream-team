@@ -8,7 +8,7 @@ variable "cfg" {
     cloudflare = object({
       domain = string
     })
-    deploy_vms = optional(bool, true)
+    deploy_vms     = optional(bool, true)
     vm_name_prefix = optional(string, "kyiv-air")
     vm = map(object({
       machine_type = optional(string, "e2-micro")
@@ -76,4 +76,8 @@ variable "secrets" {
       version   = string
     }))
   })
+}
+
+variable "cloud_sql" {
+  type = object({ connection_name = string })
 }

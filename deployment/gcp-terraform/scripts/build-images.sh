@@ -3,7 +3,15 @@ set -Eeuo pipefail
 
 scripts=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 project=$(cd "$scripts/../../.." && pwd)
-config=${DEPLOYMENT_CONFIG:-$project/deployment/config/deployment.json}
+config=${DEPLOYMENT_CONFIG:-${TF_VAR_config_path:-}}
+if [[ -z "$config" ]]; then
+  echo "Missing env var: set DEPLOYMENT_CONFIG or TF_VAR_config_path (exported by the env.sh that bootstrap.sh generates) to the deployment.json path." >&2
+  exit 1
+fi
+if [[ ! -f "$config" ]]; then
+  echo "Config file not found: $config" >&2
+  exit 1
+fi
 registry=$(jq -er '.google.region + "-docker.pkg.dev/" + .google.project_id' "$config")
 repository=$(jq -er '.registry.id // "kyiv-air"' "$config")
 registry=$registry/$repository

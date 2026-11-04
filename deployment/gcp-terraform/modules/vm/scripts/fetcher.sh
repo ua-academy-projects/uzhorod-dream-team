@@ -6,6 +6,10 @@ source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 : "${PRIVATE_IP:?Set PRIVATE_IP in the startup environment.}"
 
 prepare_runtime fetcher
+if [[ "$POSTGRES_ONLY" == true ]]; then
+  source "$HELPERS/cloud-sql.sh"
+  start_sql_proxy
+fi
 key=$(get_secret openaq-api-key)
 set_env fetcher OPENAQ_API_KEY "$key"
 [[ "$key" =~ ^[A-Za-z0-9_-]+$ && "$key" != your_openaq_api_key_here ]] || fail "Set a valid OpenAQ API key in Secret Manager."

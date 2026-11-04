@@ -1,5 +1,5 @@
 resource "google_compute_instance" "vms" {
-  for_each = var.cfg.deploy_vms ? var.cfg.vm : {}
+  for_each = var.cfg.deploy_vms ? local.vms : {}
 
   project                   = local.google.project_id
   name                      = "${var.cfg.vm_name_prefix}-${each.key}"

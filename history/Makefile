@@ -28,6 +28,7 @@ clean:
 	@rm -rf ${BIN_DIR}
 
 migrate-up:
+	@if [ "$${POSTGRES_ONLY:-false}" = true ]; then psql "${DATABASE_URL}" -v ON_ERROR_STOP=1 -c "CREATE EXTENSION IF NOT EXISTS pgmq; SELECT pgmq.create('kyiv_air_requests'); SELECT pgmq.create('kyiv_air_replies');"; fi
 	goose -dir internal/db/migrations postgres "${DATABASE_URL}" up
 
 migrate-down:

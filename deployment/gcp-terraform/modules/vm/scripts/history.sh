@@ -6,6 +6,9 @@ source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 : "${PRIVATE_IP:?Set PRIVATE_IP in the startup environment.}"
 
 prepare_runtime history
+source "$HELPERS/cloud-sql.sh"
+start_sql_proxy
+migrate_database
 read_database
 if [[ "$POSTGRES_ONLY" == false ]]; then read_rabbitmq; fi
 pull_image "$HISTORY_IMAGE"

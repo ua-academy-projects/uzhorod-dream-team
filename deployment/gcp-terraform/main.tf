@@ -24,6 +24,15 @@ module "secrets" {
   payloads         = var.secret_payloads
 }
 
+module "cloud_sql" {
+  source           = "./modules/cloud-sql"
+  cfg              = local.cfg
+  network          = module.network
+  service_accounts = google_service_account.vm
+  secrets          = module.secrets
+  revisions        = var.secret_revisions
+}
+
 module "vm" {
   source = "./modules/vm"
 
@@ -32,6 +41,7 @@ module "vm" {
   network          = module.network
   registry         = module.registry
   secrets          = module.secrets
+  cloud_sql        = module.cloud_sql
 
-  depends_on = [module.network, module.registry, module.secrets]
+  depends_on = [module.network, module.registry, module.secrets, module.cloud_sql]
 }

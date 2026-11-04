@@ -4,7 +4,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
 (( EUID == 0 )) || fail "Run this script with sudo."
 : "${PRIVATE_IP:?Set PRIVATE_IP in the startup environment.}"
-: "${DB_IP:?Set DB_IP in the startup environment.}"
+DB_IP=${DB_IP:-}
 : "${FETCHER_IP:?Set FETCHER_IP in the startup environment.}"
 : "${HISTORY_IP:?Set HISTORY_IP in the startup environment.}"
 : "${UI_IP:?Set UI_IP in the startup environment.}"
@@ -12,7 +12,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 sed -i '/^# BEGIN KYIV-AIR SSH TARGETS$/,/^# END KYIV-AIR SSH TARGETS$/d' /etc/hosts
 cat >> /etc/hosts <<HOSTS
 # BEGIN KYIV-AIR SSH TARGETS
-$DB_IP kyiv-air-db
+${DB_IP:+$DB_IP kyiv-air-db}
 $FETCHER_IP kyiv-air-fetcher
 $HISTORY_IP kyiv-air-history
 $UI_IP kyiv-air-ui
@@ -27,7 +27,7 @@ PermitRootLogin no
 AllowAgentForwarding no
 X11Forwarding no
 AllowTcpForwarding local
-PermitOpen kyiv-air-db:$SSH_PORT kyiv-air-fetcher:$SSH_PORT kyiv-air-history:$SSH_PORT kyiv-air-ui:$SSH_PORT
+PermitOpen ${DB_IP:+kyiv-air-db:$SSH_PORT }kyiv-air-fetcher:$SSH_PORT kyiv-air-history:$SSH_PORT kyiv-air-ui:$SSH_PORT
 PermitTunnel no
 GatewayPorts no
 SSH

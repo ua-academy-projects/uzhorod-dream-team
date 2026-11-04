@@ -48,7 +48,7 @@ chmod 0600 "$CONFIG/migrate.env"
 require_ca_bundle
 docker run --rm --name kyiv-air-migrate --network "$NETWORK" --env-file "$CONFIG/migrate.env" \
   --mount type=bind,src=/etc/ssl/certs/ca-certificates.crt,dst=/etc/ssl/certs/ca-certificates.crt,readonly \
-  -e SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt "$MIGRATION_IMAGE" up
+  -e SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt -e "POSTGRES_ONLY=$POSTGRES_ONLY" "$MIGRATION_IMAGE" up
 
 if [[ "$POSTGRES_ONLY" == true ]]; then
   docker exec -i kyiv-air-postgres psql -U kyiv_air -d "$DB_NAME" -v ON_ERROR_STOP=1 < <(

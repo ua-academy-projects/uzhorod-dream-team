@@ -167,7 +167,7 @@ jq -e '.billingEnabled == true' <<< "$billing" >/dev/null || die 'Billing is not
 gcloud services enable \
   cloudresourcemanager.googleapis.com cloudbilling.googleapis.com serviceusage.googleapis.com \
   iam.googleapis.com storage.googleapis.com compute.googleapis.com \
-  secretmanager.googleapis.com artifactregistry.googleapis.com \
+  secretmanager.googleapis.com artifactregistry.googleapis.com sqladmin.googleapis.com dns.googleapis.com \
   --project="$BOOTSTRAP_PROJECT_ID" --quiet
 
 # Checking zone accessibility
@@ -183,7 +183,8 @@ retry_iam gcloud iam service-accounts describe "$ACCOUNT" --project="$BOOTSTRAP_
 # Adding roles to service account
 for role in \
   roles/compute.admin roles/iam.serviceAccountAdmin roles/iam.serviceAccountUser \
-  roles/artifactregistry.admin roles/secretmanager.admin roles/serviceusage.serviceUsageConsumer; do
+  roles/cloudsql.admin roles/dns.admin roles/artifactregistry.admin roles/secretmanager.admin roles/secretmanager.secretAccessor roles/serviceusage.serviceUsageConsumer \
+  roles/resourcemanager.projectIamAdmin roles/servicedirectory.editor; do
   retry_iam gcloud projects add-iam-policy-binding "$BOOTSTRAP_PROJECT_ID" \
     --member="serviceAccount:$ACCOUNT" --role="$role" --condition=None --quiet
 done

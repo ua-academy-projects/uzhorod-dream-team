@@ -1,5 +1,5 @@
 resource "google_compute_disk" "data" {
-  for_each = { for name, vm in var.cfg.vm : name => vm if vm.data_disk != null }
+  for_each = { for name, vm in local.vms : name => vm if var.cfg.deploy_vms && vm.data_disk != null }
 
   project = local.google.project_id
   name    = "${var.cfg.vm_name_prefix}-${each.key}-data"

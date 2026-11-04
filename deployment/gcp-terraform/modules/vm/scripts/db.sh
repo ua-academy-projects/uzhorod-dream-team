@@ -12,65 +12,12 @@ DATA_MOUNT=${DATA_MOUNT:-/srv/kyiv-air-data}
 prepare_data_disk
 prepare_runtime db
 
-read_database
-if [[ "$POSTGRES_ONLY" == true ]]; then
-  read_queue
-  [[ "$QUEUE_DB_NAME" == "$DB_NAME" ]] || fail "Queue and application database names must match."
-else
-  read_rabbitmq
-fi
-pull_image "$MIGRATION_IMAGE"
-
-printf 'POSTGRES_DB=%s\nPOSTGRES_USER=kyiv_air\nPOSTGRES_PASSWORD=%s\n' "$DB_NAME" "$DB_PASSWORD" > "$CONFIG/postgres.env"
-chmod 0600 "$CONFIG/postgres.env"
-pg_ports=(-p "$PRIVATE_IP:5432:5432" -p 127.0.0.1:5432:5432)
-docker pull "$POSTGRES_IMAGE"
-docker run --rm --user root --entrypoint sh \
-  --mount "type=bind,src=$DATA_MOUNT,dst=/data" "$POSTGRES_IMAGE" -c \
-  'mkdir -p /data/postgres && chown postgres:postgres /data/postgres && chmod 0700 /data/postgres'
+REDIS_PASSWORD=$(get_secret redis-password)
+validate_password REDIS_PASSWORD "$REDIS_PASSWORD" 32
+read_rabbitmq
 install -d -m 0755 /etc/systemd/system/docker.service.d
 printf '[Unit]\nRequiresMountsFor=%s\n' "$DATA_MOUNT" > /etc/systemd/system/docker.service.d/kyiv-air-data.conf
 systemctl daemon-reload
-replace_container kyiv-air-postgres "${pg_ports[@]}" --env-file "$CONFIG/postgres.env" \
-  --mount "type=bind,src=$DATA_MOUNT/postgres,dst=/var/lib/postgresql/data" "$POSTGRES_IMAGE" postgres -c shared_preload_libraries=
-wait_command PostgreSQL docker exec kyiv-air-postgres pg_isready -h 127.0.0.1 -U kyiv_air -d "$DB_NAME"
-wait_command "PostgreSQL database" docker exec kyiv-air-postgres psql -U kyiv_air -d "$DB_NAME" -v ON_ERROR_STOP=1 -c 'SELECT 1'
-docker exec -i kyiv-air-postgres psql -U kyiv_air -d "$DB_NAME" -v ON_ERROR_STOP=1 < <(
-  printf "\\set password '%s'\n" "$DB_PASSWORD"
-  printf "ALTER ROLE kyiv_air WITH PASSWORD :'password';\n"
-) >/dev/null
-
-printf 'GOOSE_DBSTRING=postgres://kyiv_air:%s@kyiv-air-postgres:5432/%s?sslmode=disable\n' "$DB_PASSWORD" "$DB_NAME" > "$CONFIG/migrate.env"
-chmod 0600 "$CONFIG/migrate.env"
-require_ca_bundle
-docker run --rm --name kyiv-air-migrate --network "$NETWORK" --env-file "$CONFIG/migrate.env" \
-  --mount type=bind,src=/etc/ssl/certs/ca-certificates.crt,dst=/etc/ssl/certs/ca-certificates.crt,readonly \
-  -e SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt "$MIGRATION_IMAGE" up
-
-if [[ "$POSTGRES_ONLY" == true ]]; then
-  docker exec -i kyiv-air-postgres psql -U kyiv_air -d "$DB_NAME" -v ON_ERROR_STOP=1 < <(
-    printf "\\set password '%s'\n" "$FETCHER_DB_PASSWORD"
-    cat <<'SQL'
-SELECT 'CREATE ROLE kyiv_air_fetcher LOGIN' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname='kyiv_air_fetcher')
-\gexec
-ALTER ROLE kyiv_air_fetcher WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION PASSWORD :'password';
-GRANT USAGE ON SCHEMA pgmq TO kyiv_air_fetcher;
-GRANT SELECT, UPDATE, DELETE ON pgmq.q_kyiv_air_requests TO kyiv_air_fetcher;
-GRANT INSERT ON pgmq.q_kyiv_air_replies TO kyiv_air_fetcher;
-GRANT SELECT (msg_id) ON pgmq.q_kyiv_air_replies TO kyiv_air_fetcher;
-GRANT USAGE ON SEQUENCE pgmq.q_kyiv_air_replies_msg_id_seq TO kyiv_air_fetcher;
-GRANT EXECUTE ON FUNCTION pgmq.pop(text,integer), pgmq.send(text,jsonb) TO kyiv_air_fetcher;
-SQL
-  ) >/dev/null
-  for container in kyiv-air-redis kyiv-air-rabbitmq; do
-    if docker container inspect "$container" >/dev/null 2>&1; then
-      docker stop --timeout 30 "$container" >/dev/null
-      docker rm "$container" >/dev/null
-    fi
-  done
-  rm -f "$CONFIG/redis.conf" "$CONFIG/redis-probe.env" "$CONFIG/rabbitmq.conf" "$CONFIG/rabbitmq.env"
-  exit 0
-fi
 
 printf 'REDISCLI_AUTH=%s\n' "$REDIS_PASSWORD" > "$CONFIG/redis-probe.env"
 chmod 0600 "$CONFIG/redis-probe.env"

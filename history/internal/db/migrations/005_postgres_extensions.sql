@@ -1,16 +1,11 @@
 -- +goose Up
-CREATE EXTENSION IF NOT EXISTS pgmq;
 CREATE EXTENSION IF NOT EXISTS hstore;
-SELECT pgmq.create('kyiv_air_requests');
-SELECT pgmq.create('kyiv_air_replies');
 DROP TABLE sync_queue.requests;
 DROP SCHEMA sync_queue;
 TRUNCATE sessions;
 ALTER TABLE sessions ALTER COLUMN preferences TYPE hstore USING hstore(ARRAY[]::text[]);
 
 -- +goose Down
-SELECT pgmq.drop_queue('kyiv_air_replies');
-SELECT pgmq.drop_queue('kyiv_air_requests');
 TRUNCATE sessions;
 ALTER TABLE sessions ALTER COLUMN preferences TYPE jsonb USING '{}'::jsonb;
 CREATE SCHEMA sync_queue;

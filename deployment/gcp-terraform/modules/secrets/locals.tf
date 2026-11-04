@@ -11,9 +11,9 @@ locals {
   payloads = merge(var.payloads, {
     for name in local.passwords : name => ephemeral.random_password.service[name].result
   })
-  names = toset(flatten([
+  names = setunion(local.passwords, toset(flatten([
     for vm in values(var.cfg.vm) : tolist(vm.secrets)
-  ]))
+  ])))
   secret_members = flatten([
     for vm_name, vm in local.vm_access : [
       for secret_name in toset(vm.secrets) : {
