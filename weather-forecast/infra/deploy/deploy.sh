@@ -123,6 +123,7 @@ put_file() {
 run_container() {
   local vm=$1 name=$2 inputs=$3 spec state
   shift 3
+  set -- --log-opt max-size=10m --log-opt max-file=3 "$@"
   spec=$(printf '%s\n' "$inputs" "$@" | sha)
   state=$(remote "$vm" "sudo docker inspect -f '{{.Config.Labels.weather_spec}} {{.State.Running}}' $name 2>/dev/null" || true)
   if [[ $state == "$spec true" ]]; then
