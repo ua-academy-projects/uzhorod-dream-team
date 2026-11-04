@@ -1,0 +1,42 @@
+---
+- name: Ensure crypto directory exists
+  ansible.builtin.file:
+    path: /etc/crypto
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Write DB CA certificate to file
+  ansible.builtin.copy:
+    src: db-ca.pem
+    dest: /etc/crypto/db-ca.pem
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart crypto-history service
+
+- name: Generate start-history.sh from template
+  ansible.builtin.template:
+    src: start-history.sh.j2
+    dest: /usr/local/bin/start-history.sh
+    owner: root
+    group: root
+    mode: "0755"
+  notify: Restart crypto-history service
+
+- name: Create crypto-history systemd service unit
+  ansible.builtin.template:
+    src: crypto-history.service.j2
+    dest: /etc/systemd/system/crypto-history.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart crypto-history service
+
+- name: Enable and start crypto-history service
+  ansible.builtin.systemd_service:
+    name: crypto-history.service
+    daemon_reload: true
+    enabled: true
+    state: started

@@ -1,0 +1,12 @@
+#!/bin/bash
+set -euo pipefail
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin
+
+gcloud auth print-access-token | docker login -u oauth2accesstoken --password-stdin https://{{ registry_host }}
+docker pull {{ ui_image }}
+docker rm -f crypto_ui >/dev/null 2>&1 || true
+
+exec docker run --rm \
+--name crypto_ui \
+-e HISTORY_URL=http://{{ hosts_history }}:3001 \
+-p {{ ui_port }}:8080 {{ ui_image }}

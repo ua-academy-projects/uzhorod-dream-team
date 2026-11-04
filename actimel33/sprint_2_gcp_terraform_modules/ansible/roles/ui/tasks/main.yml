@@ -1,0 +1,25 @@
+---
+- name: Generate start-ui.sh from template
+  ansible.builtin.template:
+    src: start-ui.sh.j2
+    dest: /usr/local/bin/start-ui.sh
+    owner: root
+    group: root
+    mode: "0755"
+  notify: Restart crypto-ui service
+
+- name: Create crypto-ui systemd service unit
+  ansible.builtin.template:
+    src: crypto-ui.service.j2
+    dest: /etc/systemd/system/crypto-ui.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart crypto-ui service
+
+- name: Enable and start crypto-ui service
+  ansible.builtin.systemd_service:
+    name: crypto-ui.service
+    daemon_reload: true
+    enabled: true
+    state: started

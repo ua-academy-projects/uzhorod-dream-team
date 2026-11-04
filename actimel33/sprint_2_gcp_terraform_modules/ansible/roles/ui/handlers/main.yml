@@ -1,0 +1,7 @@
+---
+- name: Restart crypto-ui service
+  ansible.builtin.systemd_service:
+    name: crypto-ui.service
+    daemon_reload: true
+    enabled: true
+    state: restarted

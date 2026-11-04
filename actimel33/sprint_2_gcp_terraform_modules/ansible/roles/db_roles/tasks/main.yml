@@ -1,0 +1,18 @@
+---
+- name: Write set-db-roles.sh
+  ansible.builtin.template:
+    src: set-db-roles.sh.j2
+    dest: /usr/local/bin/set-db-roles.sh
+    owner: root
+    group: root
+    mode: "0755"
+  notify: Restart crypto-db-roles service
+
+- name: Create crypto-db-roles systemd service unit
+  ansible.builtin.template:
+    src: crypto-db-roles.service.j2
+    dest: /etc/systemd/system/crypto-db-roles.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart crypto-db-roles service

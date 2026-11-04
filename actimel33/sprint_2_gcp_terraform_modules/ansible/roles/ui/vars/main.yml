@@ -1,0 +1,1 @@
+ui_image: "{{ registry_host }}/{{ project_id }}/{{ repository_id }}/ui:{{ ui_image_tag }}"

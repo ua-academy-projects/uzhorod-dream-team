@@ -1,0 +1,14 @@
+[Unit]
+Description=crypto fetcher container
+After=docker.service network-online.target
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+ExecStart=/usr/local/bin/start-fetcher.sh
+ExecStop=/usr/bin/docker stop -t 30 crypto_fetcher
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target

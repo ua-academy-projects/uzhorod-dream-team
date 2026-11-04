@@ -1,0 +1,33 @@
+---
+- name: Install docker to fetcher, history, ui, broker
+  hosts: private
+  gather_facts: true
+  become: true
+  roles:
+    - docker
+
+- name: Broker VM provision
+  hosts: broker
+  become: true
+  roles:
+    - redis
+
+- name: History VM provision
+  hosts: history
+  become: true
+  roles:
+    - history
+    - role: db_roles
+      when: backend == "postgres"
+
+- name: Fetcher VM provision
+  hosts: fetcher
+  become: true
+  roles:
+    - fetcher
+
+- name: UI VM provision
+  hosts: ui
+  become: true
+  roles:
+    - ui

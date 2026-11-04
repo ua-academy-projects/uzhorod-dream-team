@@ -1,0 +1,32 @@
+#!/bin/bash
+set -euo pipefail
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin
+
+umask 077
+mkdir -p /run/crypto
+
+{% if backend == 'redis' -%}
+REDIS_PASSWORD=$(gcloud secrets versions access latest --secret=crypto-redis-password --project="{{ project_id }}")
+{% else -%}
+QUEUE_PASSWORD=$(gcloud secrets versions access latest --secret=crypto-db-queue-worker-password --project="{{ project_id }}")
+{% endif -%}
+
+cat > /run/crypto/fetcher.env <<EOF
+BACKEND={{ backend }}
+FETCHER_HOST=0.0.0.0
+{% if backend == "redis" -%}
+REDIS_URL=redis://{{ hosts_broker }}:6379
+REDIS_PASSWORD=$REDIS_PASSWORD
+{% else -%}
+QUEUE_DATABASE_URL=postgres://queue_worker:$QUEUE_PASSWORD@{{ db_host }}:5432/{{ db_name }}?sslmode=verify-ca&sslrootcert=/certs/db-ca.pem
+{% endif -%}
+EOF
+
+gcloud auth print-access-token | docker login -u oauth2accesstoken --password-stdin https://{{ registry_host }}
+docker pull {{ fetcher_image }}
+docker rm -f crypto_fetcher >/dev/null 2>&1 || true
+
+exec docker run --rm --name crypto_fetcher \
+--hostname fetcher --read-only --env-file /run/crypto/fetcher.env \
+-v /etc/crypto/db-ca.pem:/certs/db-ca.pem:ro \
+-p 3002:3002 {{ fetcher_image }}

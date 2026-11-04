@@ -1,0 +1,25 @@
+---
+- name: Generate start-redis.sh from template
+  ansible.builtin.template:
+    src: start-redis.sh.j2
+    dest: /usr/local/bin/start-redis.sh
+    owner: root
+    group: root
+    mode: "0755"
+  notify: Restart crypto-redis service
+
+- name: Create crypto-redis systemd service unit
+  ansible.builtin.template:
+    src: crypto-redis.service.j2
+    dest: /etc/systemd/system/crypto-redis.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart crypto-redis service
+
+- name: Enable and start crypto-redis service
+  ansible.builtin.systemd_service:
+    name: crypto-redis.service
+    daemon_reload: true
+    enabled: true
+    state: started

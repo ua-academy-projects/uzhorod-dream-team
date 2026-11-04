@@ -1,0 +1,37 @@
+#!/bin/bash
+set -euo pipefail
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin
+
+umask 077
+mkdir -p /run/crypto
+
+APP_PASSWORD=$(gcloud secrets versions access latest --secret="{{ db_password_secret }}" --project="{{ project_id }}")
+SESSION_SECRET=$(gcloud secrets versions access latest --secret=crypto-session-secret --project="{{ project_id }}")
+
+{% if backend == 'redis' -%}
+REDIS_PASSWORD=$(gcloud secrets versions access latest --secret=crypto-redis-password --project="{{ project_id }}")
+{% endif -%}
+
+cat > /run/crypto/history.env <<EOF
+BACKEND={{ backend }}
+HISTORY_HOST=0.0.0.0
+DATABASE_URL=postgres://{{ db_user }}:$APP_PASSWORD@{{ db_host }}:5432/{{ db_name }}?uselibpqcompat=true&sslmode=verify-ca&sslrootcert=/certs/db-ca.pem
+SESSION_SECRET=$SESSION_SECRET
+
+{% if backend == 'redis' -%}
+REDIS_URL=redis://{{ hosts_broker }}:6379
+REDIS_PASSWORD=$REDIS_PASSWORD
+{% endif -%}
+EOF
+
+gcloud auth print-access-token | docker login -u oauth2accesstoken --password-stdin https://{{ registry_host }}
+docker pull {{ history_image }}
+docker rm -f crypto_history >/dev/null 2>&1 || true
+
+exec docker run --rm \
+--name crypto_history \
+--hostname history \
+--read-only --init \
+--env-file /run/crypto/history.env \
+-v /etc/crypto/db-ca.pem:/certs/db-ca.pem:ro \
+-p 3001:3001 {{ history_image }}
