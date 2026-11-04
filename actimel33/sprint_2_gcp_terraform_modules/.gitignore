@@ -4,3 +4,5 @@ dist/
 bin/
 docs/
 *-terraform.json
+ansible/inventory/inventory.ini
+ansible/files/db-ca.pem
