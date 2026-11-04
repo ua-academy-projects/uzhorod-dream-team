@@ -2,7 +2,7 @@
 
 ## Requirements
 
-`gcloud`, `terraform` 1.15+, `docker`, `python3`, and `uv` for the pre-commit hook.
+`gcloud`, `terraform` 1.15+, `ansible-core` 2.19+, `docker`, `python3`, and `uv` for the pre-commit hook.
 
 ## Access
 
@@ -40,7 +40,17 @@ terraform init -reconfigure -backend-config=backend.hcl
 terraform plan
 terraform apply
 cd .. && ./build-and-push.sh
+./ssh-config.sh
+cd ansible
+ansible-galaxy collection install -r requirements.yml
+ansible-playbook site.yml
 ```
+
+- Terraform creates the VMs empty. Ansible installs Docker and starts the services on them; it connects through
+  the SSH config from `ssh-config.sh` (see [SSH](#ssh)).
+- `terraform apply` writes the inventory `ansible/inventory/inventory.ini` and the CA of the database
+  `ansible/files/db-ca.pem`. Both are git-ignored: run `terraform apply` before Ansible.
+- A second `ansible-playbook site.yml` run must show `changed=0`.
 
 Without `source .env`, Terraform runs as you instead of the `terraform` service account.
 
@@ -80,7 +90,7 @@ the Private Service Connect endpoint and the 10 GB disk are billed on top.
 - The instance has no public IP. The only way in is a Private Service Connect endpoint: an internal IP in the
   `private` subnet.
 - TLS is required. history and fetcher check the server certificate against the CA of the instance
-  (`sslmode=verify-ca`); the startup scripts put the CA in `/etc/crypto/db-ca.pem`.
+  (`sslmode=verify-ca`); Ansible puts the CA in `/etc/crypto/db-ca.pem`.
 - Terraform creates the user `app` with the password from the secret `crypto-db-app-password`. With the `postgres`
   backend, `crypto-db-roles.service` on the history VM creates `queue_worker` for the fetcher.
 - `terraform destroy` deletes the instance with its data: there are no backups.
@@ -105,7 +115,8 @@ PGPASSWORD=$(gcloud secrets versions access latest --secret=crypto-db-app-passwo
 
 - Edit `config.json`. VS Code checks it against the schema as you type; the pre-commit hook checks it on commit.
 - `vms.defaults` apply to every VM; a machine lists only what differs.
-- A new `image_tag` or a switch of `app.backend` (`postgres` / `redis`) recreates the affected VMs.
+- After a change, run `terraform apply`, then `ansible-playbook site.yml`: a new `image_tag` or a switch of
+  `app.backend` (`postgres` / `redis`) reaches the VMs only through Ansible.
 - A VM with `backends` exists only for those backends: `redis` creates the `broker` VM with Redis, `postgres` removes it.
 
 ## Leaving the project

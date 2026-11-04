@@ -6,27 +6,8 @@ locals {
     for name, machine in local.all_machines : name => machine
     if contains(try(machine.backends, [local.backend]), local.backend)
   }
-  data_disks    = { for name, machine in local.machines : name => machine.data_disk if can(machine.data_disk) }
-  containers    = { for name, machine in local.machines : name => machine if can(machine.image_tag) }
-  registry_host = "${var.config.project.region}-docker.pkg.dev"
-  registry      = "${local.registry_host}/${var.config.project.id}/${var.registry.repository_id}"
-  hosts         = { for name, machine in local.all_machines : name => "${name}.${machine.zone}.c.${var.config.project.id}.internal" }
-  startup_scripts = {
-    for name, machine in local.machines : name => join("\n", [
-      templatefile("${path.module}/templates/common.sh.tftpl", {}),
-      templatefile("${path.module}/templates/${name}.sh.tftpl", {
-        image            = can(machine.image_tag) ? "${local.registry}/${name}:${machine.image_tag}" : ""
-        registry_host    = local.registry_host
-        project_id       = var.config.project.id
-        backend          = local.backend
-        hosts            = local.hosts
-        database         = var.database
-        port             = try(machine.port, null)
-        data_disk_device = try("/dev/disk/by-id/google-${machine.data_disk.device_name}", "")
-      }),
-    ])
-    if can(machine.image_tag) || fileexists("${path.module}/templates/${name}.sh.tftpl")
-  }
+  data_disks = { for name, machine in local.machines : name => machine.data_disk if can(machine.data_disk) }
+  containers = { for name, machine in local.machines : name => machine if can(machine.image_tag) }
 }
 
 resource "google_service_account" "vm" {
@@ -74,8 +55,6 @@ resource "google_compute_instance" "vm" {
       mode        = "READ_WRITE"
     }
   }
-
-  metadata_startup_script = try(local.startup_scripts[each.key], null)
 
   # SSH access is granted through IAM.
   metadata = {

@@ -40,14 +40,3 @@ variable "registry" {
     name          = string
   })
 }
-
-variable "database" {
-  description = "How the VMs reach Postgres in Cloud SQL (from the cloud_sql module)"
-  type = object({
-    host            = string
-    ca_cert         = string
-    name            = string
-    user            = string
-    password_secret = string
-  })
-}

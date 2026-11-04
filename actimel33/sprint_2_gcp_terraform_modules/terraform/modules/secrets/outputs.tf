@@ -1,5 +1,5 @@
 output "secret_ids" {
-  description = "Secret IDs, for gcloud secrets versions access in startup scripts"
+  description = "Secret IDs, for gcloud secrets versions access in the start scripts on the VMs"
   value       = [for secret in google_secret_manager_secret.password : secret.secret_id]
 }
 

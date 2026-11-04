@@ -29,7 +29,6 @@ module "vms" {
 
   subnets  = module.network.subnets
   registry = module.artifact_registry.repository
-  database = module.cloud_sql.connection
 }
 
 module "secrets" {
