@@ -1,7 +1,8 @@
 variable "cfg" {
   type = object({
-    google      = object({ project_id = string, region = string, zone = string })
-    application = object({ database_name = string, postgres_only = bool })
+    google   = object({ project_id = string, region = string, zone = string })
+    database = object({ name = string })
+    modes    = object({ postgres_only = bool })
     cloud_sql = optional(object({
       name                = optional(string, "kyiv-air-postgres")
       tier                = optional(string, "db-f1-micro")

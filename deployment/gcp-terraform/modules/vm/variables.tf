@@ -8,8 +8,11 @@ variable "cfg" {
     cloudflare = object({
       domain = string
     })
-    deploy_vms     = optional(bool, true)
-    vm_name_prefix = optional(string, "kyiv-air")
+    vm_options = optional(object({
+      name_prefix   = optional(string, "kyiv-air")
+      deploy        = optional(bool, true)
+      probe_timeout = optional(number, 600)
+    }), {})
     vm = map(object({
       machine_type = optional(string, "e2-micro")
       private_ip   = string
@@ -35,19 +38,20 @@ variable "cfg" {
         ports = set(number)
       }))
     })
-    application = object({
-      image_version = string
+    modes = object({
       postgres_only = bool
-      database_name = string
-      ready_timeout = number
+      cloud_sql     = bool
+    })
+    database = object({
+      name = string
+    })
+    registry = object({
+      image_version = string
     })
     images = map(string)
     secrets = optional(object({
       versions = optional(map(string), {})
     }), {})
-    cloud_sql = object({
-      enabled = bool
-    })
   })
 }
 

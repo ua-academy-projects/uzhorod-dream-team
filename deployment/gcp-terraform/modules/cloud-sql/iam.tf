@@ -1,5 +1,5 @@
 locals {
-  client_vms = var.cfg.application.postgres_only ? ["history", "fetcher"] : ["history"]
+  client_vms = var.cfg.modes.postgres_only ? ["history", "fetcher"] : ["history"]
 }
 
 resource "google_project_iam_member" "client" {

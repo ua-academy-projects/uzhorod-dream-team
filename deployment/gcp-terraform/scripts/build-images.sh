@@ -15,7 +15,7 @@ fi
 registry=$(jq -er '.google.region + "-docker.pkg.dev/" + .google.project_id' "$config")
 repository=$(jq -er '.registry.id // "kyiv-air"' "$config")
 registry=$registry/$repository
-version=$(jq -er '.application.image_version' "$config")
+version=$(jq -er '.registry.image_version' "$config")
 registry_host=${registry%%/*}
 gcloud auth configure-docker "$registry_host" --quiet
 

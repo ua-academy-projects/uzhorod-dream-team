@@ -1,8 +1,8 @@
 resource "google_sql_database_instance" "main" {
-  project             = var.cfg.google.project_id
-  name                = var.cfg.cloud_sql.name
-  region              = var.cfg.google.region
-  database_version    = "POSTGRES_16"
+  project          = var.cfg.google.project_id
+  name             = var.cfg.cloud_sql.name
+  region           = var.cfg.google.region
+  database_version = "POSTGRES_16"
 
   settings {
     edition                     = "ENTERPRISE"
@@ -37,6 +37,6 @@ resource "google_sql_database_instance" "main" {
 resource "google_sql_database" "application" {
   project  = var.cfg.google.project_id
   instance = google_sql_database_instance.main.name
-  name     = var.cfg.application.database_name
+  name     = var.cfg.database.name
 }
 

@@ -26,7 +26,7 @@ module "secrets" {
 
 module "cloud_sql" {
   source = "./modules/cloud-sql"
-  count  = local.cfg.cloud_sql.enabled ? 1 : 0
+  count  = local.cfg.modes.cloud_sql ? 1 : 0
 
   cfg              = local.cfg
   network          = module.network
