@@ -47,6 +47,7 @@ locals {
           POSTGRES_DB          = var.cfg.database.name
           SSH_PORT             = tostring(one(var.cfg.network.firewall_rules["iap-ssh"].ports))
           READY_TIMEOUT        = tostring(var.cfg.vm_options.probe_timeout)
+          BASTION_SSH          = tostring(var.cfg.vm_options.bastion_ssh)
           APPLICATION_ENV      = jsonencode(vm.env)
           SECRET_REFS = length(vm.secrets) > 0 ? jsonencode({
             for name in vm.secrets : name => {

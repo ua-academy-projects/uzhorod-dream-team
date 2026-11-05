@@ -12,6 +12,7 @@ variable "cfg" {
       name_prefix   = optional(string, "kyiv-air")
       deploy        = optional(bool, true)
       probe_timeout = optional(number, 600)
+      bastion_ssh   = optional(bool, false)
     }), {})
     vm = map(object({
       machine_type = optional(string, "e2-micro")
