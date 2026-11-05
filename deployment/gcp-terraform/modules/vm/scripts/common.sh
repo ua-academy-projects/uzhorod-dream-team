@@ -9,6 +9,8 @@ READY_TIMEOUT=${READY_TIMEOUT:-600}
 readonly SSH_PORT=${SSH_PORT:-222}
 POSTGRES_ONLY=${POSTGRES_ONLY:-false}
 [[ "$POSTGRES_ONLY" == true || "$POSTGRES_ONLY" == false ]] || { echo "Invalid POSTGRES_ONLY" >&2; exit 1; }
+CLOUD_SQL=${CLOUD_SQL:-false}
+[[ "$CLOUD_SQL" == true || "$CLOUD_SQL" == false ]] || { echo "Invalid CLOUD_SQL" >&2; exit 1; }
 export DEBIAN_FRONTEND=noninteractive
 
 fail() { echo "$*" >&2; exit 1; }

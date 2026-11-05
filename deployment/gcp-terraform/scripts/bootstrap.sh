@@ -80,6 +80,8 @@ BOOTSTRAP_CONFIG_DIR=${BOOTSTRAP_CONFIG_DIR/#\~/$HOME}
 DEPLOYMENT_CONFIG=${DEPLOYMENT_CONFIG:-$BOOTSTRAP_CONFIG_DIR/deployment.json}
 if "$interactive"; then prompt DEPLOYMENT_CONFIG; fi
 DEPLOYMENT_CONFIG=${DEPLOYMENT_CONFIG/#\~/$HOME}
+if "$interactive"; then prompt BOOTSTRAP_OUTPUT_DIR; fi
+BOOTSTRAP_OUTPUT_DIR=${BOOTSTRAP_OUTPUT_DIR/#\~/$HOME}
 
 # Reading project ID & billing account
 BOOTSTRAP_PROJECT_ID=${BOOTSTRAP_PROJECT_ID:-}
@@ -89,7 +91,7 @@ if "$interactive"; then
   prompt BOOTSTRAP_BILLING_ACCOUNT
 fi
 missing=()
-for name in BOOTSTRAP_PROJECT_ID BOOTSTRAP_BILLING_ACCOUNT DEPLOYMENT_CONFIG; do
+for name in BOOTSTRAP_PROJECT_ID BOOTSTRAP_BILLING_ACCOUNT DEPLOYMENT_CONFIG BOOTSTRAP_OUTPUT_DIR; do
   [[ -n "${!name}" ]] || missing+=("$name")
 done
 if (( ${#missing[@]} )); then
@@ -110,12 +112,14 @@ if "$interactive"; then
 fi
 
 install -d -m 0700 "$BOOTSTRAP_CONFIG_DIR"
+install -d -m 0700 "$BOOTSTRAP_OUTPUT_DIR"
 BOOTSTRAP_CONFIG_DIR=$(cd "$BOOTSTRAP_CONFIG_DIR" && pwd)
+BOOTSTRAP_OUTPUT_DIR=$(cd "$BOOTSTRAP_OUTPUT_DIR" && pwd)
 
 readonly CONFIG_FILE=$(realpath "$DEPLOYMENT_CONFIG")
-readonly BACKEND_FILE=$BOOTSTRAP_CONFIG_DIR/backend.ini
-readonly KEY_FILE=$BOOTSTRAP_CONFIG_DIR/terraform-key.json
-readonly ENV_FILE=$BOOTSTRAP_CONFIG_DIR/env.sh
+readonly BACKEND_FILE=$BOOTSTRAP_OUTPUT_DIR/backend.ini
+readonly KEY_FILE=$BOOTSTRAP_OUTPUT_DIR/terraform-key.json
+readonly ENV_FILE=$BOOTSTRAP_OUTPUT_DIR/env.sh
 readonly ACCOUNT=$SERVICE_ACCOUNT_NAME@$BOOTSTRAP_PROJECT_ID.iam.gserviceaccount.com
 
 jq -e 'type == "object"' "$CONFIG_FILE" >/dev/null || die "Expected a JSON object in $CONFIG_FILE."

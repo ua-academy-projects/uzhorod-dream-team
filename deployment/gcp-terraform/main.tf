@@ -25,7 +25,9 @@ module "secrets" {
 }
 
 module "cloud_sql" {
-  source           = "./modules/cloud-sql"
+  source = "./modules/cloud-sql"
+  count  = local.cfg.cloud_sql.enabled ? 1 : 0
+
   cfg              = local.cfg
   network          = module.network
   service_accounts = google_service_account.vm
@@ -41,7 +43,7 @@ module "vm" {
   network          = module.network
   registry         = module.registry
   secrets          = module.secrets
-  cloud_sql        = module.cloud_sql
+  cloud_sql        = one(module.cloud_sql)
 
   depends_on = [module.network, module.registry, module.secrets, module.cloud_sql]
 }

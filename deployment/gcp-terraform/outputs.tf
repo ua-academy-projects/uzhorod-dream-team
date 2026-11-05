@@ -11,9 +11,5 @@ output "vms" {
 }
 
 output "cloud_sql" {
-  value = {
-    connection_name = module.cloud_sql.connection_name
-    dns_name        = module.cloud_sql.dns_name
-    endpoint_ip     = module.cloud_sql.endpoint_ip
-  }
+  value = one(module.cloud_sql)
 }

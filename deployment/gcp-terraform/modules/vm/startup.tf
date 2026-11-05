@@ -9,7 +9,8 @@ locals {
     UI_IMAGE        = "${local.repo_url}/ui:${var.cfg.application.image_version}"
   }
 
-  vms = { for name, vm in var.cfg.vm : name => vm if name != "db" || !var.cfg.application.postgres_only }
+  deploy_db_vm = !(var.cfg.cloud_sql.enabled && var.cfg.application.postgres_only)
+  vms          = { for name, vm in var.cfg.vm : name => vm if name != "db" || local.deploy_db_vm }
 
   startup_scripts = { for name, vm in local.vms :
     name => templatefile("${path.module}/templates/startup.sh.tftpl", {
@@ -32,10 +33,11 @@ locals {
           REGISTRY_HOST        = "${local.google.region}-docker.pkg.dev"
           PRIVATE_IP           = vm.private_ip
           DB_IP                = try(var.cfg.vm.db.private_ip, "")
-          DB_HOST              = "kyiv-air-sql-proxy"
+          DB_HOST              = var.cfg.cloud_sql.enabled ? "kyiv-air-sql-proxy" : try(var.cfg.vm.db.private_ip, "")
           REDIS_HOST           = try(var.cfg.vm.db.private_ip, "")
           RABBITMQ_HOST        = try(var.cfg.vm.db.private_ip, "")
-          CLOUD_SQL_CONNECTION = var.cloud_sql.connection_name
+          CLOUD_SQL            = tostring(var.cfg.cloud_sql.enabled)
+          CLOUD_SQL_CONNECTION = try(var.cloud_sql.connection_name, "")
           FETCHER_IP           = var.cfg.vm.fetcher.private_ip
           HISTORY_IP           = var.cfg.vm.history.private_ip
           UI_IP                = var.cfg.vm.ui.private_ip

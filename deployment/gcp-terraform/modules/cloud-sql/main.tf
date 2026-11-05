@@ -3,7 +3,7 @@ resource "google_sql_database_instance" "main" {
   name                = var.cfg.cloud_sql.name
   region              = var.cfg.google.region
   database_version    = "POSTGRES_16"
-  deletion_protection = true
+
   settings {
     edition                     = "ENTERPRISE"
     tier                        = var.cfg.cloud_sql.tier
@@ -11,7 +11,7 @@ resource "google_sql_database_instance" "main" {
     disk_type                   = "PD_SSD"
     disk_size                   = var.cfg.cloud_sql.disk_size_gb
     disk_autoresize             = true
-    deletion_protection_enabled = true
+    deletion_protection_enabled = var.cfg.cloud_sql.deletion_protection
     location_preference { zone = var.cfg.google.zone }
     backup_configuration {
       enabled                        = true

@@ -45,6 +45,9 @@ variable "cfg" {
     secrets = optional(object({
       versions = optional(map(string), {})
     }), {})
+    cloud_sql = object({
+      enabled = bool
+    })
   })
 }
 
@@ -79,5 +82,6 @@ variable "secrets" {
 }
 
 variable "cloud_sql" {
-  type = object({ connection_name = string })
+  type    = object({ connection_name = string })
+  default = null
 }

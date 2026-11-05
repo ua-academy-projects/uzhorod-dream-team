@@ -12,12 +12,53 @@ DATA_MOUNT=${DATA_MOUNT:-/srv/kyiv-air-data}
 prepare_data_disk
 prepare_runtime db
 
-REDIS_PASSWORD=$(get_secret redis-password)
-validate_password REDIS_PASSWORD "$REDIS_PASSWORD" 32
-read_rabbitmq
 install -d -m 0755 /etc/systemd/system/docker.service.d
 printf '[Unit]\nRequiresMountsFor=%s\n' "$DATA_MOUNT" > /etc/systemd/system/docker.service.d/kyiv-air-data.conf
 systemctl daemon-reload
+
+# PostgreSQL runs here only without Cloud SQL. History runs migrations as this superuser.
+if [[ "$CLOUD_SQL" == false ]]; then
+  DB_NAME=${POSTGRES_DB:-kyiv_air}
+  [[ "$DB_NAME" =~ ^[a-z_][a-z0-9_]*$ ]] || fail "POSTGRES_DB must be a lowercase identifier."
+  MIGRATION_PASSWORD=$(get_secret postgres-migration-password)
+  validate_password POSTGRES_MIGRATION_PASSWORD "$MIGRATION_PASSWORD" 32
+
+  printf 'POSTGRES_DB=%s\nPOSTGRES_USER=kyiv_air_migrate\nPOSTGRES_PASSWORD=%s\n' "$DB_NAME" "$MIGRATION_PASSWORD" > "$CONFIG/postgres.env"
+  chmod 0600 "$CONFIG/postgres.env"
+  pg_ports=(-p "$PRIVATE_IP:5432:5432" -p 127.0.0.1:5432:5432)
+  docker pull "$POSTGRES_IMAGE"
+  docker run --rm --user root --entrypoint sh \
+    --mount "type=bind,src=$DATA_MOUNT,dst=/data" "$POSTGRES_IMAGE" -c \
+    'mkdir -p /data/postgres && chown postgres:postgres /data/postgres && chmod 0700 /data/postgres'
+  replace_container kyiv-air-postgres "${pg_ports[@]}" --env-file "$CONFIG/postgres.env" \
+    --mount "type=bind,src=$DATA_MOUNT/postgres,dst=/var/lib/postgresql/data" "$POSTGRES_IMAGE" postgres -c shared_preload_libraries=
+  wait_command PostgreSQL docker exec kyiv-air-postgres pg_isready -h 127.0.0.1 -U kyiv_air_migrate -d "$DB_NAME"
+  wait_command "PostgreSQL database" docker exec kyiv-air-postgres psql -U kyiv_air_migrate -d "$DB_NAME" -v ON_ERROR_STOP=1 -c 'SELECT 1'
+  docker exec -i kyiv-air-postgres psql -U kyiv_air_migrate -d "$DB_NAME" -v ON_ERROR_STOP=1 < <(
+    printf "\\set password '%s'\n" "$MIGRATION_PASSWORD"
+    printf "ALTER ROLE kyiv_air_migrate WITH PASSWORD :'password';\n"
+  ) >/dev/null
+elif docker container inspect kyiv-air-postgres >/dev/null 2>&1; then
+  docker stop --timeout 30 kyiv-air-postgres >/dev/null
+  docker rm kyiv-air-postgres >/dev/null
+  rm -f "$CONFIG/postgres.env"
+fi
+
+if [[ "$POSTGRES_ONLY" == true ]]; then
+  for container in kyiv-air-redis kyiv-air-rabbitmq; do
+    if docker container inspect "$container" >/dev/null 2>&1; then
+      docker stop --timeout 30 "$container" >/dev/null
+      docker rm "$container" >/dev/null
+    fi
+  done
+  rm -f "$CONFIG/redis.conf" "$CONFIG/redis-probe.env" "$CONFIG/rabbitmq.conf" "$CONFIG/rabbitmq.env"
+  exit 0
+fi
+
+# Redis and RabbitMQ
+REDIS_PASSWORD=$(get_secret redis-password)
+validate_password REDIS_PASSWORD "$REDIS_PASSWORD" 32
+read_rabbitmq
 
 printf 'REDISCLI_AUTH=%s\n' "$REDIS_PASSWORD" > "$CONFIG/redis-probe.env"
 chmod 0600 "$CONFIG/redis-probe.env"

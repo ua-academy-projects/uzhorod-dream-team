@@ -6,7 +6,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 : "${PRIVATE_IP:?Set PRIVATE_IP in the startup environment.}"
 
 prepare_runtime fetcher
-if [[ "$POSTGRES_ONLY" == true ]]; then
+if [[ "$POSTGRES_ONLY" == true && "$CLOUD_SQL" == true ]]; then
   source "$HELPERS/cloud-sql.sh"
   start_sql_proxy
 fi
