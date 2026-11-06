@@ -1,0 +1,4 @@
+ansible-core>=2.16
+google-auth>=2.20    
+requests>=2.31
+jsonschema>=4.18      

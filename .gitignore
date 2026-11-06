@@ -1,4 +1,5 @@
 .env
+.vscode/
 *.log
 .vagrant/
 __pycache__/
@@ -12,6 +13,7 @@ infra/**/.terraform/
 *.tfstate.*
 infra/**/.build/
 
-infra/bootstrap.env
-infra/terraform.env
+infra/**/bootstrap.env
+infra/**/terraform.env
+infra/**/terraform-key.json
 infra/**/backend.hcl

@@ -1,5 +1,3 @@
-# The private network: one VPC with one subnet, internet OUT through Cloud NAT
-
 locals {
   cfg = var.config
 }

@@ -1,0 +1,11 @@
+---
+#   ansible-playbook citybikes.infra.ping
+
+- name: The collection works
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Say where we are
+      ansible.builtin.debug:
+        msg: "citybikes.infra, playbook {{ playbook_dir }}, Ansible {{ ansible_version.full }}"

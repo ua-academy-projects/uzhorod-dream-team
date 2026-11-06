@@ -1,0 +1,19 @@
+namespace: citybikes
+name: infra
+version: 1.0.0
+readme: README.rst
+authors:
+  - Bohdan Podkolzin
+description: Deploys CityBikes History on GCP (the VMs made by infra/envs/dev), its secrets and its database.
+license:
+  - MIT
+tags: [gcp, docker, deployment]
+dependencies:
+  google.cloud: ">=1.4.0"
+  community.docker: ">=3.10.0"
+  ansible.posix: ">=1.5.0"
+  ansible.utils: ">=4.0.0"
+  cloud.terraform: ">=3.0.0"
+build_ignore:
+  - tests
+  - "*.tar.gz"
