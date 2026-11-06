@@ -1,0 +1,7 @@
+images_source_dir: "{{ playbook_dir }}/../.."
+images_platform: linux/amd64
+images_components:
+  - { name: fetcher, context: fetcher }
+  - { name: history, context: history, target: runtime }
+  - { name: ui, context: ui }
+  - { name: migrate, context: history, target: migrate }

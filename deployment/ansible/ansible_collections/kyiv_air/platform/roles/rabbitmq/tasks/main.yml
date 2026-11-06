@@ -1,0 +1,88 @@
+- name: Remove RabbitMQ when PostgreSQL replaces it
+  when: kyiv_air_postgres_only | bool
+  block:
+    - name: Remove the container
+      ansible.builtin.include_role:
+        name: kyiv_air.platform.container
+      vars:
+        container_name: kyiv-air-rabbitmq
+        container_state: absent
+
+    - name: Remove the configuration file
+      ansible.builtin.file:
+        path: "{{ kyiv_air_config_dir }}/rabbitmq.conf"
+        state: absent
+
+- name: Run RabbitMQ on this VM
+  when: not (kyiv_air_postgres_only | bool)
+  block:
+    - name: Prepare the data directory
+      community.docker.docker_container:
+        name: kyiv-air-prepare-rabbitmq
+        image: "{{ cfg.images.RABBITMQ_IMAGE }}"
+        user: root
+        entrypoint: [sh, -c]
+        command: ["mkdir -p /data/rabbitmq && chown rabbitmq:rabbitmq /data/rabbitmq && chmod 0700 /data/rabbitmq"]
+        mounts:
+          - type: bind
+            source: "{{ kyiv_air_data_mount }}"
+            target: /data
+        detach: false
+        cleanup: true
+      changed_when: false
+
+    - name: Write the configuration
+      ansible.builtin.copy:
+        dest: "{{ kyiv_air_config_dir }}/rabbitmq.conf"
+        content: |
+          vm_memory_high_watermark.absolute = 512MB
+        mode: "0644"
+
+    - name: Start RabbitMQ
+      ansible.builtin.include_role:
+        name: kyiv_air.platform.container
+      vars:
+        container_name: kyiv-air-rabbitmq
+        container_image: "{{ cfg.images.RABBITMQ_IMAGE }}"
+        container_pull: missing
+        container_hostname: kyiv-air-rabbitmq
+        container_ports:
+          - "{{ cfg.vm.db.private_ip }}:5672:5672"
+          - 127.0.0.1:5672:5672
+          - 127.0.0.1:15672:15672
+        container_env:
+          RABBITMQ_DEFAULT_USER: kyiv_air
+          RABBITMQ_DEFAULT_PASS: "{{ kyiv_air_secrets['rabbitmq-password'] }}"
+          RABBITMQ_DEFAULT_VHOST: kyiv-air
+          RABBITMQ_NODENAME: rabbit@kyiv-air-rabbitmq
+        container_mounts:
+          - type: bind
+            source: "{{ kyiv_air_data_mount }}/rabbitmq"
+            target: /var/lib/rabbitmq
+          - type: bind
+            source: "{{ kyiv_air_config_dir }}/rabbitmq.conf"
+            target: /etc/rabbitmq/rabbitmq.conf
+            read_only: true
+        container_probe_exec: [rabbitmq-diagnostics, -q, check_running]
+
+    - name: Configure the RabbitMQ user
+      community.docker.docker_container_exec:
+        container: kyiv-air-rabbitmq
+        argv: "{{ item }}"
+      loop:
+        - [rabbitmqctl, -q, change_password, kyiv_air, "{{ kyiv_air_secrets['rabbitmq-password'] }}"]
+        - [rabbitmqctl, -q, set_permissions, -p, kyiv-air, kyiv_air, '.*', '.*', '.*']
+        - [rabbitmqctl, -q, set_user_tags, kyiv_air, management]
+        - [rabbitmqctl, -q, authenticate_user, kyiv_air, "{{ kyiv_air_secrets['rabbitmq-password'] }}"]
+      changed_when: false
+      no_log: true
+
+    - name: Wait for the AMQP listener
+      community.docker.docker_container_exec:
+        container: kyiv-air-rabbitmq
+        argv: [rabbitmq-diagnostics, -q, check_port_listener, "5672"]
+      register: rabbitmq_amqp
+      until: rabbitmq_amqp.rc == 0
+      retries: "{{ kyiv_air_probe_retries | int }}"
+      delay: "{{ kyiv_air_probe_delay }}"
+      changed_when: false

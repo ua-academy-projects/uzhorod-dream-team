@@ -1,0 +1,106 @@
+- name: Gather facts
+  ansible.builtin.setup:
+    gather_subset: [min]
+
+- name: Assert an amd64 guest
+  ansible.builtin.assert:
+    that: ansible_facts.architecture == 'x86_64'
+    fail_msg: This deployment requires an amd64 guest.
+
+- name: Install base packages
+  ansible.builtin.apt:
+    name: "{{ base_packages }}"
+    install_recommends: false
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Create the apt keyring directory
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: "0755"
+
+- name: Download repository signing keys
+  ansible.builtin.get_url:
+    url: "{{ item.url }}"
+    dest: "/etc/apt/keyrings/{{ item.name }}.asc"
+    mode: "0644"
+  loop:
+    - { name: google-cloud, url: "https://packages.cloud.google.com/apt/doc/apt-key.gpg" }
+    - { name: docker, url: "https://download.docker.com/linux/ubuntu/gpg" }
+  register: base_keys
+
+- name: Add the Google Cloud apt repository
+  ansible.builtin.deb822_repository:
+    name: google-cloud-sdk
+    uris: https://packages.cloud.google.com/apt
+    suites: [cloud-sdk]
+    components: [main]
+    signed_by: /etc/apt/keyrings/google-cloud.asc
+  register: base_google_repo
+
+- name: Add the Docker apt repository
+  ansible.builtin.deb822_repository:
+    name: docker
+    uris: https://download.docker.com/linux/ubuntu
+    suites: ["{{ ansible_facts.distribution_release }}"]
+    components: [stable]
+    architectures: [amd64]
+    signed_by: /etc/apt/keyrings/docker.asc
+  register: base_docker_repo
+
+- name: Install Google Cloud CLI and Docker
+  ansible.builtin.apt:
+    name:
+      - google-cloud-cli
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+    install_recommends: false
+    update_cache: "{{ base_google_repo is changed or base_docker_repo is changed }}"
+
+- name: Enable and start Docker
+  ansible.builtin.systemd_service:
+    name: docker
+    enabled: true
+    state: started
+
+- name: Read the Docker client version
+  ansible.builtin.command: docker version --format '{% raw %}{{.Client.Version}}{% endraw %}'
+  register: base_docker_version
+  changed_when: false
+
+- name: Require Docker 28 or newer (loopback port isolation)
+  ansible.builtin.assert:
+    that: (base_docker_version.stdout.split('.') | first | int) >= base_docker_min_major
+    fail_msg: "Docker {{ base_docker_min_major }} or newer is required for loopback port isolation."
+
+- name: Read a registry access token from the VM service account
+  ansible.builtin.command: gcloud auth print-access-token
+  register: base_registry_token
+  changed_when: false
+  no_log: true
+
+- name: Log in to Artifact Registry
+  community.docker.docker_login:
+    registry_url: "{{ kyiv_air_registry_host }}"
+    username: oauth2accesstoken
+    password: "{{ base_registry_token.stdout }}"
+  changed_when: false
+  no_log: true
+
+- name: Create the kyiv-air Docker network
+  community.docker.docker_network:
+    name: "{{ kyiv_air_network }}"
+    driver_options:
+      com.docker.network.bridge.name: kyiv-air0
+
+- name: Create application directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    mode: "{{ item.mode }}"
+  loop:
+    - { path: "{{ kyiv_air_app_dir }}", mode: "0755" }
+    - { path: "{{ kyiv_air_app_dir }}/bin", mode: "0755" }
+    - { path: "{{ kyiv_air_config_dir }}", mode: "0700" }

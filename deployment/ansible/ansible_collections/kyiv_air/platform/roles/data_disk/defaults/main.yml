@@ -1,0 +1,2 @@
+data_disk_device: "/dev/disk/by-id/google-{{ cfg.vm.db.data_disk.device_name }}"
+data_disk_mount: "{{ kyiv_air_data_mount }}"

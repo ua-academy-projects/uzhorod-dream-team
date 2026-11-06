@@ -1,0 +1,10 @@
+galaxy_info:
+  author: Kyiv Air
+  description: Generic Docker container with an optional readiness probe
+  license: MIT
+  min_ansible_version: "2.17"
+  platforms:
+    - name: Ubuntu
+      versions: [all]
+dependencies:
+  - role: kyiv_air.platform.common

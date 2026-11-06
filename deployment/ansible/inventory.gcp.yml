@@ -1,0 +1,23 @@
+plugin: google.cloud.gcp_compute
+auth_kind: application
+
+projects:
+  - "{{ (lookup('file', lookup('env', 'DEPLOYMENT_CONFIG')) | from_json).google.project_id }}"
+zones:
+  - "{{ (lookup('file', lookup('env', 'DEPLOYMENT_CONFIG')) | from_json).google.zone }}"
+filters:
+  - "name = {{ (lookup('file', lookup('env', 'DEPLOYMENT_CONFIG')) | from_json).vm_options.name_prefix | default('kyiv-air') }}-*"
+
+hostnames:
+  - name
+
+keyed_groups:
+  - key: tags['items']
+    prefix: ""
+    separator: ""
+
+groups:
+  internal: "'bastion' not in (tags['items'] | default([]))"
+
+compose:
+  ansible_host: "networkInterfaces[0].accessConfigs[0].natIP if 'bastion' in (tags['items'] | default([])) else name"

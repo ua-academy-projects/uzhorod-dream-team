@@ -1,0 +1,84 @@
+- name: Install cron
+  ansible.builtin.apt:
+    name: cron
+    install_recommends: false
+
+- name: Create the certificate group
+  ansible.builtin.group:
+    name: "{{ certbot_group }}"
+    system: true
+
+- name: Read the certificate group id
+  ansible.builtin.getent:
+    database: group
+    key: "{{ certbot_group }}"
+
+- name: Remember the certificate group id
+  ansible.builtin.set_fact:
+    kyiv_air_certificate_gid: "{{ getent_group[certbot_group][1] }}"
+
+- name: Create certificate directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    mode: "{{ item.mode }}"
+  loop:
+    - { path: /etc/letsencrypt, mode: "0700" }
+    - { path: /var/lib/letsencrypt, mode: "0700" }
+    - { path: /var/log/letsencrypt, mode: "0750" }
+
+- name: Write the Cloudflare credentials
+  ansible.builtin.copy:
+    dest: "{{ kyiv_air_config_dir }}/cloudflare.ini"
+    content: "dns_cloudflare_api_token = {{ kyiv_air_secrets['cloudflare-dns-token'] }}\n"
+    mode: "0600"
+  no_log: true
+
+- name: Write the certbot settings
+  ansible.builtin.copy:
+    dest: "{{ kyiv_air_config_dir }}/certbot-settings.env"
+    content: |
+      CERTBOT_IMAGE={{ certbot_image }}
+      CERTBOT_DOMAIN={{ certbot_domain }}
+      CERTIFICATE_GROUP={{ certbot_group }}
+    mode: "0600"
+
+- name: Install the renewal script
+  ansible.builtin.copy:
+    src: renew-certificates.sh
+    dest: "{{ kyiv_air_app_dir }}/bin/renew-certificates"
+    mode: "0755"
+
+- name: Obtain the certificate
+  ansible.builtin.command:
+    argv:
+      - "{{ kyiv_air_app_dir }}/bin/renew-certificates"
+      - certonly
+      - --dns-cloudflare
+      - --agree-tos
+      - --email
+      - "{{ kyiv_air_secrets['certbot-email'] }}"
+      - --cert-name
+      - "{{ certbot_domain }}"
+      - -d
+      - "{{ certbot_domain }}"
+      - --keep-until-expiring
+  environment:
+    CONFIG: "{{ kyiv_air_config_dir }}"
+  register: certbot_run
+  changed_when: "'Successfully received certificate' in certbot_run.stdout"
+
+- name: Schedule certificate renewal
+  ansible.builtin.cron:
+    cron_file: kyiv-air-certbot
+    name: kyiv-air certificate renewal
+    user: root
+    minute: "42"
+    hour: "8,20"
+    job: "CONFIG={{ kyiv_air_config_dir }} /bin/bash {{ kyiv_air_app_dir }}/bin/renew-certificates >> /var/log/letsencrypt/renewal-cron.log 2>&1"
+
+- name: Enable cron
+  ansible.builtin.systemd_service:
+    name: cron
+    enabled: true
+    state: started

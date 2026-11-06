@@ -1,0 +1,38 @@
+- name: Install disk tools
+  ansible.builtin.apt:
+    name: [e2fsprogs, util-linux]
+    install_recommends: false
+
+- name: Create an ext4 filesystem on an empty disk
+  community.general.filesystem:
+    fstype: ext4
+    dev: "{{ data_disk_device }}"
+
+- name: Read the filesystem UUID
+  ansible.builtin.command: blkid -s UUID -o value {{ data_disk_device }}
+  register: data_disk_uuid
+  changed_when: false
+
+- name: Create the Docker drop-in directory
+  ansible.builtin.file:
+    path: /etc/systemd/system/docker.service.d
+    state: directory
+    mode: "0755"
+
+- name: Mount the data disk
+  ansible.posix.mount:
+    path: "{{ data_disk_mount }}"
+    src: "UUID={{ data_disk_uuid.stdout }}"
+    fstype: ext4
+    opts: defaults,nofail
+    passno: 2
+    state: mounted
+
+- name: Make Docker wait for the data mount
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/docker.service.d/kyiv-air-data.conf
+    content: |
+      [Unit]
+      RequiresMountsFor={{ data_disk_mount }}
+    mode: "0644"
+  notify: Reload systemd

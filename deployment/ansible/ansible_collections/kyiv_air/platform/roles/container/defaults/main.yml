@@ -1,0 +1,15 @@
+container_name: ""
+container_image: ""
+container_state: started
+container_pull: always
+container_hardened: false
+container_command: []
+container_hostname: ""
+container_ports: []
+container_env: {}
+container_mounts: []
+container_groups: []
+
+container_probe_url: ""
+container_probe_exec: []
+container_probe_env: {}

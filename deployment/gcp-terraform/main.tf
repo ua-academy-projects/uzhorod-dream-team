@@ -41,9 +41,4 @@ module "vm" {
   cfg              = local.cfg
   service_accounts = google_service_account.vm
   network          = module.network
-  registry         = module.registry
-  secrets          = module.secrets
-  cloud_sql        = one(module.cloud_sql)
-
-  depends_on = [module.network, module.registry, module.secrets, module.cloud_sql]
 }

@@ -1,5 +1,40 @@
 locals {
   vm_tags = { for name, vm in var.cfg.vm : name => vm.tags }
+  ssh_port      = tostring(var.cfg.vm_options.ssh_port)
+  bastion_tags  = toset(["bastion"])
+  internal_tags = toset(flatten([for vm in var.cfg.vm : vm.tags if !contains(vm.tags, "bastion")]))
+}
+
+resource "google_compute_firewall" "ssh_admin" {
+  count = length(var.cfg.network.admin_ranges) > 0 ? 1 : 0
+
+  project   = var.cfg.google.project_id
+  name      = "${var.cfg.network.name}-ssh-admin"
+  network   = google_compute_network.main.id
+  direction = "INGRESS"
+
+  source_ranges = sort(tolist(var.cfg.network.admin_ranges))
+  target_tags   = sort(tolist(local.bastion_tags))
+
+  allow {
+    protocol = "tcp"
+    ports    = [local.ssh_port]
+  }
+}
+
+resource "google_compute_firewall" "ssh_bastion" {
+  project   = var.cfg.google.project_id
+  name      = "${var.cfg.network.name}-ssh-bastion"
+  network   = google_compute_network.main.id
+  direction = "INGRESS"
+
+  source_tags = sort(tolist(local.bastion_tags))
+  target_tags = sort(tolist(local.internal_tags))
+
+  allow {
+    protocol = "tcp"
+    ports    = [local.ssh_port]
+  }
 }
 
 resource "google_compute_firewall" "ingress" {

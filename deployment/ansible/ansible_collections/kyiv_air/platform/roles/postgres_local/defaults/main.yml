@@ -1,0 +1,2 @@
+postgres_local_user: kyiv_air_migrate
+postgres_local_container: kyiv-air-postgres

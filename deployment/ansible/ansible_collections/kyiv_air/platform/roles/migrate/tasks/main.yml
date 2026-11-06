@@ -1,0 +1,43 @@
+- name: Build the migration environment
+  ansible.builtin.set_fact:
+    migrate_env: >-
+      {{ {
+        'GOOSE_DBSTRING': 'postgres://kyiv_air_migrate:' ~ kyiv_air_secrets['postgres-migration-password'] ~ '@' ~ kyiv_air_db_host ~ ':5432/' ~ kyiv_air_database ~ '?sslmode=disable',
+        'HISTORY_DB_PASSWORD': kyiv_air_secrets['postgres-history-password'],
+        'POSTGRES_ONLY': (kyiv_air_postgres_only | bool) | string | lower
+      } | combine({'FETCHER_DB_PASSWORD': kyiv_air_secrets['postgres-fetcher-password']} if (kyiv_air_postgres_only | bool) else {}) }}
+  no_log: true
+
+- name: Wait for PostgreSQL
+  community.docker.docker_container:
+    name: kyiv-air-migrate-probe
+    image: "{{ migrate_client_image }}"
+    networks:
+      - name: "{{ kyiv_air_network }}"
+    env: "{{ migrate_env | combine({'PGCONNECT_TIMEOUT': '3'}) }}"
+    entrypoint: [sh, -c]
+    command: ['psql "$GOOSE_DBSTRING" -v ON_ERROR_STOP=1 -c "SELECT 1"']
+    detach: false
+    cleanup: true
+  register: migrate_probe
+  until: migrate_probe is succeeded
+  retries: "{{ kyiv_air_probe_retries | int }}"
+  delay: "{{ kyiv_air_probe_delay }}"
+  changed_when: false
+  no_log: true
+
+- name: Run database migrations
+  community.docker.docker_container:
+    name: kyiv-air-migrate
+    image: "{{ migrate_image }}"
+    pull: always
+    networks:
+      - name: "{{ kyiv_air_network }}"
+    env: "{{ migrate_env }}"
+    command: [up]
+    detach: false
+    cleanup: true
+    output_logs: true
+  register: migrate_run
+  changed_when: "'no migrations to run' not in (migrate_run.container.Output | default(''))"
+  no_log: true

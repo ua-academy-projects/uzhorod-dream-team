@@ -1,0 +1,3 @@
+certbot_group: kyiv-air-certificates
+certbot_domain: "{{ cfg.cloudflare.domain }}"
+certbot_image: "{{ cfg.images.CERTBOT_IMAGE }}"

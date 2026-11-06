@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
-source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/ssh.sh"
 
-(( EUID == 0 )) || fail "Run this script with sudo."
 : "${PRIVATE_IP:?Set PRIVATE_IP in the startup environment.}"
 DB_IP=${DB_IP:-}
 BASTION_SSH=${BASTION_SSH:-false}

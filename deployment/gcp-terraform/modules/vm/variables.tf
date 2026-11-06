@@ -5,14 +5,11 @@ variable "cfg" {
       region     = string
       zone       = string
     })
-    cloudflare = object({
-      domain = string
-    })
     vm_options = optional(object({
-      name_prefix   = optional(string, "kyiv-air")
-      deploy        = optional(bool, true)
-      probe_timeout = optional(number, 600)
-      bastion_ssh   = optional(bool, false)
+      name_prefix = optional(string, "kyiv-air")
+      deploy      = optional(bool, true)
+      ssh_port    = optional(number, 222)
+      bastion_ssh = optional(bool, false)
     }), {})
     vm = map(object({
       machine_type = optional(string, "e2-micro")
@@ -28,31 +25,14 @@ variable "cfg" {
         type        = string
         device_name = string
       }))
-      scripts    = set(string)
-      entrypoint = string
-      env        = optional(map(string), {})
-      secrets    = optional(set(string), [])
     }))
     network = object({
       public_tier = optional(string, "STANDARD")
-      firewall_rules = map(object({
-        ports = set(number)
-      }))
     })
     modes = object({
       postgres_only = bool
       cloud_sql     = bool
     })
-    database = object({
-      name = string
-    })
-    registry = object({
-      image_version = string
-    })
-    images = map(string)
-    secrets = optional(object({
-      versions = optional(map(string), {})
-    }), {})
   })
 }
 
@@ -69,24 +49,4 @@ variable "network" {
     public_ips    = optional(map(string), null)
   })
   description = "Network outputs"
-}
-
-variable "registry" {
-  type = object({
-    repository_url = string
-  })
-}
-
-variable "secrets" {
-  type = object({
-    secrets = map(object({
-      secret_id = string
-      version   = string
-    }))
-  })
-}
-
-variable "cloud_sql" {
-  type    = object({ connection_name = string })
-  default = null
 }

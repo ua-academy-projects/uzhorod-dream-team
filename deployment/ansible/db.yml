@@ -1,0 +1,11 @@
+- name: Database VM
+  hosts: db
+  gather_facts: false
+  roles:
+    - role: kyiv_air.platform.base
+    - role: kyiv_air.platform.secrets
+      secrets_names: "{{ cfg.vm.db.secrets }}"
+    - role: kyiv_air.platform.data_disk
+    - role: kyiv_air.platform.postgres_local
+    - role: kyiv_air.platform.redis
+    - role: kyiv_air.platform.rabbitmq

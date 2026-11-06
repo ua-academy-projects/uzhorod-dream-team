@@ -1,0 +1,8 @@
+- name: Build and push application images
+  hosts: localhost
+  gather_facts: false
+  tags: [images]
+  vars:
+    ansible_become: false
+  roles:
+    - role: kyiv_air.platform.images

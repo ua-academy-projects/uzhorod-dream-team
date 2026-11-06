@@ -1,0 +1,62 @@
+- name: Remove Redis when PostgreSQL replaces it
+  when: kyiv_air_postgres_only | bool
+  block:
+    - name: Remove the container
+      ansible.builtin.include_role:
+        name: kyiv_air.platform.container
+      vars:
+        container_name: kyiv-air-redis
+        container_state: absent
+
+    - name: Remove the configuration file
+      ansible.builtin.file:
+        path: "{{ kyiv_air_config_dir }}/redis.conf"
+        state: absent
+
+- name: Run Redis on this VM
+  when: not (kyiv_air_postgres_only | bool)
+  block:
+    - name: Prepare the data directory
+      community.docker.docker_container:
+        name: kyiv-air-prepare-redis
+        image: "{{ cfg.images.REDIS_IMAGE }}"
+        user: root
+        entrypoint: [sh, -c]
+        command: ["mkdir -p /data/redis && chown redis:redis /data/redis && chmod 0700 /data/redis"]
+        mounts:
+          - type: bind
+            source: "{{ kyiv_air_data_mount }}"
+            target: /data
+        detach: false
+        cleanup: true
+      changed_when: false
+
+    - name: Write the configuration
+      ansible.builtin.template:
+        src: redis.conf.j2
+        dest: "{{ kyiv_air_config_dir }}/redis.conf"
+        mode: "0644"
+      no_log: true
+
+    - name: Start Redis
+      ansible.builtin.include_role:
+        name: kyiv_air.platform.container
+      vars:
+        container_name: kyiv-air-redis
+        container_image: "{{ cfg.images.REDIS_IMAGE }}"
+        container_pull: missing
+        container_ports:
+          - "{{ cfg.vm.db.private_ip }}:6379:6379"
+          - 127.0.0.1:6379:6379
+        container_mounts:
+          - type: bind
+            source: "{{ kyiv_air_data_mount }}/redis"
+            target: /data
+          - type: bind
+            source: "{{ kyiv_air_config_dir }}/redis.conf"
+            target: /usr/local/etc/redis/redis.conf
+            read_only: true
+        container_command: [redis-server, /usr/local/etc/redis/redis.conf]
+        container_probe_exec: [sh, -c, '[ "$(redis-cli PING)" = PONG ]']
+        container_probe_env:
+          REDISCLI_AUTH: "{{ kyiv_air_secrets['redis-password'] }}"

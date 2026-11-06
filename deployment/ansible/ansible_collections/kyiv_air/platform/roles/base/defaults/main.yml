@@ -1,0 +1,6 @@
+base_packages:
+  - ca-certificates
+  - curl
+  - gnupg
+  - jq
+base_docker_min_major: 28

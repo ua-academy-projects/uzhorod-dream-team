@@ -1,0 +1,55 @@
+- name: "Remove container {{ container_name }}"
+  community.docker.docker_container:
+    name: "{{ container_name }}"
+    state: absent
+  when: container_state == 'absent'
+
+- name: Run the container tasks
+  when: container_state != 'absent'
+  block:
+    - name: "Start container {{ container_name }}"
+      community.docker.docker_container:
+        name: "{{ container_name }}"
+        image: "{{ container_image }}"
+        pull: "{{ container_pull }}"
+        networks:
+          - name: "{{ kyiv_air_network }}"
+        restart_policy: unless-stopped
+        log_driver: json-file
+        log_options:
+          max-size: 10m
+          max-file: "3"
+        published_ports: "{{ container_ports }}"
+        env: "{{ container_env }}"
+        mounts: "{{ container_mounts }}"
+        groups: "{{ container_groups | default(omit, true) }}"
+        command: "{{ container_command | default(omit, true) }}"
+        hostname: "{{ container_hostname | default(omit, true) }}"
+        read_only: "{{ true if container_hardened else omit }}"
+        cap_drop: "{{ ['ALL'] if container_hardened else omit }}"
+        security_opts: "{{ ['no-new-privileges'] if container_hardened else omit }}"
+      no_log: true
+
+    - name: "Wait for {{ container_probe_url }}"
+      ansible.builtin.uri:
+        url: "{{ container_probe_url }}"
+        timeout: 3
+      register: container_http_probe
+      until: container_http_probe.status == 200
+      retries: "{{ kyiv_air_probe_retries | int }}"
+      delay: "{{ kyiv_air_probe_delay }}"
+      changed_when: false
+      when: container_probe_url | length > 0
+
+    - name: "Wait for {{ container_name }} to be ready"
+      community.docker.docker_container_exec:
+        container: "{{ container_name }}"
+        argv: "{{ container_probe_exec }}"
+        env: "{{ container_probe_env }}"
+      register: container_exec_probe
+      until: container_exec_probe.rc == 0
+      retries: "{{ kyiv_air_probe_retries | int }}"
+      delay: "{{ kyiv_air_probe_delay }}"
+      changed_when: false
+      no_log: true
+      when: container_probe_exec | length > 0

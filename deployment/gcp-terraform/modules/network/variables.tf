@@ -4,11 +4,15 @@ variable "cfg" {
       project_id = string
       region     = string
     })
+    vm_options = optional(object({
+      ssh_port = optional(number, 222)
+    }), {})
     network = object({
-      name        = string
-      subnet_cidr = string
-      enable_nat  = optional(bool, true)
-      public_tier = optional(string, "STANDARD")
+      name         = string
+      subnet_cidr  = string
+      admin_ranges = optional(set(string), [])
+      enable_nat   = optional(bool, true)
+      public_tier  = optional(string, "STANDARD")
       firewall_rules = map(object({
         source_tags   = optional(set(string), [])
         source_ranges = optional(set(string), [])

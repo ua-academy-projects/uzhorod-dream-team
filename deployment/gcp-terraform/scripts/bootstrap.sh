@@ -10,6 +10,7 @@ readonly IAM_ATTEMPTS=6
 readonly IAM_RETRY_SECONDS=2
 readonly MAX_RETRY_SECONDS=16
 readonly TERRAFORM_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+readonly ANSIBLE_DIR=$(cd "$TERRAFORM_DIR/../ansible" && pwd)
 
 usage() {
   cat <<'EOF'
@@ -253,7 +254,9 @@ fi
 {
   printf '#!/usr/bin/env bash\n\n'
   printf 'export GOOGLE_APPLICATION_CREDENTIALS=%q\n' "$KEY_FILE"
-  printf 'export TF_VAR_config_path=%q\n\n' "$CONFIG_FILE"
+  printf 'export TF_VAR_config_path=%q\n' "$CONFIG_FILE"
+  printf 'export DEPLOYMENT_CONFIG=%q\n' "$CONFIG_FILE"
+  printf 'export ANSIBLE_CONFIG=%q\n\n' "$ANSIBLE_DIR/ansible.cfg"
   printf 'terraform -chdir=%q init %q\n' "$TERRAFORM_DIR" "-backend-config=$BACKEND_FILE"
 } > "$ENV_FILE"
 chmod 0600 "$ENV_FILE"
