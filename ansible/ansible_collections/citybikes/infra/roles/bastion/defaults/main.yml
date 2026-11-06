@@ -1,0 +1,2 @@
+---
+bastion_ssh_dir: "/home/{{ ssh.user }}/.ssh"

@@ -167,6 +167,7 @@ filters:
   - labels.vm:*
 hostnames:
   - name
+vars_prefix: gcp_
 keyed_groups:
   - key: labels.vm
     prefix: vm

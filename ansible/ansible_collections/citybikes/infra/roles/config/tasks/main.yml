@@ -18,6 +18,7 @@
   cloud.terraform.terraform_output:
     project_path: "{{ config_terraform_dir }}"
   register: config_terraform
+  check_mode: false
 
 - name: Every VM of config.json exists
   ansible.builtin.assert:

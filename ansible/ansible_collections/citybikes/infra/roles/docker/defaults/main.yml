@@ -1,0 +1,7 @@
+---
+docker_packages:
+  - docker.io
+  - docker-compose-v2
+  - rsync           
+  - python3-yaml    
+  - python3-requests

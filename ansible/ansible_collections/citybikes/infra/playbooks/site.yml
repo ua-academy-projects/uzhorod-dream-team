@@ -12,6 +12,7 @@
   roles:
     - citybikes.infra.config
 
+
 - name: Sort the VMs by what they run (bastion, containers, site)
   hosts: allansible-playbook citybikes.infra.site -v 2>&1 | grep -A3 citybikes_database
   gather_facts: false
@@ -29,3 +30,30 @@
     - name: Show them (removed in step 6, when the plays for these groups exist)
       ansible.builtin.debug:
         msg: "{{ group_names | reject('match', 'vm_') | list }}"
+
+
+- name: Bastion
+  hosts: bastion
+  gather_facts: false
+  vars:
+    citybikes_repo: "{{ playbook_dir }}/../../../../.."
+    citybikes_config: "{{ lookup('ansible.builtin.env', 'CITYBIKES_CONFIG', default=citybikes_repo ~ '/infra/config.json') }}"
+  vars_files:
+    - "{{ citybikes_config }}"
+    - vars/connection.yml
+  roles:
+    - citybikes.infra.bastion
+
+
+- name: VMs with containers
+  hosts: containers
+  gather_facts: false
+  become: true
+  vars:
+    citybikes_repo: "{{ playbook_dir }}/../../../../.."
+    citybikes_config: "{{ lookup('ansible.builtin.env', 'CITYBIKES_CONFIG', default=citybikes_repo ~ '/infra/config.json') }}"
+  vars_files:
+    - "{{ citybikes_config }}"
+    - vars/connection.yml
+  roles:
+    - citybikes.infra.docker

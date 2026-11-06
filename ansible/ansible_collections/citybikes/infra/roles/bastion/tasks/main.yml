@@ -1,0 +1,6 @@
+---
+- name: SSH settings for the other VMs
+  ansible.builtin.template:
+    src: ssh_config.j2
+    dest: "{{ bastion_ssh_dir }}/config"
+    mode: "0600"
