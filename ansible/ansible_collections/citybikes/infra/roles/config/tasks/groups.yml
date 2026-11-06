@@ -1,0 +1,21 @@
+---
+
+- name: The VM is in config.json
+  ansible.builtin.assert:
+    that: vm in hostvars['localhost'].citybikes_vms
+    fail_msg: "{{ inventory_hostname }} is not in config.json (vms)"
+    quiet: true
+
+- name: Groups bastion, containers, site
+  ansible.builtin.group_by:
+    key: "{{ item.key }}"
+  loop: "{{ config_groups | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  when: item.value | bool
+  vars:
+    config_vm: "{{ hostvars['localhost'].citybikes_vms[vm] }}"
+    config_groups:
+      bastion: "{{ config_vm.bastion }}"
+      containers: "{{ config_vm.services | length > 0 }}"
+      site: "{{ tls.domain != '' and vm == tls.vm }}"

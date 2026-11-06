@@ -1,0 +1,45 @@
+config_file: "{{ citybikes_config }}"
+config_schema_file: "{{ citybikes_config | dirname }}/config.schema.json"
+config_terraform_dir: "{{ citybikes_config | dirname }}/envs/dev"
+
+config_vm_defaults:
+  bastion: false
+  cloud_logging: false
+  roles: []
+  secrets: []
+
+config_vms: >-
+  {%- set out = {} -%}
+  {%- for name, vm in vms.items() -%}
+  {%-   set _ = out.update({name: config_vm_defaults | combine(vm)}) -%}
+  {%- endfor -%}
+  {{ out }}
+
+
+config_database:
+  host: "{{ config_terraform.outputs.database.value.private_ip }}"
+  sslmode: require 
+
+
+config_bastions: "{{ config_vms | dict2items | selectattr('value.bastion') | map(attribute='key') | list }}"
+config_services: "{{ vms.values() | map(attribute='services') | flatten }}"
+config_tls_vm: "{{ config_vms[tls.vm] | default(config_vm_defaults | combine({'services': []})) }}"
+
+
+config_checks:
+  - msg: 'exactly one VM must have "bastion": true'
+    ok: "{{ config_bastions | length == 1 }}"
+  - msg: 'the bastion needs "internal-ssh-key" in its "secrets"'
+    ok: "{{ config_bastions | map('extract', config_vms, 'secrets') | flatten is contains('internal-ssh-key') }}"
+  - msg: 'a VM with "cloud_logging" needs "roles/logging.logWriter" in its "roles"'
+    ok: "{{ config_vms.values() | selectattr('cloud_logging') | rejectattr('roles', 'contains', 'roles/logging.logWriter') | list | length == 0 }}"
+  - msg: 'a service may run on one VM only'
+    ok: "{{ config_services | length == config_services | unique | length }}"
+  - msg: 'queue_backend rabbitmq needs a VM with the "rabbitmq" service'
+    ok: "{{ app.queue_backend != 'rabbitmq' or 'rabbitmq' in config_services }}"
+  - msg: 'cache_backend redis needs a VM with the "redis" service'
+    ok: "{{ app.cache_backend != 'redis' or 'redis' in config_services }}"
+  - msg: 'tls.vm must run "ui" and have "cloudflare-api-token" in its "secrets"'
+    ok: "{{ tls.domain == '' or ('ui' in config_tls_vm.services and 'cloudflare-api-token' in config_tls_vm.secrets) }}"
+
+config_missing_vms: "{{ vms | reject('in', groups['all'] | map('extract', hostvars, 'vm') | list) | list }}"

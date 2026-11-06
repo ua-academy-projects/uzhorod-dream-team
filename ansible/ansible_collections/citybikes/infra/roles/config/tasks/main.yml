@@ -1,0 +1,32 @@
+---
+- name: The configuration matches its JSON Schema (config.json, config.schema.json)
+  ansible.utils.validate:
+    data: "{{ lookup('ansible.builtin.file', config_file) | from_json }}"
+    criteria: "{{ lookup('ansible.builtin.file', config_schema_file) | from_json }}"
+    engine: ansible.utils.jsonschema
+
+- name: The configuration fits together
+  ansible.builtin.assert:
+    that: item.ok | bool
+    fail_msg: "config.json: {{ item.msg }}"
+    quiet: true
+  loop: "{{ config_checks }}"
+  loop_control:
+    label: "{{ item.msg }}"
+
+- name: Read Terraform's outputs (where the database is, which secrets exist)
+  cloud.terraform.terraform_output:
+    project_path: "{{ config_terraform_dir }}"
+  register: config_terraform
+
+- name: Every VM of config.json exists
+  ansible.builtin.assert:
+    that: config_missing_vms | length == 0
+    fail_msg: "Not in GCP yet: {{ config_missing_vms | join(', ') }}. Run terraform apply."
+    quiet: true
+
+- name: Remember it for the other plays (hostvars['localhost'])
+  ansible.builtin.set_fact:
+    citybikes_vms: "{{ config_vms }}"
+    citybikes_database: "{{ config_database }}"
+    citybikes_secret_ids: "{{ config_terraform.outputs.secret_readers.value | list }}"

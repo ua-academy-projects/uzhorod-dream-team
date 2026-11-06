@@ -12,6 +12,7 @@ infra/**/.terraform/
 *.tfstate
 *.tfstate.*
 infra/**/.build/
+infra/bootstrap/inventory.gcp.yml
 
 infra/**/bootstrap.env
 infra/**/terraform.env

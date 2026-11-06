@@ -1,0 +1,14 @@
+---
+
+citybikes_bastion: "{{ prefix }}-{{ vms | dict2items | selectattr('value.bastion', 'defined') | selectattr('value.bastion') | map(attribute='key') | first }}"
+citybikes_user_key: "{{ ssh.user_public_key_file | regex_replace('\\.pub$', '') | expanduser }}"
+citybikes_internal_key: "{{ ssh.internal_public_key_file | regex_replace('\\.pub$', '') | expanduser }}"
+citybikes_through_bastion: >-
+  -o ProxyCommand="ssh -W %h:%p -q -i {{ citybikes_user_key }} -o StrictHostKeyChecking=accept-new
+  {{ ssh.user }}@{{ hostvars[citybikes_bastion].ansible_host }}"
+
+ansible_user: "{{ ssh.user }}"
+ansible_ssh_private_key_file: "{{ citybikes_user_key if inventory_hostname == citybikes_bastion else citybikes_internal_key }}"
+ansible_ssh_common_args: >-
+  -o StrictHostKeyChecking=accept-new
+  {{ '' if inventory_hostname == citybikes_bastion else citybikes_through_bastion }}

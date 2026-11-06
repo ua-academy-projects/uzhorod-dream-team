@@ -141,6 +141,11 @@ write_terraform_env() {
 # Terraform then acts AS ${SA}, with its key: no personal login needed (works after \`gcloud auth logout\`)
 unset GOOGLE_IMPERSONATE_SERVICE_ACCOUNT GOOGLE_BACKEND_IMPERSONATE_SERVICE_ACCOUNT
 export GOOGLE_APPLICATION_CREDENTIALS="${KEY_FILE}"   # the provider and the state backend
+
+export GCP_AUTH_KIND=serviceaccount
+export GCP_SERVICE_ACCOUNT_FILE="${KEY_FILE}"
+export GCP_PROJECT="${PROJECT_ID}"
+
 export TF_STATE_BUCKET="${BUCKET}"
 export TF_VAR_project_id="${PROJECT_ID}"
 export TF_VAR_region="${REGION}"
@@ -148,6 +153,31 @@ export TF_VAR_zone="${ZONE}"
 export TF_VAR_my_ip="${MY_IP}"
 EOF
 }
+
+
+write_ansible_inventory() {
+  step "7. infra/bootstrap/inventory.gcp.yml"
+  cat > inventory.gcp.yml <<EOF
+plugin: google.cloud.gcp_compute
+projects: [${PROJECT_ID}]
+zones: [${ZONE}]
+auth_kind: serviceaccount
+service_account_file: ${KEY_FILE}
+filters:
+  - labels.vm:*
+hostnames:
+  - name
+keyed_groups:
+  - key: labels.vm
+    prefix: vm
+compose:
+  vm: labels.vm
+  private_ip: networkInterfaces[0].networkIP
+  # the bastion by its public IP, every other VM by its private IP (reached through the bastion)
+  ansible_host: (networkInterfaces[0].accessConfigs | default([{}]))[0].natIP | default(networkInterfaces[0].networkIP)
+EOF
+}
+
 
 main() {
   load_config
@@ -159,6 +189,7 @@ main() {
   allow_keys_in_project
   create_key
   write_terraform_env
+  write_ansible_inventory
 
   echo
   echo "Done. Next:  source infra/bootstrap/terraform.env && cd infra/envs/dev && terraform init -reconfigure -backend-config=\"bucket=\$TF_STATE_BUCKET\""

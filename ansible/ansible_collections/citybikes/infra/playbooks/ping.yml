@@ -9,3 +9,16 @@
     - name: Say where we are
       ansible.builtin.debug:
         msg: "citybikes.infra, playbook {{ playbook_dir }}, Ansible {{ ansible_version.full }}"
+
+
+- name: Every VM answers over SSH (the bastion directly, the others through it)
+  hosts: all
+  gather_facts: false
+  vars:
+    citybikes_repo: "{{ playbook_dir }}/../../../../.."
+  vars_files:
+    - "{{ citybikes_repo }}/infra/config.json"
+    - vars/connection.yml
+  tasks:
+    - name: Ping (a small Python module runs on the VM)
+      ansible.builtin.ping:
