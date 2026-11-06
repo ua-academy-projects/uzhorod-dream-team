@@ -27,7 +27,8 @@
             "oslogin.googleapis.com",
             "sqladmin.googleapis.com",
             "servicenetworking.googleapis.com",
-            "networkconnectivity.googleapis.com"
+            "networkconnectivity.googleapis.com",
+            "servicedirectory.googleapis.com"
         ],
         "terraform_roles": [
             "roles/compute.admin",
@@ -35,7 +36,9 @@
             "roles/iam.serviceAccountUser",
             "roles/secretmanager.admin",
             "roles/artifactregistry.admin",
-            "roles/cloudsql.admin"
+            "roles/cloudsql.admin",
+            "roles/servicedirectory.editor",
+            "roles/resourcemanager.projectIamAdmin"
         ]
     },
     "app": {
@@ -182,6 +185,15 @@
                     "device_name": "data-disk"
                 }
             }
+        }
+    },
+    "service_accounts": {
+        "ansible": {
+            "display_name": "Ansible: reads the VMs and Cloud SQL",
+            "roles": [
+                "roles/compute.viewer",
+                "roles/cloudsql.viewer"
+            ]
         }
     },
     "secrets": {

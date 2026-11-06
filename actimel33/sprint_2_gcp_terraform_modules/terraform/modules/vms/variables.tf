@@ -1,5 +1,5 @@
 variable "config" {
-  description = "config.json; this module reads project, app (backend and database) and vms: service_account_prefix, defaults and machines (each lists only what differs from defaults)"
+  description = "config.json; this module reads project, app (backend and database) and vms: defaults and machines (each lists only what differs from defaults)"
   type        = any
 
   validation {
@@ -47,4 +47,9 @@ variable "registry" {
     location      = string
     name          = string
   })
+}
+
+variable "service_accounts" {
+  description = "VM name => email of its service account, from the service_accounts module"
+  type        = map(string)
 }

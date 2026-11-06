@@ -11,13 +11,6 @@ locals {
   containers = { for name, machine in local.machines : name => machine if can(machine.image_tag) }
 }
 
-resource "google_service_account" "vm" {
-  for_each = local.machines
-
-  account_id   = "${var.config.vms.service_account_prefix}${each.key}"
-  display_name = "Service account of the ${each.key} VM"
-}
-
 resource "google_compute_disk" "data" {
   for_each = local.data_disks
 
@@ -67,7 +60,7 @@ resource "google_compute_instance" "vm" {
   }
 
   service_account {
-    email  = google_service_account.vm[each.key].email
+    email  = var.service_accounts[each.key]
     scopes = ["cloud-platform"]
   }
 }
@@ -78,5 +71,5 @@ resource "google_artifact_registry_repository_iam_member" "reader" {
   location   = var.registry.location
   repository = var.registry.name
   role       = "roles/artifactregistry.reader"
-  member     = "serviceAccount:${google_service_account.vm[each.key].email}"
+  member     = "serviceAccount:${var.service_accounts[each.key]}"
 }

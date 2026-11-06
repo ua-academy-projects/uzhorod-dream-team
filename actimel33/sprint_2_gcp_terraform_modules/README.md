@@ -3,6 +3,8 @@
 ## Requirements
 
 `gcloud`, `terraform` 1.15+, `ansible-core` 2.19+, `docker`, `python3`, and `uv` for the pre-commit hook.
+The Ansible inventory reads GCP, so Ansible needs two Python packages:
+`uv tool install --force ansible-core --with google-auth --with requests`.
 
 ## Access
 
@@ -42,15 +44,30 @@ terraform apply
 cd .. && ./build-and-push.sh
 ./ssh-config.sh
 cd ansible
+export GCP_SERVICE_ACCOUNT_FILE=~/.config/gcloud/<project id>-ansible.json
 ansible-galaxy collection install -r requirements.yml
 ansible-playbook site.yml
 ```
 
 - Terraform creates the VMs empty. Ansible installs Docker and starts the services on them; it connects through
   the SSH config from `ssh-config.sh` (see [SSH](#ssh)).
-- `terraform apply` writes the inventory `ansible/inventory/inventory.ini`. With `app.database = cloud_sql`,
-  `terraform apply` also writes the CA of the database to `ansible/files/db-ca.pem`. Both are git-ignored:
-  run `terraform apply` before Ansible.
+- The roles are in the collection `crypto.services` (`ansible/collections/ansible_collections/crypto/services`),
+  and `site.yml` calls them as `crypto.services.<role>`. Ansible finds it next to `site.yml` by itself.
+- Ansible needs no output of Terraform:
+  - `ansible/inventory/gcp_compute.yml` lists the running VMs from GCP and groups them by their network tags;
+  - `ansible/inventory/group_vars/all.yml` takes the other values from `config.json`;
+  - `discover.yml`, the first play of `site.yml`, finds the Cloud SQL endpoint and writes the CA of the instance
+    to `ansible/files/db-ca.pem` (git-ignored).
+
+  The inventory and `discover.yml` read GCP with the key in `GCP_SERVICE_ACCOUNT_FILE`: the key of the `ansible`
+  account, which may only read the VMs and Cloud SQL (`service_accounts` in `config.json`). Terraform creates the
+  account; after the first `terraform apply`, create your key once:
+  `(umask 077 && gcloud iam service-accounts keys create ~/.config/gcloud/<project id>-ansible.json --iam-account=ansible@<project id>.iam.gserviceaccount.com --project=<project id>)`.
+- `gcp_compute.yml` names the project itself (`projects:`), the inventory plugin cannot read `config.json`.
+  After bootstrap creates a new project, put its ID there too.
+- Run `site.yml` without `--limit`: the `localhost` play of `discover.yml` must run, or `db_host` stays unknown.
+- If your SSH key has a passphrase, load it first: `eval "$(ssh-agent -s)" && ssh-add ~/.ssh/google_compute_engine`.
+  Ansible cannot type it.
 - A second `ansible-playbook site.yml` run must show `changed=0`.
 
 Without `source .env`, Terraform runs as you instead of the `terraform` service account.
@@ -59,6 +76,12 @@ Do not run Terraform with `TF_LOG=DEBUG` or `TF_LOG=TRACE`: the log then holds t
 
 After pulling changes that need new APIs or roles, re-run `./bootstrap/bootstrap.sh` before `terraform apply`.
 Cloud SQL is such a change: bootstrap enables its APIs and gives the `terraform` account `roles/cloudsql.admin`.
+It also gives `roles/servicedirectory.editor`: Google registers the Private Service Connect endpoint in
+Service Directory (namespace `goog-psc-default`), and the account that creates the endpoint needs that right.
+The `ansible` account is such a change too: bootstrap gives the `terraform` account
+`roles/resourcemanager.projectIamAdmin`, so Terraform can grant the roles in `service_accounts` of `config.json`.
+That role has no condition: whoever holds the `terraform` key can grant any role on the project, Owner included.
+Keep the key to yourself.
 
 ## SSH
 
@@ -149,14 +172,18 @@ sudo docker exec -it crypto_db psql -U app -d crypto
   `app.backend` (`postgres` / `redis`) or a switch of `app.database` (see [Database](#database)) reaches the VMs
   only through Ansible.
 - A VM with `backends` exists only for those backends: `redis` creates the `broker` VM with Redis, `postgres` removes it.
+- The `service_accounts` module creates every service account but `terraform`: one per VM (`sa-vm-<VM>`) and the
+  ones in `service_accounts` of `config.json`, each with its roles on the project.
 
 ## Leaving the project
 
-You delete your key, so it no longer works:
+You delete your keys, so they no longer work:
 
 ```bash
 gcloud iam service-accounts keys delete <private_key_id from your key file> --iam-account=terraform@<project id>.iam.gserviceaccount.com --project=<project id>
 rm ~/.config/gcloud/<project id>-terraform.json
+gcloud iam service-accounts keys delete <private_key_id from your ansible key file> --iam-account=ansible@<project id>.iam.gserviceaccount.com --project=<project id>
+rm ~/.config/gcloud/<project id>-ansible.json
 ```
 
 The project owner then:

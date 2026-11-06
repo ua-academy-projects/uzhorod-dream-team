@@ -1,0 +1,36 @@
+---
+- name: Find Cloud SQL in GCP
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Find the Private Service Connect endpoint of Cloud SQL
+      google.cloud.gcp_compute_address_info:
+        auth_kind: serviceaccount
+        project: "{{ project_id }}"
+        region: "{{ region }}"
+        filters:
+          - name = {{ config.cloud_sql.endpoint }}
+      register: db_endpoint
+      when: database == "cloud_sql"
+
+    - name: Find the Cloud SQL instance
+      google.cloud.gcp_sql_instance_info:
+        auth_kind: serviceaccount
+        project: "{{ project_id }}"
+      register: sql_instances
+      when: database == "cloud_sql"
+
+    - name: Ensure the files directory exists
+      ansible.builtin.file:
+        path: "{{ playbook_dir }}/files"
+        state: directory
+        mode: "0755"
+      when: database == "cloud_sql"
+
+    - name: Write the CA certificate of the Cloud SQL instance
+      ansible.builtin.copy:
+        content: "{{ (sql_instances.resources | selectattr('name', 'match', config.cloud_sql.name ~ '-') | first).serverCaCert.cert }}"
+        dest: "{{ playbook_dir }}/files/db-ca.pem"
+        mode: "0644"
+      when: database == "cloud_sql"

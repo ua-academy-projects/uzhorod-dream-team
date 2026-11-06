@@ -22,13 +22,20 @@ module "artifact_registry" {
   config = local.config
 }
 
+module "service_accounts" {
+  source = "./modules/service_accounts"
+
+  config = local.config
+}
+
 module "vms" {
   source = "./modules/vms"
 
   config = local.config
 
-  subnets  = module.network.subnets
-  registry = module.artifact_registry.repository
+  subnets          = module.network.subnets
+  registry         = module.artifact_registry.repository
+  service_accounts = module.service_accounts.vm_emails
 }
 
 module "secrets" {
@@ -36,7 +43,7 @@ module "secrets" {
 
   config = local.config
 
-  readers = module.vms.service_account_emails
+  readers = module.service_accounts.vm_emails
 }
 
 module "cloud_sql" {

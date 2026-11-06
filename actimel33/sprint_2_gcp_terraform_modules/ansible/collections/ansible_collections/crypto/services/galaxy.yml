@@ -1,0 +1,16 @@
+namespace: crypto
+name: services
+version: 1.0.0
+readme: README.md
+authors:
+  - Andrew C.
+description: Roles that install Docker and run the crypto-price-service containers on the VMs.
+license:
+  - MIT
+repository: https://github.com/ua-academy-projects/uzhorod-dream-team
+tags:
+  - infrastructure
+  - linux
+dependencies:
+  community.general: "*"
+  ansible.posix: "*"

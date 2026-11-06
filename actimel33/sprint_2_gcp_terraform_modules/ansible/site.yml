@@ -1,39 +1,42 @@
 ---
+- name: Find Cloud SQL in GCP
+  ansible.builtin.import_playbook: discover.yml
+
 - name: Install docker to fetcher, history, ui, broker, db
   hosts: private
   gather_facts: true
   become: true
   roles:
-    - docker
+    - crypto.services.docker
 
 - name: Broker VM provision
   hosts: broker
   become: true
   roles:
-    - redis
+    - crypto.services.redis
 
 - name: DB VM provision
   hosts: db
   become: true
   roles:
-    - postgres
+    - crypto.services.postgres
 
 - name: History VM provision
   hosts: history
   become: true
   roles:
-    - history
-    - role: db_roles
+    - crypto.services.history
+    - role: crypto.services.db_roles
       when: backend == "postgres"
 
 - name: Fetcher VM provision
   hosts: fetcher
   become: true
   roles:
-    - fetcher
+    - crypto.services.fetcher
 
 - name: UI VM provision
   hosts: ui
   become: true
   roles:
-    - ui
+    - crypto.services.ui
