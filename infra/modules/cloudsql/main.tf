@@ -1,43 +1,44 @@
 locals {
-  cfg = var.config
+  name     = "${var.config.prefix}-pg"
+  database = var.config.database
 }
 
 resource "google_compute_global_address" "private_range" {
-  name          = "${local.cfg.name}-private-range"
-  network       = local.cfg.network_id
+  name          = "${local.name}-private-range"
+  network       = var.network_id
   purpose       = "VPC_PEERING"
   address_type  = "INTERNAL"
-  address       = split("/", local.cfg.private_range)[0]
-  prefix_length = tonumber(split("/", local.cfg.private_range)[1])
+  address       = split("/", local.database.private_range)[0]
+  prefix_length = tonumber(split("/", local.database.private_range)[1])
 }
 
 resource "google_service_networking_connection" "private" {
-  network                 = local.cfg.network_id
+  network                 = var.network_id
   service                 = "servicenetworking.googleapis.com"
   reserved_peering_ranges = [google_compute_global_address.private_range.name]
 }
 
 resource "google_sql_database_instance" "pg" {
-  name                = local.cfg.name
-  region              = local.cfg.region
-  database_version    = local.cfg.version
+  name                = local.name
+  region              = var.config.location.region
+  database_version    = local.database.version
   deletion_protection = true
 
   settings {
     edition           = "ENTERPRISE"
-    tier              = local.cfg.tier
+    tier              = local.database.tier
     availability_type = "ZONAL"
-    disk_size         = local.cfg.disk_size_gb
+    disk_size         = local.database.disk_size_gb
     disk_autoresize   = true
-    user_labels       = local.cfg.labels
+    user_labels       = var.labels
 
     location_preference {
-      zone = local.cfg.zone
+      zone = var.config.location.zone
     }
 
     ip_configuration {
       ipv4_enabled    = false
-      private_network = local.cfg.network_id
+      private_network = var.network_id
       ssl_mode        = "ENCRYPTED_ONLY"
     }
 
@@ -51,6 +52,6 @@ resource "google_sql_database_instance" "pg" {
 }
 
 resource "google_sql_database" "app" {
-  name     = local.cfg.database
+  name     = var.config.app.db_name
   instance = google_sql_database_instance.pg.name
 }

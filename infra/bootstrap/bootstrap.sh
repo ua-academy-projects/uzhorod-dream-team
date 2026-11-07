@@ -25,23 +25,26 @@ ROLES=(
 
 KEY_POLICIES=(iam.disableServiceAccountKeyCreation iam.managed.disableServiceAccountKeyCreation)
 
-
 step() { echo; echo "==> $*"; }
 
 retry() {
-  for _ in $(seq 18); do "$@" && return 0; sleep 10; done
-  return 1
+  for _ in $(seq 17); do "$@" 2>/dev/null && return 0; sleep 10; done
+  "$@"
 }
 
 
 load_config() {
-  [ -f bootstrap.env ] || { echo "infra/bootstrap.env is missing: cp bootstrap.env.example bootstrap.env and fill it in" >&2; exit 1; }
+  [ -f bootstrap.env ] || { echo "infra/bootstrap/bootstrap.env is missing: cp bootstrap.env.example bootstrap.env and fill it in" >&2; exit 1; }
   set -a; source ./bootstrap.env; set +a
-  for v in PROJECT_ID PROJECT_NAME BILLING_ACCOUNT REGION ZONE MY_IP; do
+  for v in PROJECT_ID PROJECT_NAME BILLING_ACCOUNT MY_IP; do
     [ -n "${!v:-}" ] || { echo "bootstrap.env: $v is empty" >&2; exit 1; }
   done
 
-  ME=$(gcloud config get-value account 2>/dev/null)    
+  command -v jq >/dev/null || { echo "jq is missing: sudo apt install jq" >&2; exit 1; }
+  REGION=$(jq -er .location.region ../config.json)      
+  ZONE=$(jq -er .location.zone ../config.json)         
+
+  ME=$(gcloud config get-value account 2>/dev/null)
   BUCKET="${PROJECT_ID}-tfstate"
   SA="terraform@${PROJECT_ID}.iam.gserviceaccount.com"
   KEY_FILE="$PWD/terraform-key.json"
@@ -107,7 +110,7 @@ allow_keys_in_project() {
 
   local policy
   policy=$(mktemp)
-   for constraint in "${KEY_POLICIES[@]}"; do
+  for constraint in "${KEY_POLICIES[@]}"; do
     if ! gcloud org-policies describe "$constraint" --project="$PROJECT_ID" --effective \
            --billing-project="$PROJECT_ID" >/dev/null 2>&1; then
       echo "    ${constraint}: does not exist in this organization, skipped"
@@ -138,18 +141,13 @@ write_terraform_env() {
   step "6. infra/bootstrap/terraform.env"
   install -m 600 /dev/null terraform.env
   cat > terraform.env <<EOF
-# Terraform then acts AS ${SA}, with its key: no personal login needed (works after \`gcloud auth logout\`)
+#   source infra/bootstrap/terraform.env
+# Terraform then acts AS ${SA}, with its key: no personal login needed (works after \`gcloud auth logout\`).
+# Only what is NOT in infra/config.json (in git): the key, the state bucket, the project, your IP.
 unset GOOGLE_IMPERSONATE_SERVICE_ACCOUNT GOOGLE_BACKEND_IMPERSONATE_SERVICE_ACCOUNT
 export GOOGLE_APPLICATION_CREDENTIALS="${KEY_FILE}"   # the provider and the state backend
-
-export GCP_AUTH_KIND=serviceaccount
-export GCP_SERVICE_ACCOUNT_FILE="${KEY_FILE}"
-export GCP_PROJECT="${PROJECT_ID}"
-
-export TF_STATE_BUCKET="${BUCKET}"
+export TF_STATE_BUCKET="${BUCKET}"                     # terraform init -backend-config="bucket=\$TF_STATE_BUCKET"
 export TF_VAR_project_id="${PROJECT_ID}"
-export TF_VAR_region="${REGION}"
-export TF_VAR_zone="${ZONE}"
 export TF_VAR_my_ip="${MY_IP}"
 EOF
 }
@@ -167,7 +165,6 @@ filters:
   - labels.vm:*
 hostnames:
   - name
-vars_prefix: gcp_
 keyed_groups:
   - key: labels.vm
     prefix: vm
@@ -193,7 +190,7 @@ main() {
   write_ansible_inventory
 
   echo
-  echo "Done. Next:  source infra/bootstrap/terraform.env && cd infra/envs/dev && terraform init -reconfigure -backend-config=\"bucket=\$TF_STATE_BUCKET\""
+  echo "Done. Next:  source infra/bootstrap/terraform.env && cd infra/envs/dev && terraform init -backend-config=\"bucket=\$TF_STATE_BUCKET\""
 }
 
 main "$@"

@@ -3,9 +3,9 @@ output "internal_ip" {
 }
 
 output "external_ip" {
-  value = local.cfg.bastion ? google_compute_address.external[0].address : null
+  value = local.vm.bastion ? google_compute_address.external[0].address : null
 }
 
 output "bastion" {
-  value = local.cfg.bastion
+  value = local.vm.bastion
 }

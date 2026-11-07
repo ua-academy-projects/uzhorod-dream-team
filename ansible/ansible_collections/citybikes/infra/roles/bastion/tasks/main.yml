@@ -1,4 +1,11 @@
 ---
+- name: The internal private key (the other VMs accept only it)
+  citybikes.infra.gcp_secret_file:
+    path: "{{ bastion_ssh_dir }}/id_ed25519"
+    secrets:
+      key: "{{ bastion_key_secret }}"
+    format: raw
+    mode: "0600"
 - name: SSH settings for the other VMs
   ansible.builtin.template:
     src: ssh_config.j2

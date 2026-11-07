@@ -1,46 +1,56 @@
 locals {
-  cfg = var.config
+  vm       = var.config.vms[var.name]
+  defaults = var.config.vm_defaults
+  location = var.config.location
+  ssh      = var.config.ssh
 
-  internal_ip = cidrhost(local.cfg.subnet_cidr, local.cfg.host)
+  machine_type = coalesce(local.vm.machine_type, local.defaults.machine_type)
+  disk_size_gb = coalesce(local.vm.disk_size_gb, local.defaults.disk_size_gb)
+  image        = coalesce(local.vm.image, local.defaults.image)
 
-  ssh_key = trimspace(file(pathexpand(local.cfg.bastion ? local.cfg.ssh.user_public_key_file : local.cfg.ssh.internal_public_key_file)))
+  name   = "${var.config.prefix}-${var.name}"
+  labels = merge(var.labels, { vm = var.name })
+
+  internal_ip = cidrhost(var.config.network.subnet_cidr, local.vm.host)
+
+  ssh_key = trimspace(file(pathexpand(local.vm.bastion ? local.ssh.user_public_key_file : local.ssh.internal_public_key_file)))
 }
 
 resource "google_compute_address" "internal" {
-  name         = "${local.cfg.name}-internal"
-  region       = local.cfg.region
-  subnetwork   = local.cfg.subnetwork_id
+  name         = "${local.name}-internal"
+  region       = local.location.region
+  subnetwork   = var.subnetwork_id
   address_type = "INTERNAL"
   address      = local.internal_ip
 }
 
 resource "google_compute_address" "external" {
-  count  = local.cfg.bastion ? 1 : 0
-  name   = "${local.cfg.name}-external"
-  region = local.cfg.region
+  count  = local.vm.bastion ? 1 : 0
+  name   = "${local.name}-external"
+  region = local.location.region
 }
 
 resource "google_compute_instance" "vm" {
-  name         = local.cfg.name
-  zone         = local.cfg.zone
-  machine_type = local.cfg.machine_type
-  tags         = local.cfg.bastion ? [local.cfg.bastion_tag] : []
-  labels       = local.cfg.labels
+  name         = local.name
+  zone         = local.location.zone
+  machine_type = local.machine_type
+  tags         = local.vm.bastion ? [var.bastion_tag] : []
+  labels       = local.labels
 
   boot_disk {
     initialize_params {
-      image = local.cfg.image
-      size  = local.cfg.disk_size_gb
+      image = local.image
+      size  = local.disk_size_gb
       type  = "pd-balanced"
     }
   }
 
   network_interface {
-    subnetwork = local.cfg.subnetwork_id
+    subnetwork = var.subnetwork_id
     network_ip = google_compute_address.internal.address
 
     dynamic "access_config" {
-      for_each = local.cfg.bastion ? [1] : []
+      for_each = local.vm.bastion ? [1] : []
       content {
         nat_ip = google_compute_address.external[0].address
       }
@@ -48,13 +58,13 @@ resource "google_compute_instance" "vm" {
   }
 
   metadata = {
-    ssh-keys               = "${local.cfg.ssh.user}:${local.ssh_key}"
+    ssh-keys               = "${local.ssh.user}:${local.ssh_key}"
     block-project-ssh-keys = "true"
     enable-oslogin         = "FALSE"
   }
 
   service_account {
-    email  = local.cfg.service_account
+    email  = var.service_account
     scopes = ["cloud-platform"]
   }
 

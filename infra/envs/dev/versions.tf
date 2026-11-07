@@ -8,7 +8,7 @@ terraform {
     }
   }
 
-  # terraform init -backend-config=backend.hcl
+  #   terraform init -backend-config="bucket=$TF_STATE_BUCKET"
   backend "gcs" {
     prefix = "citybikes/dev"
   }
@@ -16,6 +16,6 @@ terraform {
 
 provider "google" {
   project = var.project_id
-  region  = var.region
-  zone    = var.zone
+  region  = local.config.location.region
+  zone    = local.config.location.zone
 }

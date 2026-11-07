@@ -1,5 +1,6 @@
 {
   "prefix": "citybikes",
+  "location": { "region": "europe-central2", "zone": "europe-central2-a" },
   "network": {
     "subnet_cidr": "10.20.0.0/24",
     "internal_ports": ["80", "443", "5672", "6379", "8002", "15672"]
@@ -9,62 +10,22 @@
     "user_public_key_file": "~/.ssh/citybikes_ed25519.pub",
     "internal_public_key_file": "~/.ssh/citybikes_internal_ed25519.pub"
   },
-  "vms": {
-    "db": {
-      "host": 50,
-      "machine_type": "e2-small",
-      "disk_size_gb": 20,
-      "services": ["redis", "rabbitmq"],
-      "cloud_logging": true,
-      "roles": ["roles/logging.logWriter"],
-      "secrets": ["redis-password", "rabbitmq-password"]
-    },
-    "fetcher": {
-      "host": 51,
-      "machine_type": "e2-small",
-      "disk_size_gb": 10,
-      "services": ["fetcher"],
-      "roles": [],
-      "secrets": ["rabbitmq-password", "db-password"]
-    },
-    "history": {
-      "host": 52,
-      "machine_type": "e2-small",
-      "disk_size_gb": 10,
-      "services": ["history"],
-      "roles": [],
-      "secrets": ["db-password", "rabbitmq-password", "redis-password"]
-    },
-    "ui": {
-      "host": 53,
-      "machine_type": "e2-small",
-      "disk_size_gb": 15,
-      "services": ["ui", "cloudflared"],
-      "roles": [],
-      "secrets": ["cloudflare-tunnel-token", "cloudflare-api-token"]
-    },
-    "bastion": {
-      "host": 54,
-      "machine_type": "e2-small",
-      "disk_size_gb": 10,
-      "services": [],
-      "bastion": true,
-      "roles": [],
-      "secrets": ["internal-ssh-key"]
-    }
-  },
-  "database": {
-    "version": "POSTGRES_16",
-    "tier": "db-f1-micro",
+  "vm_defaults": {
+    "machine_type": "e2-small",
     "disk_size_gb": 10,
-    "private_range": "10.21.0.0/24"
+    "image": "ubuntu-os-cloud/ubuntu-2404-lts-amd64",
+    "cloud_logging": true,
+    "roles": ["roles/logging.logWriter"]
   },
-  "tls": {
-    "vm": "ui",
-    "domain": "citybikes-tracker.pp.ua",
-    "email": "",
-    "staging": false
+  "vms": {
+    "db": { "host": 50, "disk_size_gb": 20, "services": ["redis", "rabbitmq"], "secrets": ["redis-password", "rabbitmq-password"] },
+    "fetcher": { "host": 51, "services": ["fetcher"], "secrets": ["rabbitmq-password", "db-password"] },
+    "history": { "host": 52, "services": ["history"], "secrets": ["db-password", "rabbitmq-password", "redis-password"] },
+    "ui": { "host": 53, "disk_size_gb": 15, "services": ["ui", "cloudflared"], "secrets": ["cloudflare-tunnel-token", "cloudflare-api-token"] },
+    "bastion": { "host": 54, "services": [], "bastion": true, "secrets": ["internal-ssh-key"] }
   },
+  "database": { "version": "POSTGRES_16", "tier": "db-f1-micro", "disk_size_gb": 10, "private_range": "10.21.0.0/24" },
+  "tls": { "vm": "ui", "domain": "citybikes-tracker.pp.ua", "email": "", "staging": false },
   "app": {
     "queue_backend": "rabbitmq",
     "cache_backend": "redis",

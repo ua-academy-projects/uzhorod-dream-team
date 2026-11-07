@@ -6,3 +6,8 @@ output "network_id" {
 output "subnetwork_id" {
   value = google_compute_subnetwork.private.id
 }
+
+output "bastion_tag" {
+  description = "The network tag the firewall opens SSH for"
+  value       = local.bastion_tag
+}

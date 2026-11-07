@@ -5,13 +5,24 @@
   "description": "WHAT is built. Read by Terraform (infra/envs/dev). Checked against this schema before every run.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["prefix", "network", "ssh", "vms", "database", "tls", "app"],
+  "required": ["prefix", "location", "network", "ssh", "vm_defaults", "vms", "database", "tls", "app"],
 
   "properties": {
     "prefix": {
       "description": "In front of every name: VMs, service accounts, secrets, the VPC",
       "type": "string",
       "pattern": "^[a-z][a-z0-9-]{1,15}$"
+    },
+
+    "location": {
+      "description": "Where everything is built",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["region", "zone"],
+      "properties": {
+        "region": { "type": "string", "pattern": "^[a-z]+-[a-z]+[0-9]$" },
+        "zone": { "type": "string", "pattern": "^[a-z]+-[a-z]+[0-9]-[a-z]$" }
+      }
     },
 
     "network": {
@@ -40,7 +51,22 @@
       }
     },
 
+    "vm_defaults": {
+      "description": "Every VM gets these. A VM's own machine_type, disk_size_gb, image, cloud_logging replace them; its roles are ADDED to these",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["machine_type", "disk_size_gb", "image", "cloud_logging", "roles"],
+      "properties": {
+        "machine_type": { "$ref": "#/$defs/machine_type" },
+        "disk_size_gb": { "$ref": "#/$defs/disk_size_gb" },
+        "image": { "type": "string" },
+        "cloud_logging": { "$ref": "#/$defs/cloud_logging" },
+        "roles": { "$ref": "#/$defs/roles" }
+      }
+    },
+
     "vms": {
+      "description": "Each VM: what is its own, and only what differs from vm_defaults",
       "type": "object",
       "minProperties": 1,
       "propertyNames": { "pattern": "^[a-z][a-z0-9-]{0,14}$" },
@@ -98,26 +124,21 @@
     "vm": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["host", "machine_type", "disk_size_gb", "services"],
+      "required": ["host", "services"],
       "properties": {
         "host": { "description": "Private IP = subnet + host", "type": "integer", "minimum": 2, "maximum": 254 },
-        "machine_type": { "type": "string", "pattern": "^[a-z0-9]+-[a-z0-9-]+$" },
-        "disk_size_gb": { "type": "integer", "minimum": 10, "maximum": 1000 },
+        "machine_type": { "$ref": "#/$defs/machine_type" },
+        "disk_size_gb": { "$ref": "#/$defs/disk_size_gb" },
         "image": { "type": "string" },
         "bastion": { "description": "The only VM with a public IP; exactly one", "type": "boolean" },
-        "cloud_logging": { "description": "Container logs to Cloud Logging (needs roles/logging.logWriter)", "type": "boolean" },
+        "cloud_logging": { "$ref": "#/$defs/cloud_logging" },
         "services": {
           "description": "The containers on this VM",
           "type": "array",
           "uniqueItems": true,
           "items": { "enum": ["redis", "rabbitmq", "fetcher", "history", "ui", "cloudflared"] }
         },
-        "roles": {
-          "description": "Project roles of the VM's service account",
-          "type": "array",
-          "uniqueItems": true,
-          "items": { "type": "string", "pattern": "^roles/[A-Za-z0-9_.]+$" }
-        },
+        "roles": { "description": "Project roles in ADDITION to vm_defaults.roles", "$ref": "#/$defs/roles" },
         "secrets": {
           "description": "The secrets the VM may read",
           "type": "array",
@@ -125,6 +146,15 @@
           "items": { "$ref": "#/$defs/secret" }
         }
       }
+    },
+    "machine_type": { "type": "string", "pattern": "^[a-z0-9]+-[a-z0-9-]+$" },
+    "disk_size_gb": { "type": "integer", "minimum": 10, "maximum": 1000 },
+    "cloud_logging": { "description": "Container logs to Cloud Logging (needs roles/logging.logWriter)", "type": "boolean" },
+    "roles": {
+      "description": "Project roles of the VM's service account",
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^roles/[A-Za-z0-9_.]+$" }
     },
     "secret": {
       "enum": [

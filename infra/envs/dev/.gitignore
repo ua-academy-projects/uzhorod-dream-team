@@ -1,0 +1,4 @@
+# terraform plans: they hold the values of every attribute
+*.tfplan
+plan.txt
+plan.out

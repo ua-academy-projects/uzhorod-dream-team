@@ -14,7 +14,7 @@
 
 
 - name: Sort the VMs by what they run (bastion, containers, site)
-  hosts: allansible-playbook citybikes.infra.site -v 2>&1 | grep -A3 citybikes_database
+  hosts: all
   gather_facts: false
   vars:
     citybikes_repo: "{{ playbook_dir }}/../../../../.."

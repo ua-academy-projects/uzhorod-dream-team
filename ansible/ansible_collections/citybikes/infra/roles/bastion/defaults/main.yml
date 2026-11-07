@@ -1,2 +1,3 @@
 ---
+bastion_key_secret: "{{ prefix }}-internal-ssh-key"
 bastion_ssh_dir: "/home/{{ ssh.user }}/.ssh"
