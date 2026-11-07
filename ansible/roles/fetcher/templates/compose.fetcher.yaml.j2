@@ -1,0 +1,20 @@
+name: datamonitor
+
+services:
+  fetcher:
+    build:
+      context: ./fetcher
+    image: datamonitor-fetcher:latest
+    container_name: datamonitor-fetcher
+    env_file:
+      - ./fetcher/.env
+    environment:
+      APP_BACKEND: {{ compute.application.app_backend | to_json }}
+      INSTANCE_CONNECTION_NAME: {{ ((project_id ~ ':' ~ cloud_sql.region ~ ':' ~ cloud_sql.instance_name) if database.provider == 'cloud_sql' else '') | to_json }}
+      FETCHER_POSTGRES_HOST: {{ compute.instances.postgres.network_ip | to_json }}
+      FETCHER_POSTGRES_PORT: '5432'
+      FETCHER_POSTGRES_DB: {{ database.name | to_json }}
+      FETCHER_PORT: {{ fetcher_port | string | to_json }}
+    ports:
+      - '{{ compute.instances.fetcher.network_ip }}:{{ fetcher_port }}:{{ fetcher_port }}'
+    restart: unless-stopped

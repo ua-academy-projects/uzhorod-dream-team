@@ -1,0 +1,64 @@
+---
+- name: Validate the requested service secret
+  ansible.builtin.assert:
+    that:
+      - secret_access_service in secret_manager.services
+      - secret_access_dest is defined
+    fail_msg: Specify a configured service and destination for its environment.
+
+- name: Get an access token from this VM service account
+  ansible.builtin.uri:
+    url: http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token
+    headers:
+      Metadata-Flavor: Google
+    use_proxy: false
+    use_netrc: false
+    return_content: true
+    timeout: 10
+    status_code: 200
+  register: secret_access_token
+  until: secret_access_token is succeeded
+  retries: 6
+  delay: 5
+  changed_when: false
+  no_log: true
+
+- name: Read only the configured service environment from Secret Manager
+  ansible.builtin.uri:
+    url: "https://secretmanager.googleapis.com/v1/projects/{{ project_id }}/secrets/{{ secret_manager.services[secret_access_service].secret_id }}/versions/latest:access"
+    headers:
+      Authorization: "Bearer {{ secret_access_token.json.access_token }}"
+    use_proxy: false
+    use_netrc: false
+    return_content: true
+    timeout: 30
+    status_code: 200
+  register: secret_access_payload
+  until: secret_access_payload is succeeded
+  retries: 6
+  delay: 5
+  changed_when: false
+  no_log: true
+
+- name: Require a nonempty environment payload
+  ansible.builtin.assert:
+    that:
+      - secret_access_payload.json.payload.data | b64decode | trim | length > 0
+    fail_msg: The service environment secret must not be empty.
+  no_log: true
+
+- name: Write the service environment with private permissions
+  ansible.builtin.copy:
+    content: "{{ secret_access_payload.json.payload.data | b64decode }}"
+    dest: "{{ secret_access_dest }}"
+    owner: root
+    group: root
+    mode: '0600'
+  no_log: true
+  diff: false
+
+- name: Clear temporary token and payload variables
+  ansible.builtin.set_fact:
+    secret_access_token: {}
+    secret_access_payload: {}
+  no_log: true

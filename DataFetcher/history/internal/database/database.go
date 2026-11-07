@@ -91,7 +91,7 @@ func (s *Store) Init(ctx context.Context, usePGMQ bool) error {
 			updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 		)
 		`,
-		`GRANT CONNECT ON DATABASE history TO fetcher_worker`,
+		`DO $$ BEGIN EXECUTE format('GRANT CONNECT ON DATABASE %I TO fetcher_worker', current_database()); END $$`,
 		`GRANT USAGE ON SCHEMA public TO fetcher_worker`,
 		`
 		GRANT SELECT (id, status, updated_at)
@@ -104,7 +104,22 @@ func (s *Store) Init(ctx context.Context, usePGMQ bool) error {
 	}
 	if usePGMQ {
 		statements = append([]string{
-			`CREATE EXTENSION IF NOT EXISTS pgmq`,
+			// Cloud SQL uses a one-time SQL-only install. Local images can still
+			// initialize the packaged extension when it is available.
+			`DO $$ BEGIN
+                IF to_regprocedure('pgmq.send(text,jsonb)') IS NULL THEN
+                    IF EXISTS (SELECT 1 FROM pg_available_extensions WHERE name = 'pgmq') THEN
+                        CREATE EXTENSION IF NOT EXISTS pgmq;
+                    ELSE
+                        RAISE EXCEPTION 'PGMQ must be installed in the database before enabling APP_BACKEND=postgres';
+                    END IF;
+                END IF;
+                IF to_regprocedure('pgmq.read(text,integer,integer,jsonb)') IS NULL
+                   OR to_regprocedure('pgmq.delete(text,bigint)') IS NULL
+                   OR to_regprocedure('pgmq.archive(text,bigint)') IS NULL THEN
+                    RAISE EXCEPTION 'PGMQ installation is incompatible with the required queue API';
+                END IF;
+            END $$`,
 			`DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pgmq.meta WHERE queue_name = 'fetcher_tasks') THEN PERFORM pgmq.create('fetcher_tasks'); END IF; END $$`,
 			`GRANT USAGE ON SCHEMA pgmq TO fetcher_worker`,
 			`GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE pgmq.q_fetcher_tasks, pgmq.a_fetcher_tasks TO fetcher_worker`,

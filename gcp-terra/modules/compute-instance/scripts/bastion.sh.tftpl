@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Keep first-boot access for fresh VMs; Ansible owns later configuration.
+if [[ -f /etc/datamonitor/bastion-ansible-managed ]]; then
+  exit 0
+fi
+
 export DEBIAN_FRONTEND=noninteractive
 
 echo "=== Configuring Bastion VM ==="

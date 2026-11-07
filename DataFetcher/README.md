@@ -86,7 +86,7 @@ docker compose ps
 docker compose logs --tail 100 postgres history fetcher
 ```
 
-Check installed extensions with `SELECT extname FROM pg_extension WHERE extname IN ('pgmq', 'hstore');`. Check queues with `SELECT * FROM pgmq.list_queues();`. In `postgres` mode, completed tasks are in `fetcher_tasks`, active messages are in `pgmq.q_fetcher_tasks`, and price records are in `history`.
+For extension installs, check `SELECT extname FROM pg_extension WHERE extname IN ('pgmq', 'hstore');`. SQL-only PGMQ is checked with `SELECT to_regprocedure('pgmq.send(text,jsonb)');`. Check queues with `SELECT * FROM pgmq.list_queues();`. In `postgres` mode, completed tasks are in `fetcher_tasks`, active messages are in `pgmq.q_fetcher_tasks`, and price records are in `history`.
 
 ## Development
 
@@ -154,8 +154,10 @@ docker logs datamonitor-nginx --tail 50
 History and Fetcher use the Cloud SQL Go Connector when
 `INSTANCE_CONNECTION_NAME=PROJECT:REGION:INSTANCE` is set. Leave it empty for
 local/Vagrant PostgreSQL. Compose passes this variable to both applications.
-The value is read from the environment secret together with the database
-credentials; it is not duplicated in Terraform startup metadata.
+For GCP deployments, `config.json` selects `database.provider` and
+`compute.application.app_backend`; Terraform supplies routing settings in startup
+metadata, overriding the environment secret. Credentials remain in the secret.
+See [bootstrap configuration](../gcp-terra/bootstrap/README.md#вибір-бази-та-бекенду).
 
 The connector always uses private IP and supplies authenticated TLS. The VM must
 have a network route to Cloud SQL and a service account with `roles/cloudsql.client`;
@@ -167,8 +169,9 @@ user/password in `POSTGRES_USER`/`POSTGRES_PASSWORD`, and a distinct worker pass
 in `FETCHER_POSTGRES_PASSWORD` in the environment secret. The PostgreSQL host is
 ignored by the connector. Start History first: it configures `fetcher_worker` and
 the schema using a database user with role creation and schema privileges. Then
-start Fetcher. Keep `APP_BACKEND=hybrid`: the `postgres` backend requires the pgmq
-extension, which is not available as a supported Cloud SQL extension.
+start Fetcher. Both `APP_BACKEND=hybrid` and `APP_BACKEND=postgres` are supported.
+For `postgres`, first install PGMQ using the one-time SQL-only migration below;
+Cloud SQL does not provide the PGMQ extension package.
 
 Both Go modules and Docker builders use Go 1.26 or later. The final images include
 CA certificates for the connector's Google API HTTPS requests. Private VM egress
@@ -204,7 +207,8 @@ required. Updating startup metadata does not execute the script automatically;
 reboot the VM or run `sudo google_metadata_script_runner startup` after applying
 an intentional metadata change.
 
-The `database` VM role starts only RabbitMQ and Redis. The local PostgreSQL
+In `hybrid` mode the `database` VM role starts RabbitMQ and Redis. In `postgres`
+mode it stops these containers (keeping their volumes); neither is required. The local PostgreSQL
 service remains in Compose for local development. Old PostgreSQL data is not
 needed. Explicitly disable its old restart policy and stop it on the existing
 VM; its data volumes are retained. The deployment scripts do not stop it for you.
@@ -219,3 +223,41 @@ Startup receives only the service role, GCP project, environment secret ID,
 HTTPS toggle, repository URL and Git ref. Cloudflare Tunnel is not supported by
 the current deployment path. Cloud SQL connection settings come from Secret
 Manager. No old PostgreSQL history needs to be imported into Cloud SQL.
+
+## PGMQ SQL-only on Cloud SQL
+
+The managed database uses upstream PGMQ **v1.13.1**, installed as SQL objects in
+schema `pgmq`, not as a PostgreSQL extension. It is already installed in the
+current Cloud SQL database; the one-time Python installer has been removed.
+Its version/checksum remains recorded in `public.datamonitor_schema_migrations`.
+
+For a new database, install the SQL file from the pinned upstream release once,
+following the upstream SQL-only installation guide linked below. The verified
+SHA-256 for `pgmq-extension/sql/pgmq.sql` from tag `v1.13.1` is
+`e861fcbd8c602df70a00eb9d230b1a2f591860a2230b9a6084172e3eff463642`.
+Run it transactionally with `psql -X --single-transaction -v ON_ERROR_STOP=1 -f pgmq.sql`
+from a VM in the private network, using database-owner credentials. The raw SQL
+file is for a fresh schema, not a repeatable upgrade. Startup never installs or
+upgrades SQL-only PGMQ. No Python installer is required to run the applications.
+
+History detects the PGMQ SQL API before attempting an extension install. Local
+PostgreSQL images with the packaged extension still work. History creates the
+`fetcher_tasks` queue and grants its worker the required table/function privileges.
+Set `APP_BACKEND=postgres` in the shared environment secret, refresh and recreate
+History, Fetcher and UI, then run deployment on the database VM to stop the unused
+brokers. The applications must use the same mode.
+
+Verify:
+
+```sql
+SELECT name, applied_at FROM public.datamonitor_schema_migrations;
+SELECT * FROM pgmq.list_queues();
+SELECT status, count(*) FROM fetcher_tasks GROUP BY status;
+SELECT source, count(*), max(recorded_at) FROM history GROUP BY source;
+```
+
+In PostgreSQL mode History enqueues work through `pgmq.send`; Fetcher uses
+`pgmq.read` and acknowledges completed messages with `pgmq.delete`. UI preferences
+are stored in PostgreSQL. Cloud SQL remains private-only and Go Connector is
+unchanged. Upstream installation guide:
+https://github.com/pgmq/pgmq/blob/v1.13.1/INSTALLATION.md

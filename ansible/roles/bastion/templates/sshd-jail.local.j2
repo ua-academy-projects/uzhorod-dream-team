@@ -1,0 +1,8 @@
+# Managed by Ansible.
+[sshd]
+enabled = true
+port = {{ bastion_port }}
+backend = systemd
+maxretry = {{ bastion_fail2ban_maxretry }}
+findtime = {{ bastion_fail2ban_findtime }}
+bantime = {{ bastion_fail2ban_bantime }}

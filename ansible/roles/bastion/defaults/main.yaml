@@ -1,0 +1,13 @@
+---
+bastion_port: "{{ compute.instances.bastion.startup.ssh_port }}"
+bastion_packages:
+  - openssh-server
+  - ufw
+  - fail2ban
+  - python3-systemd
+bastion_cache_valid_time: 3600
+bastion_max_auth_tries: 3
+bastion_fail2ban_maxretry: 5
+bastion_fail2ban_findtime: 600
+bastion_fail2ban_bantime: 3600
+bastion_connection_timeout: 120

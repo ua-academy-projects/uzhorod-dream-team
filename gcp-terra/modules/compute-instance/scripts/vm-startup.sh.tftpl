@@ -9,20 +9,20 @@ SETTINGS_DIR=/etc/datamonitor
 install -d -m 700 "$SETTINGS_DIR"
 SETTINGS_TMP="$(mktemp "$SETTINGS_DIR/deploy.env.XXXXXX")"
 trap 'rm -f "$SETTINGS_TMP"' EXIT
-for key in SERVICE_ROLE PROJECT_ID ENV_SECRET_ID IP_HTTPS REPO_URL REPO_REF APP_DIR; do
+for key in APP_BACKEND DATABASE_PROVIDER DATABASE_HOST DATABASE_NAME INSTANCE_CONNECTION_NAME SERVICE_ROLE PROJECT_ID ENV_SECRET_ID IP_HTTPS REPO_URL REPO_REF APP_DIR; do
   printf 'export %s=%q\n' "$key" "$${!key}"
 done > "$SETTINGS_TMP"
 mv "$SETTINGS_TMP" "$SETTINGS_DIR/deploy.env"
 
-if ! command -v git >/dev/null || ! command -v curl >/dev/null || ! command -v python3 >/dev/null; then
+if ! command -v git >/dev/null || ! command -v curl >/dev/null || ! python3 -c 'import yaml' >/dev/null 2>&1; then
   export DEBIAN_FRONTEND=noninteractive
   apt-get update
-  apt-get install -y git curl python3 ca-certificates
+  apt-get install -y git curl python3 python3-yaml ca-certificates
 fi
 
 # Resolve the configured ref on first boot or when the source setting changes.
 # Subsequent boots use the existing checkout; updates are explicit deployments.
-SOURCE="$REPO_URL $REPO_REF"
+SOURCE="$REPO_URL $REPO_REF $ENV_SECRET_ID"
 if [[ ! -d "$APP_DIR/.git" ]]; then
   git clone --no-checkout "$REPO_URL" "$APP_DIR"
 fi

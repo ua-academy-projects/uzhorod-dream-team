@@ -1,0 +1,11 @@
+---
+- name: Configure bastion SSH, firewall and fail2ban
+  hosts: bastion
+  become: true
+  serial: 1
+
+  vars_files:
+    - ../../config.json
+
+  roles:
+    - role: ../roles/bastion

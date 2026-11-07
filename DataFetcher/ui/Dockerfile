@@ -9,7 +9,7 @@ RUN pip install --no-cache-dir --no-compile -r requirements.txt
 RUN addgroup -S app && adduser -S -H -G app app
 
 
-COPY . .
+COPY --chown=app:app . .
 
 USER app
 EXPOSE 8000

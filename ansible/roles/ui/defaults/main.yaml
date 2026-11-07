@@ -1,0 +1,37 @@
+---
+ui_app_dir: /opt/datamonitor
+ui_compose_dir: "{{ ui_app_dir }}/DataFetcher"
+ui_wait_timeout: 120
+# Host loopback port; the application listens on 8000 inside the container.
+ui_port: 8080
+ui_http_port: 80
+ui_https_port: 443
+ui_bind_ip: 0.0.0.0
+ui_https_enabled: "{{ compute.instances.ui.startup.ip_https | default(false) | bool }}"
+# Empty means discover the attached public IPv4 address through GCP metadata.
+ui_public_ip: ''
+ui_force_build: false
+ui_revision_file: "{{ ui_app_dir }}/.ui-deployed-revision"
+ui_nginx_dir: /var/lib/datamonitor/nginx
+ui_acme_webroot: /var/lib/letsencrypt
+ui_certbot_dir: /opt/datamonitor-certbot
+ui_certbot_package: 'certbot>=5.4,<6'
+ui_docker_cli: /usr/bin/docker
+ui_certbot_argv:
+  - "{{ ui_certbot_dir }}/bin/certbot"
+  - certonly
+  - --non-interactive
+  - --agree-tos
+  - --register-unsafely-without-email
+  - --preferred-profile
+  - shortlived
+  - --preferred-challenges
+  - http
+  - --webroot
+  - --webroot-path
+  - "{{ ui_acme_webroot }}"
+  - --ip-address
+  - "{{ ui_certificate_ip }}"
+  - --cert-name
+  - "{{ ui_certificate_ip }}"
+  - --keep-until-expiring

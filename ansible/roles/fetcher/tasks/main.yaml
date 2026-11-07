@@ -1,0 +1,91 @@
+---
+- name: Validate Fetcher deployment settings
+  ansible.builtin.assert:
+    that:
+      - compute.instances.fetcher.startup.type == 'none'
+      - compute.application.app_backend in ['hybrid', 'postgres']
+      - database.provider in ['cloud_sql', 'container']
+      - fetcher_port | int > 0
+      - fetcher_port | int < 65536
+    fail_msg: Fetcher must use Ansible deployment and valid backend, database and port settings.
+
+- name: Get the configured application revision
+  ansible.builtin.git:
+    repo: "{{ compute.application.repo_url }}"
+    version: "{{ compute.application.repo_branch }}"
+    dest: "{{ fetcher_app_dir }}"
+    force: false
+  register: fetcher_source
+
+- name: Check for a previously deployed revision
+  ansible.builtin.stat:
+    path: "{{ fetcher_revision_file }}"
+  register: fetcher_revision_stat
+
+- name: Read the previously deployed revision
+  ansible.builtin.slurp:
+    src: "{{ fetcher_revision_file }}"
+  register: fetcher_deployed_revision
+  when: fetcher_revision_stat.stat.exists
+
+- name: Fetch the Fetcher environment using the VM service account
+  ansible.builtin.include_role:
+    name: "{{ role_path }}/../secret_access"
+  vars:
+    secret_access_service: fetcher
+    secret_access_dest: "{{ fetcher_compose_dir }}/fetcher/.env"
+  when: not ansible_check_mode
+
+- name: Write the Fetcher-only Compose configuration
+  ansible.builtin.template:
+    src: compose.fetcher.yaml.j2
+    dest: "{{ fetcher_compose_dir }}/compose.fetcher.yaml"
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Build and start Fetcher
+  community.docker.docker_compose_v2:
+    project_src: "{{ fetcher_compose_dir }}"
+    files: [compose.fetcher.yaml]
+    services: [fetcher]
+    dependencies: false
+    state: present
+    build: >-
+      {{ 'always' if (fetcher_force_build | bool or
+         (fetcher_deployed_revision.content | default('') | b64decode | trim)
+         != fetcher_source.after) else 'policy' }}
+    pull: never
+    wait: true
+    wait_timeout: "{{ fetcher_wait_timeout }}"
+  no_log: true
+  when: not ansible_check_mode
+
+- name: Wait for the Fetcher HTTP endpoint
+  ansible.builtin.uri:
+    url: "http://{{ compute.instances.fetcher.network_ip }}:{{ fetcher_port }}/health"
+    use_proxy: false
+    status_code: 200
+    timeout: 5
+  register: fetcher_health
+  until: fetcher_health is succeeded
+  retries: 12
+  delay: 5
+  when: not ansible_check_mode
+
+- name: Record the revision only after successful deployment and HTTP check
+  ansible.builtin.copy:
+    content: "{{ fetcher_source.after }}\n"
+    dest: "{{ fetcher_revision_file }}"
+    owner: root
+    group: root
+    mode: '0644'
+  when: not ansible_check_mode
+
+- name: Remove the legacy shared environment after successful deployment
+  ansible.builtin.file:
+    path: "{{ fetcher_compose_dir }}/.env"
+    state: absent
+  no_log: true
+  diff: false
+  when: not ansible_check_mode

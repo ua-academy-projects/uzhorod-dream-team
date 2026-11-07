@@ -1,0 +1,86 @@
+---
+- name: Validate database VM deployment settings
+  ansible.builtin.assert:
+    that:
+      - database.provider in ['cloud_sql', 'container']
+      - compute.application.app_backend in ['hybrid', 'postgres']
+      - compute.instances.postgres.startup.type == 'none'
+    fail_msg: Use valid backend settings and Ansible deployment (startup.type none).
+
+- name: Select the services required on the database VM
+  ansible.builtin.set_fact:
+    postgres_services: >-
+      {{ (['postgres'] if database.provider == 'container' else []) +
+         (['rabbitmq', 'redis'] if compute.application.app_backend == 'hybrid' else []) }}
+
+- name: Get the configured application revision
+  ansible.builtin.git:
+    repo: "{{ compute.application.repo_url }}"
+    version: "{{ compute.application.repo_branch }}"
+    dest: "{{ postgres_app_dir }}"
+    force: false
+
+- name: Read the shared Compose service definitions
+  ansible.builtin.slurp:
+    src: "{{ postgres_compose_dir }}/docker-compose.yml"
+  register: postgres_compose_source
+
+- name: Parse the shared Compose configuration
+  ansible.builtin.set_fact:
+    postgres_compose_base: "{{ postgres_compose_source.content | b64decode | from_yaml }}"
+
+- name: Fetch the PostgreSQL and RabbitMQ environment using the VM service account
+  ansible.builtin.include_role:
+    name: "{{ role_path }}/../secret_access"
+  vars:
+    secret_access_service: postgres
+    secret_access_dest: "{{ postgres_compose_dir }}/postgres/.env"
+  when: not ansible_check_mode
+
+- name: Write the database VM Compose configuration
+  ansible.builtin.template:
+    src: compose.postgres.yaml.j2
+    dest: "{{ postgres_compose_dir }}/compose.postgres.yaml"
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Stop services no longer required without deleting containers or volumes
+  community.docker.docker_compose_v2:
+    project_src: "{{ postgres_compose_dir }}"
+    files: [compose.postgres.yaml]
+    env_files: [postgres/.env]
+    profiles: [database]
+    services: "{{ ['postgres', 'rabbitmq', 'redis'] | difference(postgres_services) }}"
+    state: stopped
+    timeout: "{{ postgres_wait_timeout }}"
+  no_log: true
+  when:
+    - not ansible_check_mode
+    - postgres_services | length < 3
+
+- name: Start selected database VM services and wait for their healthchecks
+  community.docker.docker_compose_v2:
+    project_src: "{{ postgres_compose_dir }}"
+    files: [compose.postgres.yaml]
+    env_files: [postgres/.env]
+    profiles: [database]
+    services: "{{ postgres_services }}"
+    dependencies: false
+    state: present
+    build: never
+    pull: missing
+    wait: true
+    wait_timeout: "{{ postgres_wait_timeout }}"
+  no_log: true
+  when:
+    - not ansible_check_mode
+    - postgres_services | length > 0
+
+- name: Remove the legacy shared environment after successful deployment
+  ansible.builtin.file:
+    path: "{{ postgres_compose_dir }}/.env"
+    state: absent
+  no_log: true
+  diff: false
+  when: not ansible_check_mode

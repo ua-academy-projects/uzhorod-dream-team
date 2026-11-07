@@ -1,0 +1,205 @@
+---
+- name: Validate bastion settings before changing SSH or firewall
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['os_family'] == 'Debian'
+      - bastion_port | int > 0
+      - bastion_port | int < 65536
+      - bastion_port | int == compute.instances.bastion.startup.ssh_port | int
+      - bastion_port | int == ansible_port | default(22) | int
+      - ansible_user | default('root') != 'root'
+      - bastion_max_auth_tries | int > 0
+      - bastion_fail2ban_maxretry | int > 0
+      - bastion_fail2ban_findtime | int > 0
+      - bastion_fail2ban_bantime | int > 0
+      - bastion_connection_timeout | int > 0
+    fail_msg: Use Debian/Ubuntu, a non-root SSH user and the existing port matching config and inventory. Port migration is a separate operation.
+
+- name: Install bastion packages
+  ansible.builtin.apt:
+    name: "{{ bastion_packages }}"
+    state: present
+    update_cache: true
+    cache_valid_time: "{{ bastion_cache_valid_time }}"
+
+- name: Allow the current SSH port before applying firewall policies
+  community.general.ufw:
+    rule: allow
+    port: "{{ bastion_port | string }}"
+    proto: tcp
+
+- name: Ensure the SSH configuration directory exists
+  ansible.builtin.file:
+    path: /etc/ssh/sshd_config.d
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Configure and validate SSH before notifying a restart
+  block:
+    - name: Write the SSH hardening drop-in
+      ansible.builtin.template:
+        src: ssh-hardening.conf.j2
+        dest: /etc/ssh/sshd_config.d/01-hardening.conf
+        owner: root
+        group: root
+        mode: '0644'
+        backup: true
+        validate: /usr/sbin/sshd -t -f %s
+      register: bastion_ssh_config
+
+    - name: Validate the complete SSH configuration
+      ansible.builtin.command:
+        argv: [/usr/sbin/sshd, -t]
+      changed_when: false
+      when: not ansible_check_mode
+
+    - name: Read the effective SSH configuration
+      ansible.builtin.command:
+        argv: [/usr/sbin/sshd, -T]
+      register: bastion_effective_ssh
+      changed_when: false
+      when: not ansible_check_mode
+
+    - name: Require the configured port and authentication settings to take effect
+      ansible.builtin.assert:
+        that:
+          - (bastion_effective_ssh.stdout_lines | select('match', '^port ') | list) == ['port ' ~ bastion_port]
+          - "'pubkeyauthentication yes' in bastion_effective_ssh.stdout_lines"
+          - "'passwordauthentication no' in bastion_effective_ssh.stdout_lines"
+          - "'kbdinteractiveauthentication no' in bastion_effective_ssh.stdout_lines"
+          - "'permitrootlogin no' in bastion_effective_ssh.stdout_lines"
+          - "'x11forwarding no' in bastion_effective_ssh.stdout_lines"
+          - "'allowagentforwarding no' in bastion_effective_ssh.stdout_lines"
+          - "'allowtcpforwarding yes' in bastion_effective_ssh.stdout_lines"
+          - "('maxauthtries ' ~ bastion_max_auth_tries) in bastion_effective_ssh.stdout_lines"
+        fail_msg: Another SSH setting overrides the bastion configuration. The drop-in will be restored before any restart.
+      when: not ansible_check_mode
+
+    - name: Schedule a restart only after successful SSH validation
+      ansible.builtin.debug:
+        msg: The SSH configuration passed validation.
+      changed_when: bastion_ssh_config is changed
+      notify: Restart bastion SSH
+  rescue:
+    - name: Restore the previous drop-in if validation failed
+      ansible.builtin.copy:
+        src: "{{ bastion_ssh_config.backup_file }}"
+        dest: /etc/ssh/sshd_config.d/01-hardening.conf
+        remote_src: true
+        owner: root
+        group: root
+        mode: '0644'
+      when: bastion_ssh_config.backup_file is defined
+
+    - name: Remove a newly created drop-in if validation failed
+      ansible.builtin.file:
+        path: /etc/ssh/sshd_config.d/01-hardening.conf
+        state: absent
+      when:
+        - bastion_ssh_config is changed
+        - bastion_ssh_config.backup_file is not defined
+
+    - name: Stop without restarting SSH after a configuration error
+      ansible.builtin.fail:
+        msg: SSH validation failed. The previous drop-in was restored where available, and no SSH restart was requested.
+
+- name: Check whether SSH socket activation is installed
+  ansible.builtin.stat:
+    path: /lib/systemd/system/ssh.socket
+  register: bastion_ssh_socket
+
+- name: Disable socket activation so ssh.service controls the listening port
+  ansible.builtin.systemd_service:
+    name: ssh.socket
+    enabled: false
+    state: stopped
+  when: bastion_ssh_socket.stat.exists
+  notify: Restart bastion SSH
+
+- name: Ensure SSH service is enabled and running
+  ansible.builtin.systemd_service:
+    name: ssh.service
+    enabled: true
+    state: started
+
+- name: Create the fail2ban configuration directory
+  ansible.builtin.file:
+    path: /etc/fail2ban/jail.d
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Configure the fail2ban SSH jail
+  ansible.builtin.template:
+    src: sshd-jail.local.j2
+    dest: /etc/fail2ban/jail.d/sshd.local
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Restart bastion fail2ban
+
+- name: Validate the complete fail2ban configuration
+  ansible.builtin.command:
+    argv: [/usr/bin/fail2ban-client, -t]
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: Deny incoming connections by default
+  community.general.ufw:
+    direction: incoming
+    policy: deny
+
+- name: Allow outgoing connections for SSH jump traffic and package updates
+  community.general.ufw:
+    direction: outgoing
+    policy: allow
+
+- name: Enable the local firewall with the SSH allow rule already present
+  community.general.ufw:
+    state: enabled
+
+- name: Ensure fail2ban is enabled and running
+  ansible.builtin.systemd_service:
+    name: fail2ban
+    enabled: true
+    state: started
+
+- name: Apply validated SSH and fail2ban changes
+  ansible.builtin.meta: flush_handlers
+
+- name: Close the persistent SSH session to test a fresh connection
+  ansible.builtin.meta: reset_connection
+  when: not ansible_check_mode
+
+- name: Verify a fresh SSH connection through the configured firewall
+  ansible.builtin.wait_for_connection:
+    timeout: "{{ bastion_connection_timeout }}"
+    connect_timeout: 10
+    sleep: 5
+  when: not ansible_check_mode
+
+- name: Verify the SSH fail2ban jail is active
+  ansible.builtin.command:
+    argv: [/usr/bin/fail2ban-client, status, sshd]
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: Create the bastion management marker directory
+  ansible.builtin.file:
+    path: /etc/datamonitor
+    state: directory
+    owner: root
+    group: root
+    mode: '0700'
+
+- name: Mark the bastion as managed by Ansible only after successful checks
+  ansible.builtin.copy:
+    content: "Bastion configured and SSH access verified by Ansible.\n"
+    dest: /etc/datamonitor/bastion-ansible-managed
+    owner: root
+    group: root
+    mode: '0600'
+  when: not ansible_check_mode

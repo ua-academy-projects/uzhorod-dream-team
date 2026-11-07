@@ -1,0 +1,93 @@
+---
+- name: Discover the public IPv4 attached to the UI VM
+  ansible.builtin.uri:
+    url: http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/access-configs/0/external-ip
+    headers:
+      Metadata-Flavor: Google
+    use_proxy: false
+    use_netrc: false
+    return_content: true
+    timeout: 10
+    status_code: 200
+  register: ui_ip_metadata
+  changed_when: false
+  when: ui_public_ip | length == 0
+
+- name: Select the certificate IP address
+  ansible.builtin.set_fact:
+    ui_certificate_ip: "{{ ui_public_ip if ui_public_ip | length > 0 else ui_ip_metadata.content | trim }}"
+
+- name: Require a valid public IPv4 address for the certificate
+  ansible.builtin.assert:
+    that:
+      - ui_certificate_ip is match('^([0-9]{1,3}\.){3}[0-9]{1,3}$')
+      - ui_certificate_ip.split('.') | map('int') | max < 256
+    fail_msg: IP HTTPS requires the public IPv4 address attached to this VM.
+
+- name: Install Certbot in its isolated environment
+  ansible.builtin.pip:
+    name: "{{ ui_certbot_package }}"
+    virtualenv: "{{ ui_certbot_dir }}"
+    virtualenv_command: /usr/bin/python3 -m venv
+
+- name: Inspect the existing certificate
+  ansible.builtin.stat:
+    path: "/etc/letsencrypt/live/{{ ui_certificate_ip }}/fullchain.pem"
+    follow: true
+    checksum_algorithm: sha256
+  register: ui_certificate_before
+
+- name: Inspect the existing private key
+  ansible.builtin.stat:
+    path: "/etc/letsencrypt/live/{{ ui_certificate_ip }}/privkey.pem"
+    follow: true
+    get_checksum: false
+  register: ui_private_key
+  no_log: true
+
+- name: Determine whether nginx can start with HTTPS immediately
+  ansible.builtin.set_fact:
+    ui_tls_ready: >-
+      {{ ui_certificate_before.stat.exists and
+         ui_certificate_before.stat.size | default(0) > 0 and
+         ui_private_key.stat.exists and ui_private_key.stat.size | default(0) > 0 }}
+
+- name: Check for a previous renewal service
+  ansible.builtin.stat:
+    path: /etc/systemd/system/datamonitor-ip-https.service
+  register: ui_existing_renewal
+
+- name: Read the previous renewal service
+  ansible.builtin.slurp:
+    src: /etc/systemd/system/datamonitor-ip-https.service
+  register: ui_existing_renewal_source
+  when: ui_existing_renewal.stat.exists
+
+- name: Stop legacy script-based renewal during migration
+  ansible.builtin.include_tasks: https_disable.yaml
+  when:
+    - ui_existing_renewal.stat.exists
+    - "'setup-ui-https.sh' in (ui_existing_renewal_source.content | default('') | b64decode)"
+
+- name: Write the managed certificate renewal service
+  ansible.builtin.template:
+    src: datamonitor-ip-https.service.j2
+    dest: /etc/systemd/system/datamonitor-ip-https.service
+    owner: root
+    group: root
+    mode: '0644'
+  register: ui_renewal_service_unit
+
+- name: Write the certificate renewal timer
+  ansible.builtin.template:
+    src: datamonitor-ip-https.timer.j2
+    dest: /etc/systemd/system/datamonitor-ip-https.timer
+    owner: root
+    group: root
+    mode: '0644'
+  register: ui_renewal_timer_unit
+
+- name: Reload systemd when certificate renewal units change
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+  when: ui_renewal_service_unit is changed or ui_renewal_timer_unit is changed

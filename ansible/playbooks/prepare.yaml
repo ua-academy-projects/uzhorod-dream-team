@@ -1,0 +1,11 @@
+- name: Configure instances
+  hosts: internal
+  become: true
+
+  vars_files:
+    - ../../config.json
+  
+  roles:
+    - role: ../roles/common
+    - role: ../roles/docker
+  

@@ -1,7 +1,15 @@
 {
+  "ansible_user": "phantom_s",
   "project_id": "project-a5588ddc-4a2e-4c04-879",
   "region": "europe-west4",
   "zone": "europe-west4-a",
+  "bootstrap": {
+    "project_name": "Data Monitor",
+    "service_account_id": "terraform-deployer",
+    "service_account_name": "Terraform infrastructure deployer",
+    "bucket_name": "project-a5588ddc-4a2e-4c04-879-tfstate",
+    "state_prefix": "datamonitor/dev"
+  },
   "network": {
     "name": "analyzer-vpc",
     "subnet": {
@@ -76,7 +84,29 @@
     "display_name": "Data Monitor VM Service Account",
     "roles": [
       "roles/secretmanager.secretAccessor"
-    ]
+    ],
+    "services": {
+      "fetcher": {
+        "secret_id": "datamonitor-fetcher-env",
+        "account_id": "datamonitor-fetcher",
+        "display_name": "Data Monitor fetcher VM"
+      },
+      "postgres": {
+        "secret_id": "datamonitor-postgres-env",
+        "account_id": "datamonitor-postgres",
+        "display_name": "Data Monitor postgres VM"
+      },
+      "history": {
+        "secret_id": "datamonitor-history-env",
+        "account_id": "datamonitor-history",
+        "display_name": "Data Monitor history VM"
+      },
+      "ui": {
+        "secret_id": "datamonitor-ui-env",
+        "account_id": "datamonitor-ui",
+        "display_name": "Data Monitor ui VM"
+      }
+    }
   },
   "compute": {
     "defaults": {
@@ -116,8 +146,7 @@
           "internal-service"
         ],
         "startup": {
-          "type": "application",
-          "service_role": "fetcher"
+          "type": "none"
         }
       },
       "postgres": {
@@ -128,8 +157,7 @@
           "internal-service"
         ],
         "startup": {
-          "type": "application",
-          "service_role": "database"
+          "type": "none"
         }
       },
       "history": {
@@ -140,8 +168,7 @@
           "internal-service"
         ],
         "startup": {
-          "type": "application",
-          "service_role": "history"
+          "type": "none"
         }
       },
       "ui": {
@@ -151,8 +178,7 @@
           "ui-service"
         ],
         "startup": {
-          "type": "application",
-          "service_role": "ui",
+          "type": "none",
           "ip_https": true
         },
         "public_ip": true,
@@ -161,7 +187,22 @@
     },
     "application": {
       "repo_url": "https://github.com/ua-academy-projects/uzhorod-dream-team.git",
-      "repo_branch": "dmytro/btc-eth-price-analyzer"
+      "repo_branch": "dmytro/btc-eth-price-analyzer",
+      "app_backend": "hybrid"
     }
+  },
+  "cloud_sql": {
+    "instance_name": "datamonitor",
+    "database_version": "POSTGRES_18",
+    "region": "europe-west4",
+    "zone": "europe-west4-a",
+    "tier": "db-perf-optimized-N-8",
+    "public_ip": false,
+    "deletion_protection": true,
+    "edition": "ENTERPRISE_PLUS"
+  },
+  "database": {
+    "provider": "cloud_sql",
+    "name": "history"
   }
 }

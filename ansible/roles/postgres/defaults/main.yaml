@@ -1,0 +1,8 @@
+---
+postgres_app_dir: /opt/datamonitor
+postgres_compose_dir: "{{ postgres_app_dir }}/DataFetcher"
+postgres_bind_ip: "{{ compute.instances.postgres.network_ip }}"
+postgres_port: 5432
+redis_port: 6379
+rabbitmq_port: 5672
+postgres_wait_timeout: 360

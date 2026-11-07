@@ -11,7 +11,7 @@ case "$MODE" in
     git -C "$APP_DIR" remote set-url origin "$REPO_URL"
     git -C "$APP_DIR" fetch origin "$REPO_REF"
     git -C "$APP_DIR" checkout --detach FETCH_HEAD
-    printf '%s\n' "$REPO_URL $REPO_REF" > /etc/datamonitor/source
+    printf '%s\n' "$REPO_URL $REPO_REF $ENV_SECRET_ID" > /etc/datamonitor/source
     # Re-enter the deployment script from the selected release.
     exec bash "$APP_DIR/gcp-terra/scripts/deploy.sh" --boot
     ;;

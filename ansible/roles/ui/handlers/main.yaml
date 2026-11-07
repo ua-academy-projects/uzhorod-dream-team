@@ -1,0 +1,13 @@
+---
+- name: Validate UI nginx configuration
+  ansible.builtin.command:
+    argv: ["{{ ui_docker_cli }}", exec, datamonitor-nginx, nginx, -t]
+  changed_when: false
+  listen: Apply UI nginx configuration
+  when: not ansible_check_mode
+
+- name: Reload UI nginx
+  ansible.builtin.command:
+    argv: ["{{ ui_docker_cli }}", exec, datamonitor-nginx, nginx, -s, reload]
+  listen: Apply UI nginx configuration
+  when: not ansible_check_mode

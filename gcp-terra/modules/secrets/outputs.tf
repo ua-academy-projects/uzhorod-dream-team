@@ -1,7 +1,7 @@
-output "service_account_email" {
-  value = google_service_account.datamonitor.email
+output "service_account_emails" {
+  value = { for key, account in google_service_account.service : key => account.email }
 }
 
-output "env_secret_id" {
-  value = google_secret_manager_secret.datamonitor_env.secret_id
+output "env_secret_ids" {
+  value = { for key, secret in google_secret_manager_secret.service_env : key => secret.secret_id }
 }

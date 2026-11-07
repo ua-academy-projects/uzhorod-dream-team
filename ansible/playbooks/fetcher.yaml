@@ -1,0 +1,10 @@
+---
+- name: Deploy Fetcher
+  hosts: fetcher
+  become: true
+
+  vars_files:
+    - ../../config.json
+
+  roles:
+    - role: ../roles/fetcher

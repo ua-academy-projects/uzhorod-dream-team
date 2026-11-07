@@ -2,3 +2,6 @@
 .gomodcache
 **/.git
 **/__pycache__
+
+.env
+.env.*

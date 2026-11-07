@@ -1,0 +1,23 @@
+---
+- name: Check for the existing certificate renewal timer
+  ansible.builtin.stat:
+    path: /etc/systemd/system/datamonitor-ip-https.timer
+  register: ui_old_timer
+
+- name: Stop certificate renewal while deployment updates nginx
+  ansible.builtin.systemd_service:
+    name: datamonitor-ip-https.timer
+    state: stopped
+    enabled: false
+  when: ui_old_timer.stat.exists
+
+- name: Check for the existing certificate renewal service
+  ansible.builtin.stat:
+    path: /etc/systemd/system/datamonitor-ip-https.service
+  register: ui_old_renewal
+
+- name: Stop any running certificate renewal process
+  ansible.builtin.systemd_service:
+    name: datamonitor-ip-https.service
+    state: stopped
+  when: ui_old_renewal.stat.exists

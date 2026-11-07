@@ -1,0 +1,180 @@
+---
+- name: Validate UI deployment settings
+  ansible.builtin.assert:
+    that:
+      - compute.instances.ui.startup.type == 'none'
+      - compute.application.app_backend in ['hybrid', 'postgres']
+      - ui_port | int > 0
+      - ui_port | int < 65536
+      - ui_http_port | int > 0
+      - ui_http_port | int < 65536
+      - ui_https_port | int > 0
+      - ui_https_port | int < 65536
+      - ([ui_port | int, ui_http_port | int, ui_https_port | int] | unique | length) == 3
+      - ui_wait_timeout | int > 0
+      - not (ui_https_enabled | bool) or (ui_http_port | int == 80 and ui_https_port | int == 443)
+    fail_msg: Use Ansible deployment, distinct valid ports and public ports 80/443 for IP HTTPS.
+
+- name: Get the configured application revision
+  ansible.builtin.git:
+    repo: "{{ compute.application.repo_url }}"
+    version: "{{ compute.application.repo_branch }}"
+    dest: "{{ ui_app_dir }}"
+    force: false
+  register: ui_source
+
+- name: Check for a previously deployed revision
+  ansible.builtin.stat:
+    path: "{{ ui_revision_file }}"
+  register: ui_revision_stat
+
+- name: Read the previously deployed revision
+  ansible.builtin.slurp:
+    src: "{{ ui_revision_file }}"
+  register: ui_deployed_revision
+  when: ui_revision_stat.stat.exists
+
+- name: Read the shared Compose definition
+  ansible.builtin.slurp:
+    src: "{{ ui_compose_dir }}/docker-compose.yml"
+  register: ui_compose_source
+
+- name: Parse the shared Compose definition
+  ansible.builtin.set_fact:
+    ui_compose_base: "{{ ui_compose_source.content | b64decode | from_yaml }}"
+    ui_tls_ready: false
+    ui_certificate_ip: "{{ ui_public_ip }}"
+
+- name: Create nginx and certificate directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  loop:
+    - "{{ ui_nginx_dir }}"
+    - "{{ ui_acme_webroot }}"
+    - /etc/letsencrypt
+
+- name: Fetch the UI environment using the VM service account
+  ansible.builtin.include_role:
+    name: "{{ role_path }}/../secret_access"
+  vars:
+    secret_access_service: ui
+    secret_access_dest: "{{ ui_compose_dir }}/ui/.env"
+  when: not ansible_check_mode
+
+- name: Deploy UI and nginx
+  block:
+    - name: Prepare IP HTTPS and replace legacy certificate renewal
+      ansible.builtin.include_tasks: https_prepare.yaml
+      when:
+        - ui_https_enabled | bool
+        - not ansible_check_mode
+
+    - name: Disable old certificate renewal when HTTPS is disabled
+      ansible.builtin.include_tasks: https_disable.yaml
+      when:
+        - not (ui_https_enabled | bool)
+        - not ansible_check_mode
+
+    - name: Configure nginx for the available certificate
+      ansible.builtin.include_tasks: nginx.yaml
+
+    - name: Write the UI Compose configuration
+      ansible.builtin.template:
+        src: compose.ui.yaml.j2
+        dest: "{{ ui_compose_dir }}/compose.ui.yaml"
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Build and start UI and nginx
+      community.docker.docker_compose_v2:
+        project_src: "{{ ui_compose_dir }}"
+        files: [compose.ui.yaml]
+        env_files: [ui/.env]
+        profiles: [ui]
+        services: [ui, nginx]
+        state: present
+        build: >-
+          {{ 'always' if (ui_force_build | bool or
+             (ui_deployed_revision.content | default('') | b64decode | trim)
+             != ui_source.after) else 'policy' }}
+        pull: policy
+        wait: true
+        wait_timeout: "{{ ui_wait_timeout }}"
+      no_log: true
+      when: not ansible_check_mode
+
+    - name: Apply nginx configuration before certificate validation
+      ansible.builtin.meta: flush_handlers
+
+    - name: Obtain or renew the IP certificate and enable HTTPS
+      ansible.builtin.include_tasks: https_issue.yaml
+      when:
+        - ui_https_enabled | bool
+        - not ansible_check_mode
+
+    - name: Check the UI application on localhost
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ ui_port }}/"
+        use_proxy: false
+        status_code: 200
+        timeout: 10
+      register: ui_health
+      until: ui_health is succeeded
+      retries: 12
+      delay: 5
+      when: not ansible_check_mode
+
+    - name: Check the nginx HTTP endpoint
+      ansible.builtin.uri:
+        url: "http://{{ '127.0.0.1' if ui_bind_ip == '0.0.0.0' else ui_bind_ip }}:{{ ui_http_port }}/healthz"
+        use_proxy: false
+        status_code: 200
+        timeout: 5
+      register: ui_nginx_health
+      until: ui_nginx_health is succeeded
+      retries: 12
+      delay: 5
+      when: not ansible_check_mode
+
+    - name: Check HTTPS including the public certificate
+      ansible.builtin.uri:
+        url: "https://{{ ui_certificate_ip }}/"
+        use_proxy: false
+        validate_certs: true
+        status_code: 200
+        timeout: 10
+      register: ui_https_health
+      until: ui_https_health is succeeded
+      retries: 6
+      delay: 5
+      when:
+        - ui_https_enabled | bool
+        - not ansible_check_mode
+
+    - name: Record the successfully deployed UI revision
+      ansible.builtin.copy:
+        content: "{{ ui_source.after }}\n"
+        dest: "{{ ui_revision_file }}"
+        owner: root
+        group: root
+        mode: '0644'
+      when: not ansible_check_mode
+
+    - name: Remove the legacy shared environment after successful deployment
+      ansible.builtin.file:
+        path: "{{ ui_compose_dir }}/.env"
+        state: absent
+      no_log: true
+      diff: false
+      when: not ansible_check_mode
+  always:
+    - name: Restore certificate renewal even if HTTPS preparation or deployment fails
+      ansible.builtin.include_tasks: https_restore.yaml
+      when:
+        - ui_https_enabled | bool
+        - not ansible_check_mode

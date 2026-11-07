@@ -1,0 +1,24 @@
+---
+- name: Read the shared nginx HTTP configuration
+  ansible.builtin.slurp:
+    src: "{{ ui_compose_dir }}/nginx/{{ 'ip-http.conf.template' if ui_https_enabled | bool else 'default.conf' }}"
+  register: ui_nginx_http_source
+
+- name: Read the shared nginx HTTPS configuration
+  ansible.builtin.slurp:
+    src: "{{ ui_compose_dir }}/nginx/ip-https.conf.template"
+  register: ui_nginx_https_source
+  when: ui_https_enabled | bool
+
+- name: Write nginx configuration for the available certificate
+  ansible.builtin.copy:
+    content: |
+      {{ ui_nginx_http_source.content | b64decode | replace('__PUBLIC_IP__', ui_certificate_ip) }}
+      {% if ui_tls_ready | bool %}
+      {{ ui_nginx_https_source.content | b64decode | replace('__PUBLIC_IP__', ui_certificate_ip) }}
+      {% endif %}
+    dest: "{{ ui_nginx_dir }}/default.conf"
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Apply UI nginx configuration

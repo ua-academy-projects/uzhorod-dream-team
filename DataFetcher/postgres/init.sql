@@ -46,7 +46,9 @@ DO $$ BEGIN
     END IF;
 END $$;
 
-GRANT CONNECT ON DATABASE history TO fetcher_worker;
+DO $$ BEGIN
+    EXECUTE format('GRANT CONNECT ON DATABASE %I TO fetcher_worker', current_database());
+END $$;
 GRANT USAGE ON SCHEMA public, pgmq TO fetcher_worker;
 GRANT SELECT (id, status, updated_at), UPDATE (status, result, error, updated_at)
     ON fetcher_tasks TO fetcher_worker;

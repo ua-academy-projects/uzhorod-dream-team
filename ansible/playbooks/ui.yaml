@@ -1,0 +1,10 @@
+---
+- name: Deploy UI services
+  hosts: ui
+  become: true
+
+  vars_files:
+    - ../../config.json
+
+  roles:
+    - role: ../roles/ui

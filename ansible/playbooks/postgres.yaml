@@ -1,0 +1,10 @@
+---
+- name: Deploy database VM services
+  hosts: postgres
+  become: true
+
+  vars_files:
+    - ../../config.json
+
+  roles:
+    - role: ../roles/postgres

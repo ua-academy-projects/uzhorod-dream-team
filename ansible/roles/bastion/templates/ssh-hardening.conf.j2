@@ -1,0 +1,10 @@
+# Managed by Ansible. Preserve the GCP AuthorizedKeysCommand configuration.
+Port {{ bastion_port }}
+PubkeyAuthentication yes
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PermitRootLogin no
+X11Forwarding no
+AllowAgentForwarding no
+AllowTcpForwarding yes
+MaxAuthTries {{ bastion_max_auth_tries }}

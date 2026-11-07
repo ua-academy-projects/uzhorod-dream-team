@@ -26,11 +26,12 @@ resource "google_compute_address" "static_public_ips" {
 resource "google_compute_instance" "instances" {
   for_each = local.instances
 
-  name         = each.value.name
-  project      = var.project_id
-  zone         = var.zone
-  machine_type = each.value.machine_type
-  tags         = each.value.tags
+  name                      = each.value.name
+  project                   = var.project_id
+  zone                      = var.zone
+  machine_type              = each.value.machine_type
+  allow_stopping_for_update = true
+  tags                      = each.value.tags
 
   boot_disk {
     initialize_params {
@@ -54,7 +55,7 @@ resource "google_compute_instance" "instances" {
   }
 
   dynamic "service_account" {
-    for_each = each.value.attach_service_account ? [var.service_account_email] : []
+    for_each = each.value.attach_service_account ? [var.service_account_emails[each.key]] : []
     content {
       email  = service_account.value
       scopes = ["https://www.googleapis.com/auth/cloud-platform"]
@@ -66,12 +67,17 @@ resource "google_compute_instance" "instances" {
       "${path.module}/scripts/bastion.sh.tftpl", { ssh_port = each.value.startup.ssh_port }
       ) : templatefile("${path.module}/scripts/vm-startup.sh.tftpl", {
         startup_exports = join("\n", [for name, value in {
-          SERVICE_ROLE  = each.value.startup.service_role
-          PROJECT_ID    = var.project_id
-          ENV_SECRET_ID = var.env_secret_id
-          IP_HTTPS      = tostring(each.value.startup.ip_https)
-          REPO_URL      = var.config.application.repo_url
-          REPO_REF      = var.config.application.repo_branch
+          APP_BACKEND              = var.config.application.app_backend
+          DATABASE_PROVIDER        = var.database.provider
+          DATABASE_HOST            = var.database.host
+          DATABASE_NAME            = var.database.name
+          INSTANCE_CONNECTION_NAME = var.database.connection_name
+          SERVICE_ROLE             = each.value.startup.service_role
+          PROJECT_ID               = var.project_id
+          ENV_SECRET_ID            = var.env_secret_ids[each.key]
+          IP_HTTPS                 = tostring(each.value.startup.ip_https)
+          REPO_URL                 = var.config.application.repo_url
+          REPO_REF                 = var.config.application.repo_branch
         } : "export ${name}='${replace(value, "'", "'\"'\"'")}'"])
     })
   }

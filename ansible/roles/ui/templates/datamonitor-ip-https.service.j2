@@ -1,0 +1,12 @@
+[Unit]
+Description=Obtain or renew the Data Monitor IP certificate
+Wants=network-online.target
+After=network-online.target docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart={{ ui_certbot_argv | map('quote') | join(' ') }}
+ExecStartPost={{ ui_docker_cli }} exec datamonitor-nginx nginx -t
+ExecStartPost={{ ui_docker_cli }} exec datamonitor-nginx nginx -s reload
+TimeoutStartSec=20min

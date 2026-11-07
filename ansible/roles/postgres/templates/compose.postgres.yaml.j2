@@ -1,0 +1,14 @@
+{# Reuse the shared definitions, including images, healthchecks and volumes. #}
+{% set definition = {'name': postgres_compose_base.name, 'services': {}, 'volumes': {}} %}
+{% set ports = {'postgres': [postgres_port, 5432], 'rabbitmq': [rabbitmq_port, 5672], 'redis': [redis_port, 6379]} %}
+{% for name, port in ports.items() %}
+{% set service = postgres_compose_base.services[name] | combine({'ports': [postgres_bind_ip ~ ':' ~ port[0] ~ ':' ~ port[1]]}) %}
+{% if name == 'postgres' %}
+{% set service = service | combine({'environment': service.environment | combine({'POSTGRES_DB': database.name})}) %}
+{% endif %}
+{% set _ = definition.services.update({name: service}) %}
+{% endfor %}
+{% for name in ['postgres_data', 'rabbitmq_data', 'redis_data'] %}
+{% set _ = definition.volumes.update({name: postgres_compose_base.volumes[name]}) %}
+{% endfor %}
+{{ definition | to_nice_yaml(indent=2, sort_keys=false) }}

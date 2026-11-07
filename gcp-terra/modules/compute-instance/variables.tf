@@ -4,6 +4,7 @@ variable "config" {
     application = object({
       repo_url    = string
       repo_branch = string
+      app_backend = string
     })
     defaults = object({
       machine_type = string
@@ -37,6 +38,10 @@ variable "config" {
     }))
   })
 
+  validation {
+    condition     = contains(["hybrid", "postgres"], var.config.application.app_backend)
+    error_message = "compute.application.app_backend must be hybrid or postgres."
+  }
 }
 
 variable "project_id" {
@@ -48,8 +53,8 @@ variable "zone" {
 variable "subnet_id" {
   type = string
 }
-variable "service_account_email" {
-  type = string
+variable "service_account_emails" {
+  type = map(string)
 }
 
 variable "region" {
@@ -57,7 +62,20 @@ variable "region" {
   type        = string
 }
 
-variable "env_secret_id" {
-  description = "Secret Manager secret containing the application environment"
-  type        = string
+variable "env_secret_ids" {
+  description = "Per-VM Secret Manager environment secret IDs"
+  type        = map(string)
+}
+
+variable "database" {
+  type = object({
+    provider        = string
+    host            = string
+    name            = string
+    connection_name = string
+  })
+  validation {
+    condition     = contains(["cloud_sql", "container"], var.database.provider)
+    error_message = "database.provider must be cloud_sql or container."
+  }
 }

@@ -1,0 +1,35 @@
+---
+- name: Obtain or renew the short-lived IP certificate
+  ansible.builtin.command:
+    argv: "{{ ui_certbot_argv }}"
+  changed_when: false
+  register: ui_certbot_result
+  until: ui_certbot_result is succeeded
+  retries: 3
+  delay: 10
+
+- name: Inspect the issued certificate
+  ansible.builtin.stat:
+    path: "/etc/letsencrypt/live/{{ ui_certificate_ip }}/fullchain.pem"
+    follow: true
+    checksum_algorithm: sha256
+  register: ui_certificate_after
+
+- name: Require successful certificate issuance
+  ansible.builtin.assert:
+    that:
+      - ui_certificate_after.stat.exists
+      - ui_certificate_after.stat.size | default(0) > 0
+    fail_msg: Certificate issuance did not produce a certificate.
+
+- name: Enable TLS and reload nginx when the certificate changes
+  ansible.builtin.set_fact:
+    ui_tls_ready: true
+  changed_when: ui_certificate_before.stat.checksum | default('') != ui_certificate_after.stat.checksum
+  notify: Apply UI nginx configuration
+
+- name: Write nginx configuration with HTTPS enabled
+  ansible.builtin.include_tasks: nginx.yaml
+
+- name: Apply the certificate and HTTPS configuration
+  ansible.builtin.meta: flush_handlers

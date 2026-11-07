@@ -1,0 +1,25 @@
+internal:
+  hosts:
+    fetcher:
+      ansible_host: 10.10.0.12
+    postgres:
+      ansible_host: 10.10.0.13
+    history:
+      ansible_host: 10.10.0.14
+    ui:
+      ansible_host: 10.10.0.15
+
+bastion:
+  hosts:
+    bastion-host1:
+      ansible_host: 34.141.143.135
+      ansible_port: 56789
+
+myhosts:
+  vars:
+    ansible_user: phantom_s
+    ansible_ssh_private_key_file: ~/.ssh/google_compute_engine
+    ansible_python_interpreter: /usr/bin/python3.12
+  children:
+    internal:
+    bastion:

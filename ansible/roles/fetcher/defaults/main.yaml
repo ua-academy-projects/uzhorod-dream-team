@@ -1,0 +1,7 @@
+---
+fetcher_app_dir: /opt/datamonitor
+fetcher_compose_dir: "{{ fetcher_app_dir }}/DataFetcher"
+fetcher_wait_timeout: 120
+fetcher_port: 8000
+fetcher_force_build: false
+fetcher_revision_file: "{{ fetcher_app_dir }}/.fetcher-deployed-revision"

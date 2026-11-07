@@ -1,0 +1,20 @@
+name: datamonitor
+
+services:
+  history:
+    build:
+      context: ./history
+    image: datamonitor-history:latest
+    container_name: datamonitor-history
+    env_file:
+      - ./history/.env
+    environment:
+      APP_BACKEND: {{ compute.application.app_backend | to_json }}
+      INSTANCE_CONNECTION_NAME: {{ ((project_id ~ ':' ~ cloud_sql.region ~ ':' ~ cloud_sql.instance_name) if database.provider == 'cloud_sql' else '') | to_json }}
+      POSTGRES_HOST: {{ compute.instances.postgres.network_ip | to_json }}
+      POSTGRES_PORT: '5432'
+      POSTGRES_DB: {{ database.name | to_json }}
+      PORT: {{ history_port | string | to_json }}
+    ports:
+      - '{{ compute.instances.history.network_ip }}:{{ history_port }}:{{ history_port }}'
+    restart: unless-stopped

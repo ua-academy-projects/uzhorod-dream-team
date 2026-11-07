@@ -31,8 +31,10 @@ get_token() {
 # Refresh the environment from Secret Manager.
 SECRET_URL="https://secretmanager.googleapis.com/v1/projects/${PROJECT_ID}/secrets/${ENV_SECRET_ID}/versions/latest:access"
 
-ENV_FILE="${COMPOSE_DIR}/.env"
-TMP_FILE="$(mktemp "${COMPOSE_DIR}/.env.XXXXXX")"
+ENV_SERVICE="$ROLE"
+if [[ "$ROLE" == database ]]; then ENV_SERVICE=postgres; fi
+export ENV_FILE="${COMPOSE_DIR}/${ENV_SERVICE}/.env"
+TMP_FILE="$(mktemp "${ENV_FILE}.XXXXXX")"
 chmod 600 "${TMP_FILE}"
 
 cleanup() {
@@ -73,6 +75,29 @@ fi
 mv -f "${TMP_FILE}" "${ENV_FILE}"
 chmod 600 "${ENV_FILE}"
 
+# Filter the shared definition before interpolation: this VM has no other secrets.
+install -d -m 700 /var/lib/datamonitor
+export COMPOSE_FILE_PATH="/var/lib/datamonitor/compose.${ROLE}.yaml"
+python3 "${SCRIPT_DIR}/select-compose.py" "${COMPOSE_DIR}/docker-compose.yml" "$ROLE" > "$COMPOSE_FILE_PATH"
+chmod 600 "$COMPOSE_FILE_PATH"
+# The legacy shared env is no longer read by this deployment.
+rm -f "${COMPOSE_DIR}/.env"
+
+# Terraform deployment settings override stale routing values in the secret.
+: "${APP_BACKEND:?Missing configured app_backend; apply Terraform first}"
+: "${DATABASE_PROVIDER:?Missing configured database provider; apply Terraform first}"
+case "$APP_BACKEND" in hybrid|postgres) ;; *) echo 'Invalid APP_BACKEND' >&2; exit 1 ;; esac
+case "$DATABASE_PROVIDER" in cloud_sql|container) ;; *) echo 'Invalid DATABASE_PROVIDER' >&2; exit 1 ;; esac
+: "${DATABASE_HOST:?Missing configured database host}"
+: "${DATABASE_NAME:?Missing configured database name}"
+: "${INSTANCE_CONNECTION_NAME?Missing configured Cloud SQL connection name}"
+export APP_BACKEND INSTANCE_CONNECTION_NAME
+export POSTGRES_HOST="$DATABASE_HOST" FETCHER_POSTGRES_HOST="$DATABASE_HOST"
+export POSTGRES_DB="$DATABASE_NAME" FETCHER_POSTGRES_DB="$DATABASE_NAME"
+if [[ "$DATABASE_PROVIDER" == container ]]; then
+  export INSTANCE_CONNECTION_NAME=""
+fi
+
 COMPOSE_BUILD_ARGS=(--no-build)
 if [[ "${BUILD_IMAGES:-false}" == true ]]; then
   COMPOSE_BUILD_ARGS=(--build)
@@ -86,23 +111,41 @@ fi
 if [[ "${ROLE}" == ui && "${IP_HTTPS}" == true ]]; then
   export COOKIE_SECURE=true
   bash "${SCRIPT_DIR}/setup-ui-https.sh"
-  export UI_HTTP_BIND=0.0.0.0:80
-  export UI_HTTPS_BIND=0.0.0.0:443
+  echo "=== Deployment completed: ${ROLE} ==="
+  exit 0
 fi
 
 # Start the services from the same checkout as their deployment scripts.
 cd "${COMPOSE_DIR}"
 
-# Cloud deployments keep RabbitMQ/Redis here; PostgreSQL lives in Cloud SQL.
 SERVICES=()
 if [[ "${ROLE}" == database ]]; then
-  SERVICES=(rabbitmq redis)
+  STOP_SERVICES=()
+  if [[ "$DATABASE_PROVIDER" == container ]]; then
+    SERVICES+=(postgres)
+  else
+    STOP_SERVICES+=(postgres)
+  fi
+  if [[ "$APP_BACKEND" == hybrid ]]; then
+    SERVICES+=(rabbitmq redis)
+  else
+    STOP_SERVICES+=(rabbitmq redis)
+  fi
+  for service in "${STOP_SERVICES[@]}"; do
+    if docker inspect "datamonitor-$service" >/dev/null 2>&1; then
+      docker stop "datamonitor-$service"
+    fi
+  done
+  if [[ ${#SERVICES[@]} == 0 ]]; then
+    echo 'Cloud SQL postgres mode requires no database VM containers.'
+    exit 0
+  fi
 fi
 
 docker compose \
-  --env-file .env \
+  --env-file "${ENV_FILE}" \
   --project-directory "${COMPOSE_DIR}" \
-  -f "${COMPOSE_DIR}/docker-compose.yml" \
+  -f "${COMPOSE_FILE_PATH}" \
   --profile "${ROLE}" \
   up -d "${COMPOSE_BUILD_ARGS[@]}" "${SERVICES[@]}"
 
