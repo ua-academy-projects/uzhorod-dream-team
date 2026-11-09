@@ -1,59 +1,20 @@
 ---
 
-- name: Check the configuration, read where the database is (Terraform)
-  hosts: localhost
-  connection: local
-  gather_facts: false
-  vars:
-    citybikes_repo: "{{ playbook_dir }}/../../../../.."
-    citybikes_config: "{{ lookup('ansible.builtin.env', 'CITYBIKES_CONFIG', default=citybikes_repo ~ '/infra/config.json') }}"
-  vars_files:
-    - "{{ citybikes_config }}"
-  roles:
-    - citybikes.infra.config
-
-
-- name: Sort the VMs by what they run (bastion, containers, site)
+- name: Load and validate the configuration (config.json)
   hosts: all
   gather_facts: false
-  vars:
-    citybikes_repo: "{{ playbook_dir }}/../../../../.."
-    citybikes_config: "{{ lookup('ansible.builtin.env', 'CITYBIKES_CONFIG', default=citybikes_repo ~ '/infra/config.json') }}"
-  vars_files:
-    - "{{ citybikes_config }}"
-  tasks:
-    - name: Put each VM into its groups
-      ansible.builtin.import_role:
-        name: citybikes.infra.config
-        tasks_from: groups
-
-    - name: Show them (removed in step 6, when the plays for these groups exist)
-      ansible.builtin.debug:
-        msg: "{{ group_names | reject('match', 'vm_') | list }}"
-
+  roles:
+    - citybikes.infra.config_validate
 
 - name: Bastion
   hosts: bastion
   gather_facts: false
-  vars:
-    citybikes_repo: "{{ playbook_dir }}/../../../../.."
-    citybikes_config: "{{ lookup('ansible.builtin.env', 'CITYBIKES_CONFIG', default=citybikes_repo ~ '/infra/config.json') }}"
-  vars_files:
-    - "{{ citybikes_config }}"
-    - vars/connection.yml
   roles:
     - citybikes.infra.bastion
 
-
 - name: VMs with containers
-  hosts: containers
+  hosts: app
   gather_facts: false
   become: true
-  vars:
-    citybikes_repo: "{{ playbook_dir }}/../../../../.."
-    citybikes_config: "{{ lookup('ansible.builtin.env', 'CITYBIKES_CONFIG', default=citybikes_repo ~ '/infra/config.json') }}"
-  vars_files:
-    - "{{ citybikes_config }}"
-    - vars/connection.yml
   roles:
     - citybikes.infra.docker

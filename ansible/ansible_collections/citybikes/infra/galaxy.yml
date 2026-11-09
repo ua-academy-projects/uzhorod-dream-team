@@ -8,12 +8,12 @@ description: Deploys CityBikes History on GCP (the VMs made by infra/envs/dev), 
 license:
   - MIT
 tags: [gcp, docker, deployment]
+
 dependencies:
-  google.cloud: ">=1.4.0"
-  community.docker: ">=3.10.0"
-  ansible.posix: ">=1.5.0"
-  ansible.utils: ">=4.0.0"
-  cloud.terraform: ">=3.0.0"
+  google.cloud: ">=1.4.0"      
+  ansible.utils: ">=4.0.0"   
+  ansible.posix: ">=1.5.0"   
+  community.docker: ">=3.10.0" 
 build_ignore:
   - tests
   - "*.tar.gz"

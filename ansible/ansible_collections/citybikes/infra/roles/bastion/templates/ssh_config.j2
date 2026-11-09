@@ -1,5 +1,5 @@
 # Managed by Ansible (citybikes.infra.bastion). The VMs are reached by their names (GCP internal DNS).
-Host {{ prefix }}-*
-  User {{ ssh.user }}
+Host {{ config.prefix }}-*
+  User {{ config.ssh.user }}
   IdentityFile ~/.ssh/id_ed25519
   StrictHostKeyChecking accept-new

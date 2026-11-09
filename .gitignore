@@ -18,3 +18,5 @@ infra/**/bootstrap.env
 infra/**/terraform.env
 infra/**/terraform-key.json
 infra/**/backend.hcl
+
+ansible/.pytest_cache
