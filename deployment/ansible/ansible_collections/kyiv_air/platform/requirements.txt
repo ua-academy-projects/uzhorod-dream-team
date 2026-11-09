@@ -1,0 +1,4 @@
+jsonschema>=4.0
+requests>=2.26
+google-auth>=2.0
+PyYAML>=6.0

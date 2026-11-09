@@ -1,9 +1,13 @@
+- name: Validate the deployment config
+  hosts: localhost
+  gather_facts: false
+  tags: [always]
+  roles:
+    - role: kyiv_air.platform.validate
+
 - name: Build and push application images
   hosts: localhost
   gather_facts: false
   tags: [images]
-  vars:
-    ansible_become: false
   roles:
-    - role: kyiv_air.platform.connection
     - role: kyiv_air.platform.images

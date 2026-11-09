@@ -6,4 +6,5 @@ galaxy_info:
   platforms:
     - name: Ubuntu
       versions: [all]
-dependencies: []
+dependencies:
+  - role: kyiv_air.platform.config

@@ -1,0 +1,1 @@
+validate_schema_path: "{{ lookup('env', 'DEPLOYMENT_SCHEMA') or ((config_path | dirname) ~ '/deployment.schema.json') }}"

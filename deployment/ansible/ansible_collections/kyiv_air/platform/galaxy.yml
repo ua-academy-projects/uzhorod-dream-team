@@ -14,3 +14,4 @@ dependencies:
   community.docker: ">=4.0.0"
   community.general: ">=10.0.0"
   ansible.posix: ">=2.0.0"
+  ansible.utils: ">=6.0.0"

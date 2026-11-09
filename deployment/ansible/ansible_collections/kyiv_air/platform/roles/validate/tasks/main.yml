@@ -1,0 +1,75 @@
+- name: Validate the deployment config
+  tags: [always]
+  block:
+    - name: Require the config and schema paths
+      assert:
+        that:
+          - config_path | length > 0
+        fail_msg: Set DEPLOYMENT_CONFIG to the path of the deployment config.
+        quiet: true
+
+    - name: Look up the config and schema files
+      stat:
+        path: "{{ item }}"
+      loop:
+        - "{{ config_path }}"
+        - "{{ validate_schema_path }}"
+      register: validate_files
+
+    - name: Require both files to exist
+      assert:
+        that: item.stat.exists
+        fail_msg: "File not found: {{ item.item }}"
+        quiet: true
+      loop: "{{ validate_files.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: Check the config against the JSON schema
+      ansible.utils.validate:
+        data: "{{ cfg }}"
+        criteria: "{{ lookup('file', validate_schema_path) | from_json }}"
+        engine: ansible.utils.jsonschema
+      register: validate_result
+      ignore_errors: true
+
+    - name: Report every schema violation
+      fail:
+        msg: |-
+          {{ config_path }} does not match {{ validate_schema_path }}:
+          {% for error in validate_result.errors | default([]) %}
+            - {{ error.data_path | default('(root)') }}: {{ error.message }}
+          {% endfor %}
+          {% if validate_result.errors is not defined %}
+          {{ validate_result.msg }}
+          {% endif %}
+      when: validate_result is failed
+
+    - name: Check that private IPs are unique
+      assert:
+        that: >-
+          (validate_vms | map(attribute='private_ip') | list | length)
+          == (validate_vms | map(attribute='private_ip') | list | unique | length)
+        fail_msg: "Two VMs share a private IP: {{ validate_vms | map(attribute='private_ip') | list }}"
+        quiet: true
+      vars:
+        validate_vms: "{{ cfg.vm.values() | list }}"
+
+    - name: Check that the zone belongs to the region
+      assert:
+        that: cfg.google.zone.startswith(cfg.google.region ~ '-')
+        fail_msg: "Zone {{ cfg.google.zone }} is not in region {{ cfg.google.region }}"
+        quiet: true
+
+    - name: Check that firewall rules reference existing VM tags
+      assert:
+        that: validate_unknown_tags | length == 0
+        fail_msg: "Firewall rules use tags that no VM has: {{ validate_unknown_tags }}"
+        quiet: true
+      vars:
+        validate_rules: "{{ cfg.network.firewall_rules.values() | list }}"
+        validate_rule_tags: >-
+          {{ (validate_rules | map(attribute='target_tags') | flatten)
+             + (validate_rules | map(attribute='source_tags', default=[]) | flatten) }}
+        validate_vm_tags: "{{ cfg.vm.values() | map(attribute='tags') | flatten }}"
+        validate_unknown_tags: "{{ validate_rule_tags | unique | difference(validate_vm_tags) }}"

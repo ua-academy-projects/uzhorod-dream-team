@@ -1,0 +1,13 @@
+- name: Cloud SQL Auth Proxy
+  ansible.builtin.include_role:
+    name: kyiv_air.platform.container
+  vars:
+    container_name: "{{ database_sql_proxy_host }}"
+    container_image: "{{ sql_proxy_image }}"
+    container_pull: missing
+    container_state: "{{ 'started' if sql_proxy_enabled else 'absent' }}"
+    container_command:
+      - --address=0.0.0.0
+      - --port=5432
+      - --psc
+      - "{{ sql_proxy_connection }}"

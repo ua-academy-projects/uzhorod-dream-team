@@ -1,16 +1,8 @@
 - name: Cloud SQL Auth Proxy
   ansible.builtin.include_role:
-    name: kyiv_air.platform.container
+    name: kyiv_air.platform.sql_proxy
   vars:
-    container_name: kyiv-air-sql-proxy
-    container_image: "{{ database_sql_proxy_image }}"
-    container_pull: missing
-    container_state: "{{ 'started' if (cfg.modes.postgres_only and cfg.modes.cloud_sql) else 'absent' }}"
-    container_command:
-      - --address=0.0.0.0
-      - --port=5432
-      - --psc
-      - "{{ database_sql_proxy_connection }}"
+    sql_proxy_enabled: "{{ cfg.modes.cloud_sql and cfg.modes.postgres_only }}"
 
 - name: Validate the OpenAQ API key
   ansible.builtin.assert:

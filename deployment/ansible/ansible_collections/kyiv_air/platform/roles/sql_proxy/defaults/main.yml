@@ -1,0 +1,3 @@
+sql_proxy_enabled: "{{ cfg.modes.cloud_sql }}"
+sql_proxy_image: "{{ cfg.images.CLOUD_SQL_PROXY_IMAGE | default('gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.18.2') }}"
+sql_proxy_connection: "{{ cfg.google.project_id }}:{{ cfg.google.region }}:{{ (cfg.cloud_sql | default({})).name | default('kyiv-air-postgres') }}"

@@ -1,0 +1,8 @@
+- name: Require the SSH user and key
+  assert:
+    that:
+      - connection_user | length > 0
+      - connection_key is file
+    fail_msg: Set ANSIBLE_REMOTE_USER and point ANSIBLE_PRIVATE_KEY_FILE at an existing key. Source env.sh.
+    quiet: true
+  tags: [always]

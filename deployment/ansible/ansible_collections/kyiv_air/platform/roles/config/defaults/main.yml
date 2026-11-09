@@ -1,0 +1,2 @@
+config_path: "{{ lookup('env', 'DEPLOYMENT_CONFIG') }}"
+cfg: "{{ lookup('file', config_path) | from_json }}"
