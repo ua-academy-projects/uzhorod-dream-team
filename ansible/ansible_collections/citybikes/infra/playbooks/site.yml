@@ -18,3 +18,11 @@
   become: true
   roles:
     - citybikes.infra.docker
+
+- name: VMs of the application
+  hosts: app
+  gather_facts: false
+  become: true
+  roles:
+    - citybikes.infra.docker
+    - citybikes.infra.compose

@@ -1,0 +1,119 @@
+compose_dir: /opt/citybikes
+
+compose_hosts: "{{ groups['app'] | map('extract', hostvars) | list }}"
+compose_vm_ip: "{{ dict(compose_hosts | map(attribute='vm') | zip(compose_hosts | map(attribute='private_ip'))) }}"
+
+compose_placement: "{{ config.vms | dict2items | subelements('value.services') }}"
+compose_service_ip: "{{ dict(compose_placement | map('last') | zip(compose_placement | map('first') | map(attribute='key') | map('extract', compose_vm_ip))) }}"
+
+
+compose_db_env:
+  DB_HOST: "{{ citybikes_db_host }}" 
+  DB_PORT: "5432"
+  DB_NAME: "{{ config.app.db_name }}"
+  DB_USER: "{{ config.app.db_user }}"
+  DB_PASSWORD: "${DB_PASSWORD}"
+  PGSSLMODE: require 
+compose_rabbitmq_env:
+  RABBITMQ_HOST: "{{ compose_service_ip.rabbitmq | default('') }}"
+  RABBITMQ_PORT: "5672"
+  RABBITMQ_USER: "{{ config.app.rabbitmq_user }}"
+  RABBITMQ_PASSWORD: "${RABBITMQ_PASSWORD}"
+  RABBITMQ_VHOST: "{{ config.app.rabbitmq_vhost }}"
+compose_redis_env:
+  REDIS_HOST: "{{ compose_service_ip.redis | default('') }}"
+  REDIS_PORT: "6379"
+  REDIS_PASSWORD: "${REDIS_PASSWORD}"
+
+compose_backend_env:
+  db: "{{ compose_db_env }}"
+  queue: "{{ compose_db_env if config.app.queue_backend == 'postgres' else compose_rabbitmq_env }}"
+  cache: "{{ compose_redis_env if config.app.cache_backend == 'redis' else {} }}"
+
+compose_uses:
+  fetcher: [queue]
+  history: [db, queue, cache]
+
+
+compose_tls_on: "{{ config.tls.domain != '' }}"
+
+compose_catalog:
+  redis:
+    ports: ["6379:6379"]
+    volumes: ["citybikes-redisdata:/data"]
+    environment:
+      REDIS_PASSWORD: "${REDIS_PASSWORD}"
+
+  rabbitmq:
+    hostname: rabbitmq-citybikes     
+    ports: ["5672:5672", "15672:15672"]
+    volumes: ["citybikes-rabbitmqdata:/var/lib/rabbitmq"]
+    environment:
+      RABBITMQ_DEFAULT_USER: "{{ config.app.rabbitmq_user }}"
+      RABBITMQ_DEFAULT_PASS: "${RABBITMQ_PASSWORD}"
+      RABBITMQ_DEFAULT_VHOST: "{{ config.app.rabbitmq_vhost }}"
+
+  fetcher:
+    cap_drop: [ALL]
+    read_only: true
+    tmpfs: [/tmp]
+    environment:
+      QUEUE_BACKEND: "{{ config.app.queue_backend }}"
+      CITYBIKES_NETWORK_ID: "{{ config.app.citybikes_network }}"
+
+  history:
+    cap_drop: [ALL]
+    read_only: true
+    tmpfs: [/tmp]
+    ports: ["8002:8002"]
+    environment:
+      QUEUE_BACKEND: "{{ config.app.queue_backend }}"
+      CACHE_BACKEND: "{{ config.app.cache_backend }}"
+      POLL_INTERVAL: "{{ config.app.poll_interval }}"
+
+  ui:
+      cap_drop: [ALL]
+      ports: "{{ ['80:8080', '443:8443'] if compose_tls_on else ['80:8080'] }}"
+      volumes: "{{ [compose_dir ~ '/tls:/etc/nginx/tls:ro'] if compose_tls_on else [] }}"
+      environment:
+        HISTORY_URL: "http://{{ compose_service_ip.history | default('') }}:8002"
+
+  cloudflared:
+      cap_drop: [ALL]
+      read_only: true
+      tmpfs: [/tmp]
+      environment:
+        TUNNEL_TOKEN: "${TUNNEL_TOKEN}"
+        TUNNEL_TRANSPORT_PROTOCOL: "{{ config.app.cloudflare_tunnel_protocol }}"
+
+compose_service_defaults:
+  restart: unless-stopped                     
+  security_opt: ["no-new-privileges:true"]
+  logging: "{{ compose_logging }}"
+
+compose_logging: >-
+  {{ {'driver': 'gcplogs', 'options': {'gcp-log-cmd': 'false'}} if citybikes_vm.cloud_logging
+     else {'driver': 'json-file', 'options': {'max-size': '10m', 'max-file': '3'}} }}
+
+compose_volumes: >-
+  {{ citybikes_vm.services | map('extract', compose_catalog) | map(attribute='volumes', default=[]) | flatten
+     | reject('match', '/') | map('split', ':') | map('first') | unique }}
+
+compose_services: "{{ citybikes_vm.services }}"
+compose_repo: "{{ citybikes_config_file | dirname | dirname }}"
+compose_sync_skip: [".venv/", "venv/", "node_modules/", "dist/", "__pycache__/", "test_*.py"]
+compose_sync_filters: >-
+  {{ compose_sync_skip | map('regex_replace', '^', '--exclude=') | list
+     + compose_services | map('regex_replace', '^', '--include=/') | map('regex_replace', '$', '/') | list
+     + ['--exclude=/*', '--delete-excluded'] }}
+
+compose_secret_of:
+  DB_PASSWORD: db-password
+  REDIS_PASSWORD: redis-password
+  RABBITMQ_PASSWORD: rabbitmq-password
+  TUNNEL_TOKEN: cloudflare-tunnel-token
+
+compose_placeholders: "{{ lookup('ansible.builtin.template', 'compose.yaml.j2') | regex_findall('\\$\\{([A-Z_]+)\\}') | unique }}"
+compose_secrets: "{{ compose_placeholders | map('extract', compose_secret_of) | list }}"
+compose_env_secrets: "{{ dict(compose_placeholders | zip(compose_secrets | map('regex_replace', '^', config.prefix ~ '-'))) }}"
+compose_secrets_missing: "{{ compose_secrets | reject('in', citybikes_vm.secrets) | list }}"

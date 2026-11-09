@@ -1,0 +1,45 @@
+---
+
+- name: The containers' secrets may be read by this VM (vms.<name>.secrets in config.json)
+  ansible.builtin.assert:
+    that: compose_secrets_missing | length == 0
+    fail_msg: "config.json: vms.{{ vm }}.secrets needs {{ compose_secrets_missing | join(', ') }}"
+    quiet: true
+
+- name: Folder of the application
+  ansible.builtin.file:
+    path: "{{ compose_dir }}"
+    state: directory
+    mode: "0755"
+
+- name: The code of this VM's services (services/<name>/ of the repository; nothing else)
+  ansible.posix.synchronize:
+    src: "{{ compose_repo }}/services/"
+    dest: "{{ compose_dir }}/services/"
+    delete: true
+    owner: false
+    group: false
+    use_ssh_args: true
+    rsync_opts: "{{ compose_sync_filters }}"
+  register: compose_code
+
+- name: The compose file of this VM (compose.yaml)
+  ansible.builtin.template:
+    src: compose.yaml.j2
+    dest: "{{ compose_dir }}/compose.yaml"
+    mode: "0644"
+
+- name: The secrets for docker compose (.env, read on the VM with its own service account)
+  citybikes.infra.gcp_secret_file:
+    path: "{{ compose_dir }}/.env"
+    secrets: "{{ compose_env_secrets }}"
+    format: env
+    mode: "0600"
+
+- name: Build and start the containers (a container is recreated only when its image or settings changed)
+  community.docker.docker_compose_v2:
+    project_src: "{{ compose_dir }}"
+    build: "{{ 'always' if compose_code is changed else 'policy' }}"
+    remove_orphans: true
+    wait: true       
+    wait_timeout: 600
