@@ -26,3 +26,10 @@
   roles:
     - citybikes.infra.docker
     - citybikes.infra.compose
+
+- name: The site's certificate (HTTPS)
+  hosts: frontend
+  gather_facts: false
+  become: true
+  roles:
+    - citybikes.infra.tls

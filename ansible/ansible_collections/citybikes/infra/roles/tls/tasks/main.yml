@@ -1,0 +1,82 @@
+---
+
+- name: certbot with its Cloudflare plugin (the package brings certbot.timer, which renews)
+  ansible.builtin.apt:
+    name: "{{ tls_packages }}"
+    cache_valid_time: 3600
+
+- name: Folder of the Cloudflare credentials
+  ansible.builtin.file:
+    path: "{{ tls_credentials | dirname }}"
+    state: directory
+    mode: "0700"
+
+- name: The Cloudflare API token for certbot (read on the VM with its own service account)
+  citybikes.infra.gcp_secret_file:
+    path: "{{ tls_credentials }}"
+    secrets:
+      dns_cloudflare_api_token: "{{ config.prefix }}-cloudflare-api-token"
+    format: ini
+    mode: "0600"
+
+- name: Folder of certbot's deploy hooks (certbot makes it only on its first run)
+  ansible.builtin.file:
+    path: "{{ tls_hook | dirname }}"
+    state: directory
+    mode: "0755"
+
+- name: After every renewal, the new certificate goes to nginx (certbot's deploy hook)
+  ansible.builtin.template:
+    src: deploy-hook.sh.j2
+    dest: "{{ tls_hook }}"
+    mode: "0755"
+
+- name: The certificate (nothing happens while it is not due for renewal)
+  ansible.builtin.command:
+    argv: "{{ tls_certbot_argv }}"
+  register: tls_certbot
+  changed_when: "'not yet due for renewal' not in (tls_certbot.stdout ~ tls_certbot.stderr)"
+
+- name: The certificate of the other mode is removed (after "staging" was switched)
+  ansible.builtin.command:
+    argv: [certbot, delete, --non-interactive, --cert-name, "{{ tls_other_cert_name }}"]
+  args:
+    removes: "/etc/letsencrypt/renewal/{{ tls_other_cert_name }}.conf"
+
+- name: Is there a certificate (not yet in a first --check run)
+  ansible.builtin.stat:
+    path: "{{ tls_live_dir }}/fullchain.pem"
+  register: tls_cert
+
+- name: Folder of what nginx reads
+  ansible.builtin.file:
+    path: "{{ tls_dir }}"
+    state: directory
+    mode: "0755"
+
+- name: The certificate and its key for nginx (a copy only nginx's user may read)
+  ansible.builtin.copy:
+    src: "{{ tls_live_dir }}/{{ item }}"
+    dest: "{{ tls_dir }}/{{ item }}"
+    remote_src: true
+    owner: "{{ tls_nginx_uid }}"
+    group: "{{ tls_nginx_uid }}"
+    mode: "0600"
+  loop: "{{ tls_files }}"
+  when: tls_cert.stat.exists
+  notify: Reload nginx
+
+- name: HTTPS in nginx (included in the server block of services/ui/nginx.conf.template)
+  ansible.builtin.template:
+    src: https.conf.j2
+    dest: "{{ tls_dir }}/https.conf"
+    mode: "0644"
+  when: tls_cert.stat.exists
+  notify: Reload nginx
+
+- name: Renewal twice a day
+  ansible.builtin.systemd_service:
+    name: certbot.timer
+    state: started
+    enabled: true
+    

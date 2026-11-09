@@ -1,0 +1,22 @@
+tls_domain: "{{ config.tls.domain }}"
+tls_staging: "{{ config.tls.staging }}"
+
+tls_cert_name: "{{ tls_domain ~ ('-staging' if tls_staging else '') }}"
+tls_other_cert_name: "{{ tls_domain ~ ('' if tls_staging else '-staging') }}"
+tls_live_dir: "/etc/letsencrypt/live/{{ tls_cert_name }}"
+
+tls_packages: [certbot, python3-certbot-dns-cloudflare]
+tls_credentials: /etc/citybikes/cloudflare.ini         
+tls_hook: /etc/letsencrypt/renewal-hooks/deploy/citybikes.sh
+
+tls_dir: /opt/citybikes/tls
+tls_files: [fullchain.pem, privkey.pem]
+tls_container: ui
+tls_nginx_uid: 101 
+
+tls_certbot_argv: >-
+  {{ ['certbot', 'certonly', '--non-interactive', '--agree-tos', '--keep-until-expiring',
+      '--dns-cloudflare', '--dns-cloudflare-credentials', tls_credentials,
+      '--cert-name', tls_cert_name, '--domain', tls_domain]
+     + (['--email', config.tls.email] if config.tls.email else ['--register-unsafely-without-email'])
+     + (['--staging'] if tls_staging else []) }}

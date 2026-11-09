@@ -1,0 +1,6 @@
+---
+
+- name: Reload nginx
+  community.docker.docker_container_exec:
+    container: "{{ tls_container }}"
+    command: nginx -s reload

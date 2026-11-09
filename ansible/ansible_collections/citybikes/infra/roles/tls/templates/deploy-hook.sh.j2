@@ -1,0 +1,11 @@
+#!/bin/sh
+# Managed by Ansible (role citybikes.infra.tls): do not edit it here.
+# certbot runs it after it renewed a certificate (certbot.timer, between Ansible runs).
+# It does what the role does: a copy for nginx, which only nginx's user may read, then nginx reloads.
+set -eu
+[ "${RENEWED_LINEAGE:-}" = "{{ tls_live_dir }}" ] || exit 0
+
+for file in {{ tls_files | join(' ') }}; do
+  install -m 0600 -o {{ tls_nginx_uid }} -g {{ tls_nginx_uid }} "$RENEWED_LINEAGE/$file" "{{ tls_dir }}/$file"
+done
+docker exec {{ tls_container }} nginx -s reload

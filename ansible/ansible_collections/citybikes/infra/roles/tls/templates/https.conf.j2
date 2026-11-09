@@ -1,0 +1,8 @@
+# Managed by Ansible (role citybikes.infra.tls): do not edit it here.
+# Included in the server block of services/ui/nginx.conf.template (port 8443, published as 443).
+listen 8443 ssl;
+http2 on;
+ssl_certificate     /etc/nginx/tls/fullchain.pem;
+ssl_certificate_key /etc/nginx/tls/privkey.pem;
+ssl_protocols TLSv1.2 TLSv1.3;
+ssl_session_cache shared:SSL:1m;
