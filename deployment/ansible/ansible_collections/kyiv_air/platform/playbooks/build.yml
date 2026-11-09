@@ -5,4 +5,5 @@
   vars:
     ansible_become: false
   roles:
+    - role: kyiv_air.platform.connection
     - role: kyiv_air.platform.images

@@ -1,4 +1,4 @@
-images_source_dir: "{{ playbook_dir }}/../.."
+images_source_dir: "{{ lookup('env', 'KYIV_AIR_SOURCE_DIR') }}"
 images_platform: linux/amd64
 images_components:
   - { name: fetcher, context: fetcher }

@@ -1,0 +1,11 @@
+- name: "Wait for {{ probe_container }}"
+  community.docker.docker_container_exec:
+    container: "{{ probe_container }}"
+    argv: "{{ probe_argv }}"
+    env: "{{ probe_env }}"
+  register: probe_result
+  until: probe_result.rc == 0
+  retries: "{{ probe_retries | int }}"
+  delay: "{{ probe_delay }}"
+  changed_when: false
+  no_log: "{{ probe_env | length > 0 }}"

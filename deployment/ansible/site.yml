@@ -1,5 +1,0 @@
-- import_playbook: build.yml
-- import_playbook: db.yml
-- import_playbook: history.yml
-- import_playbook: fetcher.yml
-- import_playbook: ui.yml

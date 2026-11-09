@@ -1,0 +1,74 @@
+- name: Cloud SQL Auth Proxy
+  ansible.builtin.include_role:
+    name: kyiv_air.platform.container
+  vars:
+    container_name: kyiv-air-sql-proxy
+    container_image: "{{ database_sql_proxy_image }}"
+    container_pull: missing
+    container_state: "{{ 'started' if (cfg.modes.postgres_only and cfg.modes.cloud_sql) else 'absent' }}"
+    container_command:
+      - --address=0.0.0.0
+      - --port=5432
+      - --psc
+      - "{{ database_sql_proxy_connection }}"
+
+- name: Validate the OpenAQ API key
+  ansible.builtin.assert:
+    that:
+      - kyiv_air_secrets['openaq-api-key'] is match('^[A-Za-z0-9_-]+$')
+      - kyiv_air_secrets['openaq-api-key'] != 'your_openaq_api_key_here'
+    quiet: true
+    fail_msg: Set a valid OpenAQ API key in Secret Manager.
+  no_log: true
+
+- name: Build the Fetcher environment
+  vars:
+    fetcher_database_url: "postgres://kyiv_air_fetcher:{{ kyiv_air_secrets['postgres-fetcher-password'] }}@{{ database_host }}:5432/{{ cfg.database.name }}?sslmode=disable"
+    fetcher_rabbitmq_url: "amqp://kyiv_air:{{ kyiv_air_secrets['rabbitmq-password'] }}@{{ cfg.vm.db.private_ip }}:5672/kyiv-air"
+  ansible.builtin.set_fact:
+    fetcher_env: >-
+      {{ cfg.vm.fetcher.env | default({}) | combine(
+           {
+             'PORT': '8080',
+             'POSTGRES_ONLY': cfg.modes.postgres_only | string | lower,
+             'OPENAQ_API_KEY': kyiv_air_secrets['openaq-api-key']
+           },
+           {'DATABASE_URL': fetcher_database_url} if cfg.modes.postgres_only else {'RABBITMQ_URL': fetcher_rabbitmq_url}
+         ) }}
+  no_log: true
+
+- name: Wait for the PostgreSQL queues
+  ansible.builtin.include_role:
+    name: kyiv_air.platform.probe
+  vars:
+    probe_type: psql
+    probe_database_url: "{{ fetcher_env.DATABASE_URL }}"
+    probe_query: SELECT msg_id FROM pgmq.q_kyiv_air_requests LIMIT 0; SELECT msg_id FROM pgmq.q_kyiv_air_replies LIMIT 0
+  when: cfg.modes.postgres_only
+
+- name: Wait for RabbitMQ
+  ansible.builtin.include_role:
+    name: kyiv_air.platform.probe
+  vars:
+    probe_type: tcp
+    probe_host: "{{ cfg.vm.db.private_ip }}"
+    probe_port: 5672
+  when: not cfg.modes.postgres_only
+
+- name: Fetcher service
+  ansible.builtin.include_role:
+    name: kyiv_air.platform.container
+  vars:
+    container_name: kyiv-air-fetcher
+    container_image: "{{ registry_url }}/fetcher:{{ registry_tag }}"
+    container_hardened: true
+    container_mounts:
+      - type: bind
+        source: /etc/ssl/certs/ca-certificates.crt
+        target: /etc/ssl/certs/ca-certificates.crt
+        read_only: true
+    container_ports:
+      - "{{ cfg.vm.fetcher.private_ip }}:8080:8080"
+      - 127.0.0.1:8080:8080
+    container_env: "{{ fetcher_env }}"
+    container_probe_url: http://127.0.0.1:8080/health

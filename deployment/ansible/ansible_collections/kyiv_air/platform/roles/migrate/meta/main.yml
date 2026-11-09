@@ -7,4 +7,5 @@ galaxy_info:
     - name: Ubuntu
       versions: [all]
 dependencies:
-  - role: kyiv_air.platform.common
+  - role: kyiv_air.platform.registry
+  - role: kyiv_air.platform.database

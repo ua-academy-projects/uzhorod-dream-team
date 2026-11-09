@@ -20,6 +20,11 @@ $UI_IP kyiv-air-ui
 # END KYIV-AIR SSH TARGETS
 HOSTS
 
+targets=(kyiv-air-fetcher "$FETCHER_IP" kyiv-air-history "$HISTORY_IP" kyiv-air-ui "$UI_IP")
+[[ -z "$DB_IP" ]] || targets+=(kyiv-air-db "$DB_IP")
+permit_open=
+for target in "${targets[@]}"; do permit_open+="$target:$SSH_PORT "; done
+
 cat > /etc/ssh/sshd_config.d/00-kyiv-air-bastion.conf <<SSH
 PubkeyAuthentication yes
 PasswordAuthentication no
@@ -28,7 +33,7 @@ PermitRootLogin no
 AllowAgentForwarding no
 X11Forwarding no
 AllowTcpForwarding local
-PermitOpen ${DB_IP:+kyiv-air-db:$SSH_PORT }kyiv-air-fetcher:$SSH_PORT kyiv-air-history:$SSH_PORT kyiv-air-ui:$SSH_PORT
+PermitOpen ${permit_open% }
 PermitTunnel no
 GatewayPorts no
 SSH

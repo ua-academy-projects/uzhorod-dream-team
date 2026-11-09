@@ -1,0 +1,8 @@
+- name: "Wait for {{ probe_argv | first }}"
+  ansible.builtin.command:
+    argv: "{{ probe_argv }}"
+  register: probe_result
+  until: probe_result.rc == 0
+  retries: "{{ probe_retries | int }}"
+  delay: "{{ probe_delay }}"
+  changed_when: false

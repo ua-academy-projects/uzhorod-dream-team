@@ -4,10 +4,10 @@
   vars:
     container_name: "{{ postgres_local_container }}"
     container_state: absent
-  when: kyiv_air_cloud_sql | bool
+  when: cfg.modes.cloud_sql
 
 - name: Run PostgreSQL on this VM
-  when: not (kyiv_air_cloud_sql | bool)
+  when: not cfg.modes.cloud_sql
   block:
     - name: Prepare the PostgreSQL data directory
       community.docker.docker_container:
@@ -18,7 +18,7 @@
         command: ["mkdir -p /data/postgres && chown postgres:postgres /data/postgres && chmod 0700 /data/postgres"]
         mounts:
           - type: bind
-            source: "{{ kyiv_air_data_mount }}"
+            source: "{{ database_data_mount }}"
             target: /data
         detach: false
         cleanup: true
@@ -35,25 +35,23 @@
           - "{{ cfg.vm.db.private_ip }}:5432:5432"
           - 127.0.0.1:5432:5432
         container_env:
-          POSTGRES_DB: "{{ kyiv_air_database }}"
+          POSTGRES_DB: "{{ cfg.database.name }}"
           POSTGRES_USER: "{{ postgres_local_user }}"
           POSTGRES_PASSWORD: "{{ kyiv_air_secrets['postgres-migration-password'] }}"
         container_mounts:
           - type: bind
-            source: "{{ kyiv_air_data_mount }}/postgres"
+            source: "{{ database_data_mount }}/postgres"
             target: /var/lib/postgresql/data
         container_command: [postgres, -c, shared_preload_libraries=]
-        container_probe_exec: [pg_isready, -h, 127.0.0.1, -U, "{{ postgres_local_user }}", -d, "{{ kyiv_air_database }}"]
+        container_probe_exec: [pg_isready, -h, 127.0.0.1, -U, "{{ postgres_local_user }}", -d, "{{ cfg.database.name }}"]
 
     - name: Wait for the PostgreSQL database
-      community.docker.docker_container_exec:
-        container: "{{ postgres_local_container }}"
-        argv: [psql, -U, "{{ postgres_local_user }}", -d, "{{ kyiv_air_database }}", -v, ON_ERROR_STOP=1, -c, SELECT 1]
-      register: postgres_local_ready
-      until: postgres_local_ready.rc == 0
-      retries: "{{ kyiv_air_probe_retries | int }}"
-      delay: "{{ kyiv_air_probe_delay }}"
-      changed_when: false
+      ansible.builtin.include_role:
+        name: kyiv_air.platform.probe
+      vars:
+        probe_type: exec
+        probe_container: "{{ postgres_local_container }}"
+        probe_argv: [psql, -U, "{{ postgres_local_user }}", -d, "{{ cfg.database.name }}", -v, ON_ERROR_STOP=1, -c, SELECT 1]
 
     - name: Apply the migration role password
       community.docker.docker_container_exec:
@@ -63,7 +61,7 @@
           - -U
           - "{{ postgres_local_user }}"
           - -d
-          - "{{ kyiv_air_database }}"
+          - "{{ cfg.database.name }}"
           - -v
           - ON_ERROR_STOP=1
           - -c

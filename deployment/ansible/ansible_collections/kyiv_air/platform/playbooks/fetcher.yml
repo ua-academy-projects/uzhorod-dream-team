@@ -1,0 +1,10 @@
+- name: Fetcher VM
+  hosts: fetcher
+  gather_facts: false
+  roles:
+    - role: kyiv_air.platform.connection
+    - role: kyiv_air.platform.wait
+    - role: kyiv_air.platform.base
+    - role: kyiv_air.platform.secrets
+      secrets_names: "{{ cfg.vm.fetcher.secrets }}"
+    - role: kyiv_air.platform.fetcher

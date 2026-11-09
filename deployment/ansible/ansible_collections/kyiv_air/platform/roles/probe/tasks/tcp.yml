@@ -1,0 +1,5 @@
+- name: "Wait for {{ probe_host }}:{{ probe_port }}"
+  ansible.builtin.wait_for:
+    host: "{{ probe_host }}"
+    port: "{{ probe_port }}"
+    timeout: "{{ probe_timeout }}"

@@ -11,6 +11,7 @@ readonly IAM_RETRY_SECONDS=2
 readonly MAX_RETRY_SECONDS=16
 readonly TERRAFORM_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 readonly ANSIBLE_DIR=$(cd "$TERRAFORM_DIR/../ansible" && pwd)
+readonly PROJECT_DIR=$(cd "$TERRAFORM_DIR/../.." && pwd)
 
 usage() {
   cat <<'EOF'
@@ -26,6 +27,7 @@ BOOTSTRAP_BUCKET           Default: <project-id>-tfstate
 BOOTSTRAP_STATE_PREFIX     Default: terraform/state
 DEPLOYMENT_CONFIG          Default: <config-dir>/deployment.json
 BOOTSTRAP_CONFIG_DIR       Default: ~/.config/kyiv-air
+BOOTSTRAP_SSH_KEY          Default: ~/.ssh/google_compute_engine (private key; <path>.pub is registered with OS Login)
 EOF
 }
 
@@ -106,8 +108,9 @@ if "$interactive"; then prompt BOOTSTRAP_REGION; fi
 BOOTSTRAP_ZONE=${BOOTSTRAP_ZONE:-$BOOTSTRAP_REGION-a}
 BOOTSTRAP_BUCKET=${BOOTSTRAP_BUCKET:-$BOOTSTRAP_PROJECT_ID-tfstate}
 BOOTSTRAP_STATE_PREFIX=${BOOTSTRAP_STATE_PREFIX:-$DEFAULT_STATE_PREFIX}
+BOOTSTRAP_SSH_KEY=${BOOTSTRAP_SSH_KEY:-$HOME/.ssh/google_compute_engine}
 if "$interactive"; then
-  for name in BOOTSTRAP_ZONE BOOTSTRAP_BUCKET BOOTSTRAP_STATE_PREFIX; do
+  for name in BOOTSTRAP_ZONE BOOTSTRAP_BUCKET BOOTSTRAP_STATE_PREFIX BOOTSTRAP_SSH_KEY; do
     prompt "$name"
   done
 fi
@@ -144,6 +147,9 @@ if [[ -e "$KEY_FILE" ]]; then
   chmod 0600 "$KEY_FILE"
 fi
 
+[[ -f "$BOOTSTRAP_SSH_KEY" && -f "$BOOTSTRAP_SSH_KEY.pub" ]] \
+  || die "SSH key pair not found at $BOOTSTRAP_SSH_KEY(.pub). Create one with ssh-keygen -t ed25519 or set BOOTSTRAP_SSH_KEY."
+
 # Checking user auth
 caller=$(gcloud auth list --filter=status:ACTIVE --format='value(account)')
 [[ -n "$caller" ]] || die 'Authenticate first with gcloud auth login.'
@@ -171,7 +177,7 @@ jq -e '.billingEnabled == true' <<< "$billing" >/dev/null || die 'Billing is not
 # Enabling services
 gcloud services enable \
   cloudresourcemanager.googleapis.com cloudbilling.googleapis.com serviceusage.googleapis.com \
-  iam.googleapis.com storage.googleapis.com compute.googleapis.com \
+  iam.googleapis.com storage.googleapis.com compute.googleapis.com oslogin.googleapis.com iap.googleapis.com \
   secretmanager.googleapis.com artifactregistry.googleapis.com sqladmin.googleapis.com dns.googleapis.com \
   --project="$BOOTSTRAP_PROJECT_ID" --quiet
 
@@ -193,6 +199,26 @@ for role in \
   retry_iam gcloud projects add-iam-policy-binding "$BOOTSTRAP_PROJECT_ID" \
     --member="serviceAccount:$ACCOUNT" --role="$role" --condition=None --quiet
 done
+
+# Granting the caller SSH access through IAP and OS Login
+case "$caller" in
+  *.gserviceaccount.com) caller_member=serviceAccount:$caller ;;
+  *) caller_member=user:$caller ;;
+esac
+for role in roles/compute.osAdminLogin roles/iam.serviceAccountUser roles/iap.tunnelResourceAccessor; do
+  retry_iam gcloud projects add-iam-policy-binding "$BOOTSTRAP_PROJECT_ID" \
+    --member="$caller_member" --role="$role" --condition=None --quiet
+done
+
+# Registering the SSH public key with OS Login
+public_key=$(awk '{ print $1, $2 }' "$BOOTSTRAP_SSH_KEY.pub")
+profile=$(gcloud compute os-login describe-profile --format=json)
+if ! jq -e --arg key "$public_key" 'any(.sshPublicKeys[]?.key; startswith($key))' <<< "$profile" >/dev/null; then
+  gcloud compute os-login ssh-keys add --key-file="$BOOTSTRAP_SSH_KEY.pub" --project="$BOOTSTRAP_PROJECT_ID" --quiet >/dev/null
+  profile=$(gcloud compute os-login describe-profile --format=json)
+fi
+os_login_user=$(jq -er '[.posixAccounts[]? | select(.primary == true)][0].username // .posixAccounts[0].username' <<< "$profile") \
+  || die 'Could not determine the OS Login username.'
 
 # Validating service account key
 keys=$(gcloud iam service-accounts keys list --iam-account="$ACCOUNT" --managed-by=user --project="$BOOTSTRAP_PROJECT_ID" --format=json)
@@ -256,7 +282,11 @@ fi
   printf 'export GOOGLE_APPLICATION_CREDENTIALS=%q\n' "$KEY_FILE"
   printf 'export TF_VAR_config_path=%q\n' "$CONFIG_FILE"
   printf 'export DEPLOYMENT_CONFIG=%q\n' "$CONFIG_FILE"
-  printf 'export ANSIBLE_CONFIG=%q\n\n' "$ANSIBLE_DIR/ansible.cfg"
+  printf 'export ANSIBLE_COLLECTIONS_PATH=%q\n' "$ANSIBLE_DIR"
+  printf 'export ANSIBLE_INVENTORY=%q\n' "$ANSIBLE_DIR/inventory.gcp.yml"
+  printf 'export KYIV_AIR_SOURCE_DIR=%q\n' "$PROJECT_DIR"
+  printf 'export ANSIBLE_REMOTE_USER=%q\n' "$os_login_user"
+  printf 'export ANSIBLE_PRIVATE_KEY_FILE=%q\n\n' "$BOOTSTRAP_SSH_KEY"
   printf 'terraform -chdir=%q init %q\n' "$TERRAFORM_DIR" "-backend-config=$BACKEND_FILE"
 } > "$ENV_FILE"
 chmod 0600 "$ENV_FILE"

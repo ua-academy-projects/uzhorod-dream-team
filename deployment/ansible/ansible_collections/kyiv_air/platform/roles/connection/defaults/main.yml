@@ -1,0 +1,29 @@
+cfg: "{{ lookup('file', lookup('env', 'DEPLOYMENT_CONFIG')) | from_json }}"
+
+ansible_port: "{{ cfg.vm_options.ssh_port | default(222) }}"
+ansible_become: true
+ansible_pipelining: true
+
+connection_user: "{{ ansible_user | default(lookup('env', 'ANSIBLE_REMOTE_USER')) }}"
+connection_key: "{{ lookup('env', 'ANSIBLE_PRIVATE_KEY_FILE') }}"
+connection_identity: "{{ ('-i ' ~ connection_key ~ ' -o IdentitiesOnly=yes') if connection_key else '' }}"
+connection_bastion: "{{ groups['bastion'][0] }}"
+connection_iap_tunnel: >-
+  gcloud compute start-iap-tunnel {{ connection_bastion }} {{ ansible_port }}
+  --listen-on-stdin
+  --project={{ cfg.google.project_id }}
+  --zone={{ cfg.google.zone }}
+  --verbosity=warning
+connection_jump: >-
+  ssh -W %h:%p
+  -p {{ ansible_port }}
+  -l {{ connection_user }}
+  {{ connection_identity }}
+  -o StrictHostKeyChecking=accept-new
+  -o ProxyCommand='{{ connection_iap_tunnel }}'
+  {{ hostvars[connection_bastion].ansible_host }}
+
+ansible_ssh_common_args: >-
+  -o StrictHostKeyChecking=accept-new
+  {{ '-o IdentitiesOnly=yes' if connection_key else '' }}
+  -o ProxyCommand="{{ connection_iap_tunnel if 'bastion' in group_names else connection_jump }}"

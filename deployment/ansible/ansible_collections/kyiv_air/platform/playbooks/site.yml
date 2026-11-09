@@ -1,0 +1,5 @@
+- import_playbook: kyiv_air.platform.build
+- import_playbook: kyiv_air.platform.db
+- import_playbook: kyiv_air.platform.history
+- import_playbook: kyiv_air.platform.fetcher
+- import_playbook: kyiv_air.platform.ui

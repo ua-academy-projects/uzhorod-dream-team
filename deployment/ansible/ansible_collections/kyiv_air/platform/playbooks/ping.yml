@@ -1,0 +1,9 @@
+- name: Check connectivity to the VMs
+  hosts: internal
+  gather_facts: false
+  roles:
+    - role: kyiv_air.platform.connection
+    - role: kyiv_air.platform.wait
+  tasks:
+    - name: Ping
+      ping:

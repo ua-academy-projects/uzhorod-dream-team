@@ -1,5 +1,5 @@
 - name: Remove Redis when PostgreSQL replaces it
-  when: kyiv_air_postgres_only | bool
+  when: cfg.modes.postgres_only
   block:
     - name: Remove the container
       ansible.builtin.include_role:
@@ -10,11 +10,11 @@
 
     - name: Remove the configuration file
       ansible.builtin.file:
-        path: "{{ kyiv_air_config_dir }}/redis.conf"
+        path: "/etc/kyiv-air/redis.conf"
         state: absent
 
 - name: Run Redis on this VM
-  when: not (kyiv_air_postgres_only | bool)
+  when: not cfg.modes.postgres_only
   block:
     - name: Prepare the data directory
       community.docker.docker_container:
@@ -25,7 +25,7 @@
         command: ["mkdir -p /data/redis && chown redis:redis /data/redis && chmod 0700 /data/redis"]
         mounts:
           - type: bind
-            source: "{{ kyiv_air_data_mount }}"
+            source: "{{ database_data_mount }}"
             target: /data
         detach: false
         cleanup: true
@@ -34,7 +34,7 @@
     - name: Write the configuration
       ansible.builtin.template:
         src: redis.conf.j2
-        dest: "{{ kyiv_air_config_dir }}/redis.conf"
+        dest: "/etc/kyiv-air/redis.conf"
         mode: "0644"
       no_log: true
 
@@ -50,10 +50,10 @@
           - 127.0.0.1:6379:6379
         container_mounts:
           - type: bind
-            source: "{{ kyiv_air_data_mount }}/redis"
+            source: "{{ database_data_mount }}/redis"
             target: /data
           - type: bind
-            source: "{{ kyiv_air_config_dir }}/redis.conf"
+            source: "/etc/kyiv-air/redis.conf"
             target: /usr/local/etc/redis/redis.conf
             read_only: true
         container_command: [redis-server, /usr/local/etc/redis/redis.conf]

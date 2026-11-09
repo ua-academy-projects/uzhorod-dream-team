@@ -1,0 +1,9 @@
+- name: "Wait for {{ probe_url }}"
+  ansible.builtin.uri:
+    url: "{{ probe_url }}"
+    timeout: 3
+  register: probe_result
+  until: probe_result.status == 200
+  retries: "{{ probe_retries | int }}"
+  delay: "{{ probe_delay }}"
+  changed_when: false

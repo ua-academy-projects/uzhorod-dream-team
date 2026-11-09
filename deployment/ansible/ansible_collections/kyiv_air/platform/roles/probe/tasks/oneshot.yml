@@ -1,0 +1,18 @@
+- name: "Wait for a one-shot {{ probe_image }} container"
+  community.docker.docker_container:
+    name: kyiv-air-probe
+    image: "{{ probe_image }}"
+    networks:
+      - name: kyiv-air
+    env: "{{ probe_env }}"
+    entrypoint: "{{ probe_entrypoint | default(omit, true) }}"
+    command: "{{ probe_command }}"
+    detach: false
+    cleanup: true
+    output_logs: true
+  register: probe_result
+  until: probe_result is succeeded and (probe_expect | length == 0 or probe_expect in (probe_result.container.Output | default('')))
+  retries: "{{ probe_retries | int }}"
+  delay: "{{ probe_delay }}"
+  changed_when: false
+  no_log: true

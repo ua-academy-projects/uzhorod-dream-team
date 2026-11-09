@@ -1,0 +1,4 @@
+database_host: "{{ 'kyiv-air-sql-proxy' if cfg.modes.cloud_sql else cfg.vm.db.private_ip }}"
+database_data_mount: "{{ cfg.vm.db.env.DATA_MOUNT | default('/srv/kyiv-air-data') }}"
+database_sql_proxy_image: "{{ cfg.images.CLOUD_SQL_PROXY_IMAGE | default('gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.18.2') }}"
+database_sql_proxy_connection: "{{ cfg.google.project_id }}:{{ cfg.google.region }}:{{ (cfg.cloud_sql | default({})).name | default('kyiv-air-postgres') }}"

@@ -1,0 +1,10 @@
+- name: Wait for PostgreSQL
+  ansible.builtin.include_tasks: oneshot.yml
+  vars:
+    probe_image: "{{ cfg.images.POSTGRES_CLIENT_IMAGE }}"
+    probe_entrypoint: [sh, -c]
+    probe_command: ['psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "$PROBE_QUERY"']
+    probe_env:
+      DATABASE_URL: "{{ probe_database_url }}"
+      PROBE_QUERY: "{{ probe_query }}"
+      PGCONNECT_TIMEOUT: "3"

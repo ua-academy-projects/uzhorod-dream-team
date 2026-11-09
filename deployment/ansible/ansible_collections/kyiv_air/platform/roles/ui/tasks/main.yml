@@ -1,0 +1,75 @@
+- name: Wait for the History VM
+  ansible.builtin.include_role:
+    name: kyiv_air.platform.probe
+  vars:
+    probe_type: http
+    probe_url: "http://{{ cfg.vm.history.private_ip }}:8081/health"
+
+- name: Install the nginx template
+  ansible.builtin.copy:
+    src: ui.conf.template
+    dest: "/etc/kyiv-air/ui.conf.template"
+    mode: "0644"
+
+- name: Build the UI environment
+  ansible.builtin.set_fact:
+    ui_env: "{{ (cfg.vm.ui.env | default({})) | combine({'HISTORY_URL': 'http://' ~ cfg.vm.history.private_ip ~ ':8081', 'CERTBOT_DOMAIN': cfg.cloudflare.domain}) }}"
+    ui_mounts:
+      - type: bind
+        source: /etc/letsencrypt
+        target: /etc/letsencrypt
+        read_only: true
+      - type: bind
+        source: "/etc/kyiv-air/ui.conf.template"
+        target: /etc/nginx/templates/default.conf.template
+        read_only: true
+
+- name: Validate the nginx configuration
+  community.docker.docker_container:
+    name: kyiv-air-ui-check
+    image: "{{ registry_url }}/ui:{{ registry_tag }}"
+    pull: always
+    networks:
+      - name: kyiv-air
+    env: "{{ ui_env }}"
+    groups: ["{{ kyiv_air_certificate_gid }}"]
+    mounts: "{{ ui_mounts }}"
+    command: [nginx, -t]
+    detach: false
+    cleanup: true
+  changed_when: false
+
+- name: UI service
+  ansible.builtin.include_role:
+    name: kyiv_air.platform.container
+  vars:
+    container_name: kyiv-air-ui
+    container_image: "{{ registry_url }}/ui:{{ registry_tag }}"
+    container_ports:
+      - "{{ cfg.vm.ui.private_ip }}:80:8080"
+      - 127.0.0.1:80:8080
+      - "{{ cfg.vm.ui.private_ip }}:443:8443"
+      - 127.0.0.1:443:8443
+    container_env: "{{ ui_env }}"
+    container_groups: ["{{ kyiv_air_certificate_gid }}"]
+    container_mounts: "{{ ui_mounts }}"
+    container_probe_url: http://127.0.0.1/
+
+- name: UI HTTPS probes
+  ansible.builtin.include_role:
+    name: kyiv_air.platform.probe
+  vars:
+    probe_type: command
+    probe_argv:
+      - curl
+      - -fsS
+      - --connect-timeout
+      - "2"
+      - --max-time
+      - "3"
+      - --noproxy
+      - "*"
+      - --resolve
+      - "{{ cfg.cloudflare.domain }}:443:{{ cfg.vm.ui.private_ip }}"
+      - "https://{{ cfg.cloudflare.domain }}{{ item }}"
+  loop: ["/", /api/v1/session]

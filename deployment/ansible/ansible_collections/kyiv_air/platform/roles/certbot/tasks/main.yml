@@ -29,14 +29,14 @@
 
 - name: Write the Cloudflare credentials
   ansible.builtin.copy:
-    dest: "{{ kyiv_air_config_dir }}/cloudflare.ini"
+    dest: "/etc/kyiv-air/cloudflare.ini"
     content: "dns_cloudflare_api_token = {{ kyiv_air_secrets['cloudflare-dns-token'] }}\n"
     mode: "0600"
   no_log: true
 
 - name: Write the certbot settings
   ansible.builtin.copy:
-    dest: "{{ kyiv_air_config_dir }}/certbot-settings.env"
+    dest: "/etc/kyiv-air/certbot-settings.env"
     content: |
       CERTBOT_IMAGE={{ certbot_image }}
       CERTBOT_DOMAIN={{ certbot_domain }}
@@ -46,13 +46,13 @@
 - name: Install the renewal script
   ansible.builtin.copy:
     src: renew-certificates.sh
-    dest: "{{ kyiv_air_app_dir }}/bin/renew-certificates"
+    dest: "/opt/kyiv-air/bin/renew-certificates"
     mode: "0755"
 
 - name: Obtain the certificate
   ansible.builtin.command:
     argv:
-      - "{{ kyiv_air_app_dir }}/bin/renew-certificates"
+      - "/opt/kyiv-air/bin/renew-certificates"
       - certonly
       - --dns-cloudflare
       - --agree-tos
@@ -64,7 +64,7 @@
       - "{{ certbot_domain }}"
       - --keep-until-expiring
   environment:
-    CONFIG: "{{ kyiv_air_config_dir }}"
+    CONFIG: "/etc/kyiv-air"
   register: certbot_run
   changed_when: "'Successfully received certificate' in certbot_run.stdout"
 
@@ -75,7 +75,7 @@
     user: root
     minute: "42"
     hour: "8,20"
-    job: "CONFIG={{ kyiv_air_config_dir }} /bin/bash {{ kyiv_air_app_dir }}/bin/renew-certificates >> /var/log/letsencrypt/renewal-cron.log 2>&1"
+    job: "CONFIG=/etc/kyiv-air /bin/bash /opt/kyiv-air/bin/renew-certificates >> /var/log/letsencrypt/renewal-cron.log 2>&1"
 
 - name: Enable cron
   ansible.builtin.systemd_service:

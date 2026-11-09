@@ -1,2 +1,2 @@
-migrate_image: "{{ kyiv_air_registry }}/migrate:{{ kyiv_air_image_version }}"
+migrate_image: "{{ registry_url }}/migrate:{{ registry_tag }}"
 migrate_client_image: "{{ cfg.images.POSTGRES_CLIENT_IMAGE }}"

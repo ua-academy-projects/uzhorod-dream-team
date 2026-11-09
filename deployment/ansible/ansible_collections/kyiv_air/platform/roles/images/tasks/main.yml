@@ -1,12 +1,12 @@
-- name: Read a registry access token for the local gcloud account
-  ansible.builtin.command: gcloud auth print-access-token
+- name: Read a registry access token for the deployment service account
+  ansible.builtin.command: gcloud auth application-default print-access-token
   register: images_token
   changed_when: false
   no_log: true
 
 - name: Log in to Artifact Registry
   community.docker.docker_login:
-    registry_url: "{{ kyiv_air_registry_host }}"
+    registry_url: "{{ registry_host }}"
     username: oauth2accesstoken
     password: "{{ images_token.stdout }}"
   changed_when: false
@@ -14,8 +14,8 @@
 
 - name: Build images
   community.docker.docker_image_build:
-    name: "{{ kyiv_air_registry }}/{{ item.name }}"
-    tag: "{{ kyiv_air_image_version }}"
+    name: "{{ registry_url }}/{{ item.name }}"
+    tag: "{{ registry_tag }}"
     path: "{{ images_source_dir }}/{{ item.context }}"
     target: "{{ item.target | default(omit) }}"
     platform: "{{ images_platform }}"
@@ -26,8 +26,8 @@
 
 - name: Push images
   community.docker.docker_image_push:
-    name: "{{ kyiv_air_registry }}/{{ item.name }}"
-    tag: "{{ kyiv_air_image_version }}"
+    name: "{{ registry_url }}/{{ item.name }}"
+    tag: "{{ registry_tag }}"
   loop: "{{ images_components | selectattr('name', 'in', images_only | default(images_components | map(attribute='name'))) | list }}"
   loop_control:
     label: "{{ item.name }}"

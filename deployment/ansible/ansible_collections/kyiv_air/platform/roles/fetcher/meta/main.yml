@@ -1,8 +1,11 @@
 galaxy_info:
   author: Kyiv Air
-  description: Shared configuration, derived values and SSH connection settings
+  description: Fetcher service
   license: MIT
   min_ansible_version: "2.17"
   platforms:
     - name: Ubuntu
       versions: [all]
+dependencies:
+  - role: kyiv_air.platform.registry
+  - role: kyiv_air.platform.database

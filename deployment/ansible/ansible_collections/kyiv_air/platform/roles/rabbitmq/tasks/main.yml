@@ -1,5 +1,5 @@
 - name: Remove RabbitMQ when PostgreSQL replaces it
-  when: kyiv_air_postgres_only | bool
+  when: cfg.modes.postgres_only
   block:
     - name: Remove the container
       ansible.builtin.include_role:
@@ -10,11 +10,11 @@
 
     - name: Remove the configuration file
       ansible.builtin.file:
-        path: "{{ kyiv_air_config_dir }}/rabbitmq.conf"
+        path: "/etc/kyiv-air/rabbitmq.conf"
         state: absent
 
 - name: Run RabbitMQ on this VM
-  when: not (kyiv_air_postgres_only | bool)
+  when: not cfg.modes.postgres_only
   block:
     - name: Prepare the data directory
       community.docker.docker_container:
@@ -25,7 +25,7 @@
         command: ["mkdir -p /data/rabbitmq && chown rabbitmq:rabbitmq /data/rabbitmq && chmod 0700 /data/rabbitmq"]
         mounts:
           - type: bind
-            source: "{{ kyiv_air_data_mount }}"
+            source: "{{ database_data_mount }}"
             target: /data
         detach: false
         cleanup: true
@@ -33,7 +33,7 @@
 
     - name: Write the configuration
       ansible.builtin.copy:
-        dest: "{{ kyiv_air_config_dir }}/rabbitmq.conf"
+        dest: "/etc/kyiv-air/rabbitmq.conf"
         content: |
           vm_memory_high_watermark.absolute = 512MB
         mode: "0644"
@@ -57,10 +57,10 @@
           RABBITMQ_NODENAME: rabbit@kyiv-air-rabbitmq
         container_mounts:
           - type: bind
-            source: "{{ kyiv_air_data_mount }}/rabbitmq"
+            source: "{{ database_data_mount }}/rabbitmq"
             target: /var/lib/rabbitmq
           - type: bind
-            source: "{{ kyiv_air_config_dir }}/rabbitmq.conf"
+            source: "/etc/kyiv-air/rabbitmq.conf"
             target: /etc/rabbitmq/rabbitmq.conf
             read_only: true
         container_probe_exec: [rabbitmq-diagnostics, -q, check_running]
@@ -78,11 +78,9 @@
       no_log: true
 
     - name: Wait for the AMQP listener
-      community.docker.docker_container_exec:
-        container: kyiv-air-rabbitmq
-        argv: [rabbitmq-diagnostics, -q, check_port_listener, "5672"]
-      register: rabbitmq_amqp
-      until: rabbitmq_amqp.rc == 0
-      retries: "{{ kyiv_air_probe_retries | int }}"
-      delay: "{{ kyiv_air_probe_delay }}"
-      changed_when: false
+      ansible.builtin.include_role:
+        name: kyiv_air.platform.probe
+      vars:
+        probe_type: exec
+        probe_container: kyiv-air-rabbitmq
+        probe_argv: [rabbitmq-diagnostics, -q, check_port_listener, "5672"]

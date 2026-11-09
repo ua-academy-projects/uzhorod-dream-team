@@ -1,0 +1,9 @@
+galaxy_info:
+  author: Kyiv Air
+  description: Readiness check timing
+  license: MIT
+  min_ansible_version: "2.17"
+  platforms:
+    - name: Ubuntu
+      versions: [all]
+dependencies: []

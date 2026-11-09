@@ -1,0 +1,10 @@
+galaxy_info:
+  author: Kyiv Air
+  description: UI service behind nginx with TLS
+  license: MIT
+  min_ansible_version: "2.17"
+  platforms:
+    - name: Ubuntu
+      versions: [all]
+dependencies:
+  - role: kyiv_air.platform.registry

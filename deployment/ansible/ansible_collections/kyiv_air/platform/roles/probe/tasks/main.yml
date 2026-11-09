@@ -1,0 +1,2 @@
+- name: "Probe: {{ probe_type }}"
+  ansible.builtin.include_tasks: "{{ probe_type }}.yml"
