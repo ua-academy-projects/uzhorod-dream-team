@@ -1,7 +1,8 @@
 # Secret Manager
 
 locals {
-  access  = { for vm, cfg in var.config.vms : vm => [for s in cfg.secrets : "${var.config.prefix}-${s}"] }
+  labels  = { app = var.config.prefix, managed-by = "terraform" }
+  access  = { for vm, cfg in var.config.vms.instances : vm => [for s in cfg.secrets : "${var.config.prefix}-${s}"] }
   secrets = toset(flatten(values(local.access)))
 
   grants = merge([
@@ -14,7 +15,8 @@ locals {
 resource "google_secret_manager_secret" "secret" {
   for_each  = local.secrets
   secret_id = each.key
-  labels    = var.labels
+
+  labels = local.labels
 
   replication {
     auto {}

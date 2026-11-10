@@ -1,6 +1,7 @@
 locals {
   name     = "${var.config.prefix}-pg"
   database = var.config.database
+  labels   = { app = var.config.prefix, managed-by = "terraform" }
 }
 
 resource "google_compute_global_address" "private_range" {
@@ -30,7 +31,7 @@ resource "google_sql_database_instance" "pg" {
     availability_type = "ZONAL"
     disk_size         = local.database.disk_size_gb
     disk_autoresize   = true
-    user_labels       = var.labels
+    user_labels       = local.labels
 
     location_preference {
       zone = var.config.location.zone

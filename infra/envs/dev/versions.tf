@@ -16,6 +16,4 @@ terraform {
 
 provider "google" {
   project = var.project_id
-  region  = local.config.location.region
-  zone    = local.config.location.zone
 }

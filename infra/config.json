@@ -8,21 +8,24 @@
   "ssh": {
     "user": "citybikes",
     "user_public_key_file": "~/.ssh/citybikes_ed25519.pub",
-    "internal_public_key_file": "~/.ssh/citybikes_internal_ed25519.pub"
-  },
-  "vm_defaults": {
-    "machine_type": "e2-small",
-    "disk_size_gb": 10,
-    "image": "ubuntu-os-cloud/ubuntu-2404-lts-amd64",
-    "cloud_logging": true,
-    "roles": ["roles/logging.logWriter"]
+    "internal_public_key_file": "~/.ssh/citybikes_internal_ed25519.pub",
+    "bastion_port": 505
   },
   "vms": {
-    "db": { "host": 50, "disk_size_gb": 20, "services": ["redis", "rabbitmq"], "secrets": ["redis-password", "rabbitmq-password"] },
-    "fetcher": { "host": 51, "services": ["fetcher"], "secrets": ["rabbitmq-password", "db-password"] },
-    "history": { "host": 52, "services": ["history"], "secrets": ["db-password", "rabbitmq-password", "redis-password"] },
-    "ui": { "host": 53, "disk_size_gb": 15, "services": ["ui", "cloudflared"], "secrets": ["cloudflare-tunnel-token", "cloudflare-api-token"] },
-    "bastion": { "host": 54, "services": [], "bastion": true, "secrets": ["internal-ssh-key"] }
+    "defaults": {
+      "machine_type": "e2-small",
+      "disk_size_gb": 10,
+      "image": "ubuntu-os-cloud/ubuntu-2404-lts-amd64",
+      "cloud_logging": true,
+      "roles": ["roles/logging.logWriter"]
+    },
+    "instances": {
+      "db": { "host": 50, "disk_size_gb": 20, "services": ["redis", "rabbitmq"], "secrets": ["redis-password", "rabbitmq-password"] },
+      "fetcher": { "host": 51, "services": ["fetcher"], "secrets": ["rabbitmq-password", "db-password"] },
+      "history": { "host": 52, "services": ["history"], "secrets": ["db-password", "rabbitmq-password", "redis-password"] },
+      "ui": { "host": 53, "disk_size_gb": 15, "services": ["ui", "cloudflared"], "secrets": ["cloudflare-tunnel-token", "cloudflare-api-token"] },
+      "bastion": { "host": 54, "services": [], "bastion": true, "secrets": ["internal-ssh-key"] }
+    }
   },
   "database": { "version": "POSTGRES_16", "tier": "db-f1-micro", "disk_size_gb": 10, "private_range": "10.21.0.0/24" },
   "tls": { "vm": "ui", "domain": "citybikes-tracker.pp.ua", "email": "fikusivan777@gmail.com", "staging": false },

@@ -5,7 +5,7 @@
   "description": "WHAT is built. Read by Terraform (infra/envs/dev). Checked against this schema before every run.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["prefix", "location", "network", "ssh", "vm_defaults", "vms", "database", "tls", "app"],
+  "required": ["prefix", "location", "network", "ssh", "vms", "database", "tls", "app"],
 
   "properties": {
     "prefix": {
@@ -43,34 +43,45 @@
     "ssh": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["user", "user_public_key_file", "internal_public_key_file"],
+      "required": ["user", "user_public_key_file", "internal_public_key_file", "bastion_port"],
       "properties": {
         "user": { "type": "string", "pattern": "^[a-z_][a-z0-9_-]{0,31}$" },
         "user_public_key_file": { "description": "YOUR key: the bastion accepts it", "$ref": "#/$defs/pubkey_file" },
-        "internal_public_key_file": { "description": "The key the other VMs accept", "$ref": "#/$defs/pubkey_file" }
-      }
-    },
-
-    "vm_defaults": {
-      "description": "Every VM gets these. A VM's own machine_type, disk_size_gb, image, cloud_logging replace them; its roles are ADDED to these",
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["machine_type", "disk_size_gb", "image", "cloud_logging", "roles"],
-      "properties": {
-        "machine_type": { "$ref": "#/$defs/machine_type" },
-        "disk_size_gb": { "$ref": "#/$defs/disk_size_gb" },
-        "image": { "type": "string" },
-        "cloud_logging": { "$ref": "#/$defs/cloud_logging" },
-        "roles": { "$ref": "#/$defs/roles" }
+        "internal_public_key_file": { "description": "The key the other VMs accept", "$ref": "#/$defs/pubkey_file" },
+        "bastion_port": {
+              "description": "The port the bastion's sshd listens on (the only SSH port open to the internet)",
+              "type": "integer", "minimum": 1, "maximum": 65535, "not": { "const": 22 }
+        }
       }
     },
 
     "vms": {
-      "description": "Each VM: what is its own, and only what differs from vm_defaults",
+      "description": "The VMs: what they all have, and each one",
       "type": "object",
-      "minProperties": 1,
-      "propertyNames": { "pattern": "^[a-z][a-z0-9-]{0,14}$" },
-      "additionalProperties": { "$ref": "#/$defs/vm" }
+      "additionalProperties": false,
+      "required": ["defaults", "instances"],
+      "properties": {
+        "defaults": {
+          "description": "Every VM gets these. A VM's own machine_type, disk_size_gb, image, cloud_logging replace them; its roles are ADDED to these",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["machine_type", "disk_size_gb", "image", "cloud_logging", "roles"],
+          "properties": {
+            "machine_type": { "$ref": "#/$defs/machine_type" },
+            "disk_size_gb": { "$ref": "#/$defs/disk_size_gb" },
+            "image": { "type": "string" },
+            "cloud_logging": { "$ref": "#/$defs/cloud_logging" },
+            "roles": { "$ref": "#/$defs/roles" }
+          }
+        },
+        "instances": {
+          "description": "Each VM: what is its own, and only what differs from vms.defaults",
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": { "pattern": "^[a-z][a-z0-9-]{0,14}$" },
+          "additionalProperties": { "$ref": "#/$defs/vm" }
+        }
+      }
     },
 
     "database": {
@@ -138,7 +149,7 @@
           "uniqueItems": true,
           "items": { "enum": ["redis", "rabbitmq", "fetcher", "history", "ui", "cloudflared"] }
         },
-        "roles": { "description": "Project roles in ADDITION to vm_defaults.roles", "$ref": "#/$defs/roles" },
+        "roles": { "description": "Project roles in ADDITION to vms.defaults.roles", "$ref": "#/$defs/roles" },
         "secrets": {
           "description": "The secrets the VM may read",
           "type": "array",

@@ -16,13 +16,15 @@ spec.loader.exec_module(gcp)
 
 CONFIG = {
     "prefix": "citybikes",
-    "ssh": {"user": "citybikes", "user_public_key_file": "~/.ssh/me.pub", "internal_public_key_file": "~/.ssh/internal.pub"},
+    "ssh": {"user": "citybikes", "user_public_key_file": "~/.ssh/me.pub", "internal_public_key_file": "~/.ssh/internal.pub", "bastion_port": 505},
     "tls": {"vm": "ui", "domain": "example.org"},
-    "vm_defaults": {"machine_type": "e2-small", "disk_size_gb": 10, "cloud_logging": True, "roles": ["roles/logging.logWriter"]},
     "vms": {
-        "db": {"host": 50, "disk_size_gb": 20, "services": ["redis"], "roles": ["roles/extra"]},
-        "ui": {"host": 53, "services": ["ui", "cloudflared"], "cloud_logging": False},
-        "bastion": {"host": 54, "services": [], "bastion": True, "secrets": ["internal-ssh-key"]},
+        "defaults": {"machine_type": "e2-small", "disk_size_gb": 10, "cloud_logging": True, "roles": ["roles/logging.logWriter"]},
+        "instances": {
+            "db": {"host": 50, "disk_size_gb": 20, "services": ["redis"], "roles": ["roles/extra"]},
+            "ui": {"host": 53, "services": ["ui", "cloudflared"], "cloud_logging": False},
+            "bastion": {"host": 54, "services": [], "bastion": True, "secrets": ["internal-ssh-key"]},
+        },
     },
 }
 
@@ -76,7 +78,7 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(gcp.vm_settings(CONFIG, "ui")["secrets"], [])
 
     def test_groups_by_what_runs(self):
-        settings = {name: gcp.vm_settings(CONFIG, name) for name in CONFIG["vms"]}
+        settings = {name: gcp.vm_settings(CONFIG, name) for name in CONFIG["vms"]["instances"]}
         self.assertEqual(gcp.groups_of(CONFIG, "bastion", settings["bastion"]), ["bastion"])
         self.assertEqual(gcp.groups_of(CONFIG, "db", settings["db"]), ["app"])
         self.assertEqual(gcp.groups_of(CONFIG, "ui", settings["ui"]), ["app", "frontend"])
@@ -98,6 +100,9 @@ class ConnectionTests(unittest.TestCase):
         self.assertEqual(c["ansible_host"], "34.1.2.3")
         self.assertEqual(c["ansible_ssh_private_key_file"], os.path.expanduser("~/.ssh/me"))
         self.assertNotIn("ProxyCommand", c["ansible_ssh_common_args"])
+        self.assertEqual(c["ansible_port"], 505)
+        self.assertIn("-p 505", c["ansible_ssh_common_args"])
+        
 
     def test_the_others_through_the_bastion_with_the_internal_key(self):
         c = gcp.connection(CONFIG["ssh"], {"bastion": False}, "10.20.0.50", "34.1.2.3")

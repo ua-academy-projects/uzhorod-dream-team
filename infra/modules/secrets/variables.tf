@@ -1,10 +1,12 @@
 variable "config" {
-  description = "infra/config.json as a whole; this module uses prefix and the vms' secrets"
+  description = "infra/config.json as a whole; this module uses prefix and the secrets of vms.instances"
   type = object({
     prefix = string
-    vms = map(object({
-      secrets = optional(list(string), [])
-    }))
+    vms = object({
+      instances = map(object({
+        secrets = optional(list(string), [])
+      }))
+    })
   })
 }
 
@@ -13,6 +15,3 @@ variable "members" {
   type        = map(string)
 }
 
-variable "labels" {
-  type = map(string)
-}

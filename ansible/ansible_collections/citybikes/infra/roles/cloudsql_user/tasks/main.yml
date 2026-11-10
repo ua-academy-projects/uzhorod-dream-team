@@ -1,0 +1,7 @@
+---
+
+- name: The user of the application, with the password of the secret db-password
+  citybikes.infra.gcp_sql_user:
+    instance: "{{ cloudsql_user_instance }}"
+    name: "{{ cloudsql_user_name }}"
+    password_secret: "{{ cloudsql_user_password_secret }}"

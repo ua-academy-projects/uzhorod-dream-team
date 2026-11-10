@@ -1,0 +1,16 @@
+---
+
+- name: Every value is in .env
+  ansible.builtin.assert:
+    that: gcp_secrets_missing | length == 0
+    fail_msg: "{{ gcp_secrets_env_file }} needs a value for: {{ gcp_secrets_missing | join(', ') }}"
+    quiet: true
+
+- name: The values of the secrets (a new version only when a value differs from the latest)
+  citybikes.infra.gcp_secret:
+    name: "{{ config.prefix }}-{{ item }}"
+    value: >-
+      {{ gcp_secrets_internal_key if item == gcp_secrets_file_secret
+         else gcp_secrets_env[gcp_secrets_env_key[item]] }}
+  loop: "{{ gcp_secrets_wanted }}"
+  no_log: true 

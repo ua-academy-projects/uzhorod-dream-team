@@ -41,7 +41,7 @@ resource "google_compute_firewall" "ssh_to_bastion" {
 
   allow {
     protocol = "tcp"
-    ports    = ["22"]
+    ports    = [tostring(var.config.ssh.bastion_port)]
   }
 }
 

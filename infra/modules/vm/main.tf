@@ -1,19 +1,26 @@
 locals {
-  vm       = var.config.vms[var.name]
-  defaults = var.config.vm_defaults
+  vm = merge(var.config.vms.defaults, { for key, value in var.config.vms.instances[var.name] : key => value if value != null })
+
   location = var.config.location
   ssh      = var.config.ssh
-
-  machine_type = coalesce(local.vm.machine_type, local.defaults.machine_type)
-  disk_size_gb = coalesce(local.vm.disk_size_gb, local.defaults.disk_size_gb)
-  image        = coalesce(local.vm.image, local.defaults.image)
-
-  name   = "${var.config.prefix}-${var.name}"
-  labels = merge(var.labels, { vm = var.name })
+  name     = "${var.config.prefix}-${var.name}"
+  labels   = { app = var.config.prefix, vm = var.name, managed-by = "terraform" }
 
   internal_ip = cidrhost(var.config.network.subnet_cidr, local.vm.host)
 
+
   ssh_key = trimspace(file(pathexpand(local.vm.bastion ? local.ssh.user_public_key_file : local.ssh.internal_public_key_file)))
+
+  bastion_user_data = <<-EOT
+    #cloud-config
+    write_files:
+      - path: /etc/ssh/sshd_config.d/10-port.conf
+        content: |
+          Port ${local.ssh.bastion_port}
+    runcmd:
+      - [systemctl, daemon-reload]
+      - [systemctl, restart, ssh.socket]
+  EOT
 }
 
 resource "google_compute_address" "internal" {
@@ -33,14 +40,14 @@ resource "google_compute_address" "external" {
 resource "google_compute_instance" "vm" {
   name         = local.name
   zone         = local.location.zone
-  machine_type = local.machine_type
+  machine_type = local.vm.machine_type
   tags         = local.vm.bastion ? [var.bastion_tag] : []
   labels       = local.labels
 
   boot_disk {
     initialize_params {
-      image = local.image
-      size  = local.disk_size_gb
+      image = local.vm.image
+      size  = local.vm.disk_size_gb
       type  = "pd-balanced"
     }
   }
@@ -57,11 +64,14 @@ resource "google_compute_instance" "vm" {
     }
   }
 
-  metadata = {
-    ssh-keys               = "${local.ssh.user}:${local.ssh_key}"
-    block-project-ssh-keys = "true"
-    enable-oslogin         = "FALSE"
-  }
+  metadata = merge(
+    {
+      ssh-keys               = "${local.ssh.user}:${local.ssh_key}"
+      block-project-ssh-keys = "true"
+      enable-oslogin         = "FALSE"
+    },
+    local.vm.bastion ? { user-data = local.bastion_user_data } : {},
+  )
 
   service_account {
     email  = var.service_account

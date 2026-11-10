@@ -1,8 +1,8 @@
 locals {
   prefix = var.config.prefix
-  vms    = var.config.vms
+  vms    = var.config.vms.instances
 
-  roles = { for name, vm in local.vms : name => distinct(concat(var.config.vm_defaults.roles, vm.roles)) }
+  roles = { for name, vm in local.vms : name => distinct(concat(var.config.vms.defaults.roles, vm.roles)) }
 
   grants = merge([
     for name, roles in local.roles : {

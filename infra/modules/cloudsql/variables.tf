@@ -19,7 +19,3 @@ variable "network_id" {
   description = "Our VPC: the ONLY place the database can be reached from"
   type        = string
 }
-
-variable "labels" {
-  type = map(string)
-}

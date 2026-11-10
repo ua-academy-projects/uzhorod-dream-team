@@ -75,8 +75,8 @@ def gcp_compute_settings(project, credentials_file):
 
 def vm_settings(config, name):
     """A VM of config.json with vm_defaults filled in: its own values replace the defaults, its roles are added."""
-    defaults = config.get("vm_defaults", {})
-    vm = config["vms"][name]
+    defaults = config["vms"]["defaults"]
+    vm = config["vms"]["instances"][name]
     settings = {"bastion": False, "services": [], "secrets": []}
     settings.update(defaults)
     settings.update(vm)
@@ -103,23 +103,29 @@ def private_key(public_key_file):
 
 
 def connection(ssh, vm, private_ip, bastion_ip):
-    """How Ansible reaches the VM: the bastion directly with YOUR key, the others through it with the internal key."""
+    """How Ansible reaches the VM: the bastion directly with YOUR key on ssh.bastion_port,
+    the others through it with the internal key (their sshd stays on 22)."""
     user_key = private_key(ssh["user_public_key_file"])
+    port = ssh["bastion_port"]
     args = ["-o StrictHostKeyChecking=accept-new"]
+    settings = {}
     if vm["bastion"]:
         host, key = bastion_ip, user_key
+        settings["ansible_port"] = port
     else:
         host, key = private_ip, private_key(ssh["internal_public_key_file"])
-        proxy = "ssh -W %h:%p -q -i {} -o StrictHostKeyChecking=accept-new {}@{}".format(user_key, ssh["user"], bastion_ip)
+        proxy = "ssh -W %h:%p -q -p {} -i {} -o StrictHostKeyChecking=accept-new {}@{}".format(
+            port, user_key, ssh["user"], bastion_ip)
         args.append('-o ProxyCommand="{}"'.format(proxy))
-    return {
+    settings.update({
         "ansible_host": host,
         "ansible_user": ssh["user"],
         "ansible_ssh_private_key_file": key,
         "ansible_ssh_common_args": " ".join(args),
         "ansible_pipelining": True,
         "ansible_python_interpreter": "/usr/bin/python3",
-    }
+    })
+    return settings
 
 # CloudSQL
 SQLADMIN_URL = "https://sqladmin.googleapis.com/v1/projects/{project}/instances/{instance}"
