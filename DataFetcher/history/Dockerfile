@@ -11,5 +11,6 @@ COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 
 COPY --from=builder /out/history /history
 
+USER 65532:65532
 EXPOSE 8000
 ENTRYPOINT ["/history"]

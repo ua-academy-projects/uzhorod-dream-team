@@ -7,3 +7,4 @@ services/__pycache__/
 
 requirements-dev.txt
 .env
+.env.*
