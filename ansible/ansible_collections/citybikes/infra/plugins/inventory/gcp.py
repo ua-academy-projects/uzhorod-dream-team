@@ -8,10 +8,9 @@ description:
   - A wrapper around C(google.cloud.gcp_compute). The inventory file names only this plugin; the plugin sets
     gcp_compute up by itself (the project and the key of the service account, only the VMs with the label
     C(vm)) and lets it list the VMs.
-  - Then it adds what config.json says about every VM. Its groups, by the role it plays, are C(bastion)
-    (the way in), C(app) (it runs services of the application) and C(frontend) (it serves the site).
-    Its settings with vms.defaults filled in go to C(citybikes_vm), and how to reach it (the bastion directly
-    with your key, every other VM through the bastion with the internal key) to the connection variables.
+  - Its settings with vms.defaults filled in go to C(citybikes_vm), and how to reach it to the connection
+    variables. The keys come from your ssh-agent (only the public key files are named), the bastion directly
+    on ssh.bastion_port, every other VM through the bastion (ssh -W, the bastion holds no key).
   - For every host and for localhost it sets C(citybikes_config_file), the path of config.json. The role
     config_validate loads it with include_vars.
   - And C(citybikes_db_host), the address of the database. The private IP of the Cloud SQL instance
@@ -43,7 +42,6 @@ plugin: citybikes.infra.gcp
 
 import json
 import os
-import re
 import tempfile
 
 from ansible.errors import AnsibleParserError
@@ -97,34 +95,24 @@ def groups_of(config, name, vm):
     return groups
 
 
-def private_key(public_key_file):
-    """The private key is the public key file without ".pub"."""
-    return os.path.expanduser(re.sub(r"\.pub$", "", public_key_file))
-
-
 def connection(ssh, vm, private_ip, bastion_ip):
-    """How Ansible reaches the VM: the bastion directly with YOUR key on ssh.bastion_port,
-    the others through it with the internal key (their sshd stays on 22)."""
-    user_key = private_key(ssh["user_public_key_file"])
-    port = ssh["bastion_port"]
-    args = ["-o StrictHostKeyChecking=accept-new"]
-    settings = {}
-    if vm["bastion"]:
-        host, key = bastion_ip, user_key
-        settings["ansible_port"] = port
-    else:
-        host, key = private_ip, private_key(ssh["internal_public_key_file"])
-        proxy = "ssh -W %h:%p -q -p {} -i {} -o StrictHostKeyChecking=accept-new {}@{}".format(
-            port, user_key, ssh["user"], bastion_ip)
-        args.append('-o ProxyCommand="{}"'.format(proxy))
-    settings.update({
-        "ansible_host": host,
+    user_key = os.path.expanduser(ssh["user_public_key_file"])
+    args = ["-o StrictHostKeyChecking=accept-new", "-o IdentitiesOnly=yes"]
+    settings = {
         "ansible_user": ssh["user"],
-        "ansible_ssh_private_key_file": key,
-        "ansible_ssh_common_args": " ".join(args),
         "ansible_pipelining": True,
         "ansible_python_interpreter": "/usr/bin/python3",
-    })
+    }
+    if vm["bastion"]:
+        settings.update(ansible_host=bastion_ip, ansible_port=ssh["bastion_port"])
+        args.append("-o IdentityFile={}".format(user_key))
+    else:
+        jump = "ssh -W %h:%p -q -p {} -o StrictHostKeyChecking=accept-new -o IdentitiesOnly=yes -o IdentityFile={} {}@{}".format(
+            ssh["bastion_port"], user_key, ssh["user"], bastion_ip)
+        settings["ansible_host"] = private_ip
+        args.append("-o IdentityFile={}".format(os.path.expanduser(ssh["internal_public_key_file"])))
+        args.append('-o ProxyCommand="{}"'.format(jump))
+    settings["ansible_ssh_common_args"] = " ".join(args)
     return settings
 
 # CloudSQL

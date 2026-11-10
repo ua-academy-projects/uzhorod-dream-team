@@ -14,12 +14,6 @@
   roles:
     - citybikes.infra.config
 
-- name: Bastion
-  hosts: bastion
-  gather_facts: false
-  roles:
-    - citybikes.infra.bastion
-
 - name: VMs of the application
   hosts: app
   gather_facts: false

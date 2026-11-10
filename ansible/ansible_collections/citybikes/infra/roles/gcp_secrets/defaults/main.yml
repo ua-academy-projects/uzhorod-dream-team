@@ -9,16 +9,11 @@ gcp_secrets_env_key:
   cloudflare-tunnel-token: CLOUDFLARE_TUNNEL_TOKEN
   cloudflare-api-token: CLOUDFLARE_API_TOKEN
 
-gcp_secrets_file_secret: internal-ssh-key
-gcp_secrets_internal_key: "{{ lookup('ansible.builtin.file', config_json.ssh.internal_public_key_file | regex_replace('\\.pub$', '') | expanduser) }}"
-
 
 gcp_secrets_env_line: '^[ \t]*([A-Z_][A-Z0-9_]*)[ \t]*=[ \t]*["'']?(.*?)["'']?[ \t]*$'
 gcp_secrets_env: "{{ dict(lookup('ansible.builtin.file', gcp_secrets_env_file) | regex_findall(gcp_secrets_env_line, multiline=True)) }}"
 gcp_secrets_env_filled: "{{ gcp_secrets_env | dict2items | rejectattr('value', 'eq', '') | map(attribute='key') | list }}"
 
-
 gcp_secrets_wanted: "{{ config_json.vms.instances.values() | map(attribute='secrets', default=[]) | flatten | unique | sort }}"
-gcp_secrets_from_env: "{{ gcp_secrets_wanted | reject('eq', gcp_secrets_file_secret) | list }}"
 
-gcp_secrets_missing: "{{ gcp_secrets_from_env | map('extract', gcp_secrets_env_key) | reject('in', gcp_secrets_env_filled) | list }}"
+gcp_secrets_missing: "{{ gcp_secrets_wanted | map('extract', gcp_secrets_env_key) | reject('in', gcp_secrets_env_filled) | list }}"

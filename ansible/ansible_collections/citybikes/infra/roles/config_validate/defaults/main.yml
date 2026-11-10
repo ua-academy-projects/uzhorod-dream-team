@@ -13,8 +13,6 @@ config_validate_tls_vm: "{{ config_validate_vms[config_json.tls.vm] | default({'
 config_validate_checks:
   - msg: 'exactly one VM must have "bastion": true'
     ok: "{{ config_validate_bastions | length == 1 }}"
-  - msg: 'the bastion needs "internal-ssh-key" in its "secrets"'
-    ok: "{{ config_validate_bastions | map('extract', config_validate_vms, 'secrets') | flatten is contains('internal-ssh-key') }}"
   - msg: 'a VM with "cloud_logging" needs "roles/logging.logWriter" (in its "roles" or in vm_defaults.roles)'
     ok: "{{ config_validate_vms.values() | selectattr('cloud_logging') | rejectattr('roles', 'contains', 'roles/logging.logWriter') | list | length == 0 }}"
   - msg: 'a service may run on one VM only'

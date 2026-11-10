@@ -170,7 +170,7 @@
     "secret": {
       "enum": [
         "db-password", "redis-password", "rabbitmq-password",
-        "cloudflare-tunnel-token", "cloudflare-api-token", "internal-ssh-key"
+        "cloudflare-tunnel-token", "cloudflare-api-token"
       ]
     },
     "cidr": {

@@ -24,7 +24,7 @@
       "fetcher": { "host": 51, "services": ["fetcher"], "secrets": ["rabbitmq-password", "db-password"] },
       "history": { "host": 52, "services": ["history"], "secrets": ["db-password", "rabbitmq-password", "redis-password"] },
       "ui": { "host": 53, "disk_size_gb": 15, "services": ["ui", "cloudflared"], "secrets": ["cloudflare-tunnel-token", "cloudflare-api-token"] },
-      "bastion": { "host": 54, "services": [], "bastion": true, "secrets": ["internal-ssh-key"] }
+      "bastion": { "host": 54, "services": [], "bastion": true }
     }
   },
   "database": { "version": "POSTGRES_16", "tier": "db-f1-micro", "disk_size_gb": 10, "private_range": "10.21.0.0/24" },

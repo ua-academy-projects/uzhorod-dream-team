@@ -27,11 +27,6 @@ variable "config" {
       }))
     })
   })
-
-  validation {
-    condition     = alltrue([for vm in var.config.vms.instances : !vm.bastion || contains(vm.secrets, "internal-ssh-key")])
-    error_message = "config.json: the bastion needs \"internal-ssh-key\" in its \"secrets\"."
-  }
 }
 
 variable "name" {

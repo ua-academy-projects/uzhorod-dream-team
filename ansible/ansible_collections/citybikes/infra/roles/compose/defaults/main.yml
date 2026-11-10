@@ -3,7 +3,7 @@ compose_dir: /opt/citybikes
 compose_hosts: "{{ groups['app'] | map('extract', hostvars) | list }}"
 compose_vm_ip: "{{ dict(compose_hosts | map(attribute='vm') | zip(compose_hosts | map(attribute='private_ip'))) }}"
 
-compose_placement: "{{ config_json.vms.instances | dict2items | subelements('value.services') }}"
+compose_placement: "{{ config_json.vms.instances | dict2items | subelements('value.services') }}" 
 compose_service_ip: "{{ dict(compose_placement | map('last') | zip(compose_placement | map('first') | map(attribute='key') | map('extract', compose_vm_ip))) }}"
 
 

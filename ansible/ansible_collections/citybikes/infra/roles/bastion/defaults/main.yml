@@ -1,4 +1,0 @@
----
-
-bastion_ssh_dir: "/home/{{ config_json.ssh.user }}/.ssh"
-bastion_key_secret: "{{ config_json.prefix }}-internal-ssh-key"
