@@ -1,0 +1,8 @@
+local all all trust
+host all postgres 127.0.0.1/32 scram-sha-256
+host {{ app.database_name }} weather_app 127.0.0.1/32 scram-sha-256
+host {{ app.database_name }} weather_app {{ container_history_ip }}/32 scram-sha-256
+host {{ app.database_name }} weather_fetcher 127.0.0.1/32 scram-sha-256
+host {{ app.database_name }} weather_fetcher {{ container_fetcher_ip }}/32 scram-sha-256
+host all all 0.0.0.0/0 reject
+host all all ::/0 reject

@@ -4,4 +4,3 @@
 *.tfvars
 crash.log
 *.tfplan
-.known_hosts

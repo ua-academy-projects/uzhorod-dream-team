@@ -1,0 +1,69 @@
+---
+- name: Run weather-{{ container_service }}
+  when: inventory_hostname == container_vm and container_enabled
+  block:
+    - name: Pull the image
+      community.docker.docker_image_pull:
+        name: "{{ container_image }}"
+        platform: linux/amd64
+        pull: not_present
+      when: container_image != ''
+
+    - name: Build and ship the image
+      ansible.builtin.include_tasks: image.yml
+      when: container_image == ''
+
+    - name: Write config files
+      ansible.builtin.template:
+        src: "{{ item.name }}.j2"
+        dest: /etc/weather-forecast/{{ item.name }}
+        mode: "{{ item.mode }}"
+        owner: "{{ item.owner | default('root') }}"
+      loop: "{{ container_spec.files | default([]) }}"
+      register: container_files
+
+    - name: Write the environment file
+      ansible.builtin.template:
+        src: env.j2
+        dest: /etc/weather-forecast/weather-{{ container_service }}.env
+        mode: "0600"
+
+    - name: Start the container
+      community.docker.docker_container:
+        name: weather-{{ container_service }}
+        image: "{{ container_image or 'weather-' ~ container_service ~ ':' ~ container_built.image.Id[7:19] }}"
+        command: "{{ container_command }}"
+        env_file: /etc/weather-forecast/weather-{{ container_service }}.env
+        volumes: "{{ container_spec.volumes | default([]) }}"
+        network_mode: host
+        restart_policy: unless-stopped
+        restart: "{{ container_files.changed }}"
+        stop_timeout: 60
+        log_driver: json-file
+        log_options:
+          max-size: 10m
+          max-file: "3"
+
+    - name: Wait for the port
+      ansible.builtin.wait_for:
+        host: "{{ ansible_host }}"
+        port: "{{ container_spec.port }}"
+        timeout: 120
+      when: container_spec.port is defined
+
+    - name: Sync the RabbitMQ password
+      ansible.builtin.include_tasks: rabbitmq.yml
+      when: container_service == 'rabbitmq'
+
+    - name: Remove unused images
+      community.docker.docker_prune:
+        images: true
+        images_filters:
+          dangling: false
+          label: weather-forecast
+
+- name: Remove weather-{{ container_service }}, its volume is kept
+  community.docker.docker_container:
+    name: weather-{{ container_service }}
+    state: absent
+  when: inventory_hostname == container_vm and not container_enabled

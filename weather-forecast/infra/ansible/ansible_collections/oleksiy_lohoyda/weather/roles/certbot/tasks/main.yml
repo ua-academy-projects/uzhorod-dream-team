@@ -1,0 +1,46 @@
+---
+- name: Get the certificate
+  when: inventory_hostname == certbot_vm
+  block:
+    - name: Write the Cloudflare credentials
+      ansible.builtin.template:
+        src: cloudflare.ini.j2
+        dest: /etc/weather-forecast/cloudflare.ini
+        mode: "0600"
+
+    - name: Check the certificate
+      ansible.builtin.stat:
+        path: /var/lib/docker/volumes/weather-letsencrypt/_data/live/{{ certbot_cert_name }}/fullchain.pem
+      register: certbot_certificate
+
+    - name: Request the certificate
+      community.docker.docker_container:
+        name: weather-certbot
+        image: "{{ certbot_image }}"
+        detach: false
+        cleanup: true
+        volumes:
+          - weather-letsencrypt:/etc/letsencrypt
+          - /etc/weather-forecast/cloudflare.ini:/cloudflare.ini:ro
+        command: >-
+          certonly --dns-cloudflare --dns-cloudflare-credentials /cloudflare.ini
+          --dns-cloudflare-propagation-seconds 30 -d {{ certbot_domain }} --cert-name {{ certbot_cert_name }}
+          --non-interactive --agree-tos --register-unsafely-without-email
+          {{ '--staging' if certbot_staging else '' }}
+      when: not certbot_certificate.stat.exists
+
+    - name: Install the renewal units
+      ansible.builtin.template:
+        src: "{{ item }}.j2"
+        dest: /etc/systemd/system/{{ item }}
+        mode: "0644"
+      loop:
+        - weather-certbot-renew.service
+        - weather-certbot-renew.timer
+
+    - name: Start the renewal timer
+      ansible.builtin.systemd_service:
+        name: weather-certbot-renew.timer
+        state: started
+        enabled: true
+        daemon_reload: true

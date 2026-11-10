@@ -7,4 +7,4 @@ secrets.env
 /.tools/
 /.pytest_cache/
 
-/var/
+__pycache__/

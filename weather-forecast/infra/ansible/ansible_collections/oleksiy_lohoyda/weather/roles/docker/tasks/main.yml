@@ -1,0 +1,26 @@
+---
+- name: Install Docker
+  ansible.builtin.apt:
+    name: docker.io
+
+- name: Configure Docker
+  ansible.builtin.template:
+    src: daemon.json.j2
+    dest: /etc/docker/daemon.json
+    mode: "0644"
+  notify: Restart Docker
+
+- name: Start Docker
+  ansible.builtin.service:
+    name: docker
+    state: started
+    enabled: true
+
+- name: Create the config directory
+  ansible.builtin.file:
+    path: /etc/weather-forecast
+    state: directory
+    mode: "0755"
+
+- name: Apply Docker changes before containers start
+  ansible.builtin.meta: flush_handlers

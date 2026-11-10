@@ -1,0 +1,3 @@
+---
+docker_subnet: "{{ vms.instances[inventory_hostname].subnet | default(vms.defaults.subnet) }}"
+docker_mtu: "{{ networks[subnets[docker_subnet].network].mtu | default(1460) }}"

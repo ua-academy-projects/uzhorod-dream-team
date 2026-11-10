@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily Let's Encrypt renewal check for the weather UI
+
+[Timer]
+OnCalendar=daily
+RandomizedDelaySec=1h
+Persistent=true
+
+[Install]
+WantedBy=timers.target

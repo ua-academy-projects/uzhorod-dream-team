@@ -1,0 +1,57 @@
+---
+container_specs:
+  postgres:
+    source: services/postgres
+    port: 5432
+    files:
+      - { name: pg_hba.conf, mode: "0644" }
+    volumes:
+      - weather-postgres:/var/lib/postgresql
+      - /etc/weather-forecast/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
+      - /run/weather-postgres:/var/run/postgresql
+    env:
+      POSTGRES_DB: "{{ app.database_name }}"
+      POSTGRES_HOST_AUTH_METHOD: trust
+    command:
+      - -c
+      - hba_file=/etc/postgresql/pg_hba.conf
+      - -c
+      - listen_addresses=127.0.0.1,{{ ansible_host }}
+  rabbitmq:
+    port: 5672
+    files:
+      - { name: rabbitmq.conf, mode: "0644" }
+    volumes:
+      - weather-rabbitmq:/var/lib/rabbitmq
+      - /etc/weather-forecast/rabbitmq.conf:/etc/rabbitmq/conf.d/20-weather.conf:ro
+    env:
+      RABBITMQ_DEFAULT_USER: weather
+      RABBITMQ_DEFAULT_PASS: "{{ container_rabbitmq_password }}"
+      RABBITMQ_DEFAULT_VHOST: weather
+  redis:
+    port: 6379
+    files:
+      - { name: redis.conf, mode: "0600", owner: "999" }
+    volumes:
+      - weather-redis:/data
+      - /etc/weather-forecast/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    env: {}
+    command:
+      - redis-server
+      - /usr/local/etc/redis/redis.conf
+  fetcher:
+    source: services/fetcher
+    env: "{{ container_fetcher_env }}"
+  history:
+    source: services/history
+    port: 8002
+    env: "{{ container_history_env }}"
+  ui:
+    source: services/ui
+    port: 443
+    files:
+      - { name: nginx.conf, mode: "0644" }
+    volumes:
+      - /etc/weather-forecast/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - weather-letsencrypt:/etc/letsencrypt:ro
+    env: {}

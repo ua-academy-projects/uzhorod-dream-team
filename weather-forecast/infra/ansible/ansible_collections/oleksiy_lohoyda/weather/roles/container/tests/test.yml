@@ -1,0 +1,5 @@
+---
+- name: Test the container role
+  hosts: node
+  roles:
+    - oleksiy_lohoyda.weather.container

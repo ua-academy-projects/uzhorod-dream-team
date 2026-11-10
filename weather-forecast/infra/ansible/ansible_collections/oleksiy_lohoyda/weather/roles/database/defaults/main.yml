@@ -1,0 +1,13 @@
+---
+database_vm: "{{ app.services.postgres.host if app.database == 'vm' else app.services.history.host }}"
+database_secret_command: "gcloud secrets versions access latest --project={{ lookup('env', 'PROJECT_ID') }} --secret={{ project.prefix }}-"
+database_admin_password: "{{ lookup('pipe', database_secret_command ~ 'postgres-admin-password') }}"
+database_app_password: "{{ lookup('pipe', database_secret_command ~ 'db-password') }}"
+database_fetcher_password: "{{ lookup('pipe', database_secret_command ~ 'fetcher-db-password') }}"
+database_connection: >-
+  {{ {'login_user': 'postgres', 'login_db': app.database_name}
+     | combine({'login_unix_socket': '/run/weather-postgres'} if app.database == 'vm' else
+               {'login_host': cloudsql_private_ip, 'login_password': database_admin_password, 'ssl_mode': 'require'}) }}
+database_migrations: "{{ playbook_dir }}/../../../../../../services/postgres/migrations"
+database_pgmq_url: https://raw.githubusercontent.com/pgmq/pgmq/v1.13.0/pgmq-extension/sql/pgmq.sql
+database_pgmq_checksum: sha256:bf7e66c75ed771df0c5f7cb2b9f0123ca77992daacd56e3911d1894a3efa99de

@@ -1,0 +1,26 @@
+---
+- name: Validate the config
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - "{{ lookup('env', 'WEATHER_CONFIG') or lookup('env', 'HOME') ~ '/.config/weather-forecast/deployment.json' }}"
+  roles:
+    - oleksiy_lohoyda.weather.validate_config
+
+- name: Configure the VMs and deploy the application
+  hosts: node
+  become: true
+  vars_files:
+    - "{{ lookup('env', 'WEATHER_CONFIG') or lookup('env', 'HOME') ~ '/.config/weather-forecast/deployment.json' }}"
+  roles:
+    - oleksiy_lohoyda.weather.base
+    - oleksiy_lohoyda.weather.ops_agent
+    - oleksiy_lohoyda.weather.docker
+    - { role: oleksiy_lohoyda.weather.container, container_service: postgres }
+    - { role: oleksiy_lohoyda.weather.container, container_service: rabbitmq }
+    - { role: oleksiy_lohoyda.weather.container, container_service: redis }
+    - oleksiy_lohoyda.weather.database
+    - { role: oleksiy_lohoyda.weather.container, container_service: fetcher }
+    - { role: oleksiy_lohoyda.weather.container, container_service: history }
+    - oleksiy_lohoyda.weather.certbot
+    - { role: oleksiy_lohoyda.weather.container, container_service: ui }

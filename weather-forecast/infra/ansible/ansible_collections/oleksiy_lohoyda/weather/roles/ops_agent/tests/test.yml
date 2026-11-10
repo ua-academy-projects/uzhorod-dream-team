@@ -1,0 +1,5 @@
+---
+- name: Test the ops_agent role
+  hosts: node
+  roles:
+    - oleksiy_lohoyda.weather.ops_agent

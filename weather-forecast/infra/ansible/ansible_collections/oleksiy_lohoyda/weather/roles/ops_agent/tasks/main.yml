@@ -1,0 +1,20 @@
+---
+- name: Add the Ops Agent repository
+  ansible.builtin.deb822_repository:
+    name: google-cloud-ops-agent
+    uris: "{{ ops_agent_repository }}"
+    suites: "{{ ops_agent_suite }}"
+    components: main
+    signed_by: "{{ ops_agent_repository }}/doc/apt-key.gpg"
+  register: ops_agent_repo
+
+- name: Install the Ops Agent
+  ansible.builtin.apt:
+    name: google-cloud-ops-agent
+    update_cache: "{{ ops_agent_repo.changed }}"
+
+- name: Start the Ops Agent
+  ansible.builtin.service:
+    name: google-cloud-ops-agent
+    state: started
+    enabled: true

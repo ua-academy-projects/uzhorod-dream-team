@@ -21,17 +21,7 @@ case $role in
     systemctl enable nftables.service
     systemctl restart nftables.service
     ;;
-  node)
-    tries=0
-    until curl -fsS --max-time 5 -o /dev/null http://archive.ubuntu.com/ubuntu/; do
-      tries=$((tries + 1))
-      [[ $tries -lt 60 ]] || { echo 'no internet via bastion' >&2; exit 1; }
-      sleep 10
-    done
-    apt-get update
-    apt-get install -y docker.io
-    systemctl enable --now docker
-    ;;
+  node) ;;
   *)
     echo "unknown role: $role" >&2
     exit 1

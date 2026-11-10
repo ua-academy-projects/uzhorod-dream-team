@@ -1,0 +1,9 @@
+[Unit]
+Description=Renew the Let's Encrypt certificate of the weather UI
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/docker run {{ certbot_docker_args }} renew --quiet
+ExecStartPost=/usr/bin/docker exec weather-ui nginx -s reload

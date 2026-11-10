@@ -1,0 +1,43 @@
+---
+container_service: ""
+container_vm: "{{ app.services[container_service].host }}"
+container_enabled: >-
+  {{ (container_service != 'postgres' or app.database == 'vm')
+     and (container_service not in ['rabbitmq', 'redis'] or app.backend == 'rabbitmq_redis') }}
+container_spec: "{{ container_specs[container_service] }}"
+container_image: "{{ app.services[container_service].image | default('') }}"
+container_command: "{{ app.services[container_service].command | default(container_spec.command | default(omit)) }}"
+container_source_root: "{{ playbook_dir }}/../../../../../.."
+container_image_cache: "{{ lookup('env', 'HOME') }}/.cache/weather-forecast/images"
+
+container_secret_command: "gcloud secrets versions access latest --project={{ lookup('env', 'PROJECT_ID') }} --secret={{ project.prefix }}-"
+container_app_password: "{{ lookup('pipe', container_secret_command ~ 'db-password') }}"
+container_fetcher_password: "{{ lookup('pipe', container_secret_command ~ 'fetcher-db-password') }}"
+container_rabbitmq_password: "{{ lookup('pipe', container_secret_command ~ 'rabbitmq-password') }}"
+container_redis_password: "{{ lookup('pipe', container_secret_command ~ 'redis-password') }}"
+
+container_history_ip: "{{ hostvars[app.services.history.host].ansible_host }}"
+container_fetcher_ip: "{{ hostvars[app.services.fetcher.host].ansible_host }}"
+container_rabbitmq_ip: "{{ hostvars[app.services.rabbitmq.host].ansible_host }}"
+container_redis_ip: "{{ hostvars[app.services.redis.host].ansible_host }}"
+container_db_ip: "{{ hostvars[app.services.postgres.host].ansible_host if app.database == 'vm' else cloudsql_private_ip }}"
+container_db_sslmode: "{{ 'disable' if app.database == 'vm' else 'require' }}"
+container_db_url: "{{ container_db_ip }}:5432/{{ app.database_name }}?sslmode={{ container_db_sslmode }}"
+container_rabbitmq_url: "amqp://weather:{{ container_rabbitmq_password | urlencode }}@{{ container_rabbitmq_ip }}:5672/weather"
+
+container_domain: "{{ app.public.domain }}"
+container_cert_name: "{{ app.public.domain ~ ('-staging' if app.public.letsencrypt_staging else '') }}"
+
+container_fetcher_env: >-
+  {{ {'WEATHER_BACKEND': app.backend, 'FETCHER_HOST': '127.0.0.1'}
+     | combine({'RABBITMQ_URL': container_rabbitmq_url} if app.backend == 'rabbitmq_redis'
+       else {'DATABASE_URL': 'postgresql://weather_fetcher:' ~ (container_fetcher_password | urlencode) ~ '@' ~ container_db_url}) }}
+container_history_env: >-
+  {{ {'WEATHER_BACKEND': app.backend,
+      'DATABASE_URL': 'postgresql://weather_app:' ~ (container_app_password | urlencode) ~ '@' ~ container_db_url,
+      'HISTORY_ADDR': ansible_host ~ ':8002',
+      'HISTORY_SERVE_UI': 'false',
+      'SESSION_COOKIE_SECURE': app.session_cookie_secure | string | lower}
+     | combine({'RABBITMQ_URL': container_rabbitmq_url,
+                'REDIS_ADDR': container_redis_ip ~ ':6379',
+                'REDIS_PASSWORD': container_redis_password} if app.backend == 'rabbitmq_redis' else {}) }}

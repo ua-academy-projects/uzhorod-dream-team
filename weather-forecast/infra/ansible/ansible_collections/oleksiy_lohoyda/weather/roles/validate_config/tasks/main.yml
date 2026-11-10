@@ -1,0 +1,6 @@
+---
+- name: Validate the config against the schema
+  ansible.utils.validate:
+    data: "{{ lookup('file', validate_config_path) | from_json }}"
+    criteria: "{{ validate_config_schema }}"
+    engine: ansible.utils.jsonschema

@@ -1,0 +1,96 @@
+---
+- name: Set up the database
+  when: inventory_hostname == database_vm
+  module_defaults:
+    group/community.postgresql.all: "{{ database_connection }}"
+  block:
+    - name: Install the PostgreSQL driver
+      ansible.builtin.apt:
+        name: python3-psycopg2
+
+    - name: Set the Cloud SQL postgres password
+      ansible.builtin.include_tasks: cloudsql.yml
+      when: app.database == 'cloudsql'
+
+    - name: Download PGMQ
+      ansible.builtin.get_url:
+        url: "{{ database_pgmq_url }}"
+        checksum: "{{ database_pgmq_checksum }}"
+        dest: /var/lib/weather-forecast-pgmq.sql
+        mode: "0644"
+
+    - name: Check PGMQ
+      community.postgresql.postgresql_query:
+        query: SELECT 1 FROM pg_namespace WHERE nspname = 'pgmq'
+      register: database_pgmq
+      changed_when: false
+
+    - name: Install PGMQ
+      community.postgresql.postgresql_script:
+        path: /var/lib/weather-forecast-pgmq.sql
+      when: database_pgmq.rowcount == 0
+
+    - name: Install hstore
+      community.postgresql.postgresql_ext:
+        name: hstore
+
+    - name: Create the migrations table
+      community.postgresql.postgresql_table:
+        name: schema_migrations
+        columns:
+          - version TEXT PRIMARY KEY
+          - applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+
+    - name: Read applied migrations
+      community.postgresql.postgresql_query:
+        query: SELECT version FROM schema_migrations
+      register: database_applied
+      changed_when: false
+
+    - name: Apply migrations
+      community.postgresql.postgresql_query:
+        query: |
+          {{ lookup('file', item) }}
+          INSERT INTO schema_migrations (version) VALUES ('{{ item | basename | splitext | first }}');
+      loop: "{{ query('fileglob', database_migrations ~ '/*.sql') | sort }}"
+      when: item | basename | splitext | first not in database_applied.query_result | map(attribute='version')
+
+    - name: Try the application password
+      community.postgresql.postgresql_ping:
+        login_user: weather_app
+        login_password: "{{ database_app_password }}"
+      register: database_app_ping
+      failed_when: false
+      when: app.database == 'cloudsql'
+      no_log: true
+
+    - name: Create the application role
+      community.postgresql.postgresql_user:
+        name: weather_app
+        password: "{{ database_app_password }}"
+        role_attr_flags: LOGIN
+        no_password_changes: "{{ app.database == 'cloudsql' and database_app_ping.is_available | default(false) }}"
+      no_log: true
+
+    - name: Create the fetcher role
+      community.postgresql.postgresql_user:
+        name: weather_fetcher
+        password: "{{ database_fetcher_password if app.backend == 'postgres' else omit }}"
+        role_attr_flags: "{{ 'LOGIN' if app.backend == 'postgres' else 'NOLOGIN' }}"
+      no_log: true
+
+    - name: Read the application tables
+      community.postgresql.postgresql_query:
+        query: SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename <> 'schema_migrations'
+      register: database_app_tables
+      changed_when: false
+
+    - name: Grant privileges
+      community.postgresql.postgresql_privs:
+        roles: "{{ item.roles }}"
+        type: "{{ item.type }}"
+        schema: "{{ item.schema | default(omit) }}"
+        objs: "{{ item.objs }}"
+        privs: "{{ item.privs }}"
+        state: "{{ item.state | default('present') }}"
+      loop: "{{ database_privileges }}"

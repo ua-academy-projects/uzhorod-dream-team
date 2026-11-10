@@ -1,0 +1,16 @@
+---
+- name: Check the RabbitMQ password
+  community.docker.docker_container_exec:
+    container: weather-rabbitmq
+    argv: [rabbitmqctl, -q, authenticate_user, weather, "{{ container_rabbitmq_password }}"]
+  register: container_rabbitmq_auth
+  failed_when: false
+  changed_when: false
+  no_log: true
+
+- name: Set the RabbitMQ password
+  community.docker.docker_container_exec:
+    container: weather-rabbitmq
+    argv: [rabbitmqctl, -q, change_password, weather, "{{ container_rabbitmq_password }}"]
+  when: container_rabbitmq_auth.rc != 0
+  no_log: true

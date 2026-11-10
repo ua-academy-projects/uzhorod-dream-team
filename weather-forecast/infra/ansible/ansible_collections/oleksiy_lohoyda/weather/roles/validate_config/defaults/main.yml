@@ -1,0 +1,3 @@
+---
+validate_config_path: "{{ lookup('env', 'WEATHER_CONFIG') or lookup('env', 'HOME') ~ '/.config/weather-forecast/deployment.json' }}"
+validate_config_schema: "{{ lookup('file', 'deployment.schema.json') | from_json }}"

@@ -1,0 +1,22 @@
+---
+- name: Try the postgres password
+  community.postgresql.postgresql_ping:
+  register: database_ping
+  failed_when: false
+
+- name: Set the postgres password
+  ansible.builtin.command:
+    argv:
+      - gcloud
+      - sql
+      - users
+      - set-password
+      - postgres
+      - --instance={{ project.prefix }}-db
+      - --password={{ database_admin_password }}
+      - --project={{ lookup('env', 'PROJECT_ID') }}
+      - --quiet
+  delegate_to: localhost
+  become: false
+  when: not database_ping.is_available | default(false)
+  no_log: true

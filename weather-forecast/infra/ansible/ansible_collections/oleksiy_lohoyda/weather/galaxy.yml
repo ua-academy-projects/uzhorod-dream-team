@@ -1,0 +1,14 @@
+namespace: oleksiy_lohoyda
+name: weather
+version: 1.0.0
+readme: README.md
+authors:
+  - Oleksiy Lohoyda <oleksiy.lohoyda@gmail.com>
+description: Configures the Weather Forecast VMs and deploys the application.
+license:
+  - MIT
+dependencies:
+  ansible.utils: ">=5.0.0"
+  community.docker: ">=4.0.0"
+  community.postgresql: ">=3.0.0"
+repository: https://github.com/ua-academy-projects/uzhorod-dream-team

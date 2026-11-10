@@ -1,0 +1,10 @@
+---
+certbot_vm: "{{ app.services.certbot.host }}"
+certbot_image: "{{ app.services.certbot.image }}"
+certbot_domain: "{{ app.public.domain }}"
+certbot_staging: "{{ app.public.letsencrypt_staging | bool }}"
+certbot_cert_name: "{{ certbot_domain ~ ('-staging' if certbot_staging else '') }}"
+certbot_token: "{{ lookup('pipe', 'gcloud secrets versions access latest --project=' ~ lookup('env', 'PROJECT_ID') ~ ' --secret=' ~ project.prefix ~ '-cloudflare-api-token') }}"
+certbot_docker_args: >-
+  --rm -v weather-letsencrypt:/etc/letsencrypt
+  -v /etc/weather-forecast/cloudflare.ini:/cloudflare.ini:ro {{ certbot_image }}

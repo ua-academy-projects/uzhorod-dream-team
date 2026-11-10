@@ -1,0 +1,62 @@
+---
+- name: Build the image
+  community.docker.docker_image_build:
+    name: weather-{{ container_service }}
+    tag: build
+    path: "{{ container_source_root }}/{{ container_spec.source }}"
+    platform: linux/amd64
+    rebuild: always
+    labels:
+      weather-forecast: "true"
+  environment:
+    BUILDX_NO_DEFAULT_ATTESTATIONS: "1"
+  delegate_to: localhost
+  become: false
+  register: container_built
+  changed_when: false
+
+- name: Check the image on the VM
+  community.docker.docker_image_info:
+    name: weather-{{ container_service }}:{{ container_built.image.Id[7:19] }}
+  register: container_remote_image
+
+- name: Ship the image
+  when: container_remote_image.images | length == 0
+  block:
+    - name: Tag the image
+      community.docker.docker_image_tag:
+        name: weather-{{ container_service }}:build
+        repository:
+          - weather-{{ container_service }}:{{ container_built.image.Id[7:19] }}
+      delegate_to: localhost
+      become: false
+
+    - name: Create the image cache
+      ansible.builtin.file:
+        path: "{{ container_image_cache }}"
+        state: directory
+        mode: "0700"
+      delegate_to: localhost
+      become: false
+
+    - name: Export the image
+      community.docker.docker_image_export:
+        names: weather-{{ container_service }}:{{ container_built.image.Id[7:19] }}
+        path: "{{ container_image_cache }}/weather-{{ container_service }}.tar"
+      delegate_to: localhost
+      become: false
+
+    - name: Copy the image
+      ansible.builtin.copy:
+        src: "{{ container_image_cache }}/weather-{{ container_service }}.tar"
+        dest: /var/tmp/weather-{{ container_service }}.tar
+        mode: "0600"
+
+    - name: Load the image
+      community.docker.docker_image_load:
+        path: /var/tmp/weather-{{ container_service }}.tar
+
+    - name: Delete the copied archive
+      ansible.builtin.file:
+        path: /var/tmp/weather-{{ container_service }}.tar
+        state: absent

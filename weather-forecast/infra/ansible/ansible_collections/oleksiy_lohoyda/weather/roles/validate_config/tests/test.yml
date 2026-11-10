@@ -1,0 +1,5 @@
+---
+- name: Test the validate_config role
+  hosts: localhost
+  roles:
+    - oleksiy_lohoyda.weather.validate_config

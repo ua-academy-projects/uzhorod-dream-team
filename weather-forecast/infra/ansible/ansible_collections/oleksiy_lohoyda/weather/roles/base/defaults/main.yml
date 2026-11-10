@@ -1,0 +1,5 @@
+---
+base_packages:
+  - unattended-upgrades
+  - python3-debian
+  - python3-requests

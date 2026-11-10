@@ -69,11 +69,6 @@ locals {
               ])
             })
           },
-          {
-            path        = "/etc/docker/daemon.json"
-            permissions = "0644"
-            content     = jsonencode({ mtu = 1460 })
-          },
         ]),
       )
 

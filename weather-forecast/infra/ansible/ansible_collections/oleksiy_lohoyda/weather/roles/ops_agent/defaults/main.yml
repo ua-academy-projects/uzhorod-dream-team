@@ -1,0 +1,3 @@
+---
+ops_agent_repository: https://packages.cloud.google.com/apt
+ops_agent_suite: "google-cloud-ops-agent-{{ ansible_facts.distribution_release }}-all"

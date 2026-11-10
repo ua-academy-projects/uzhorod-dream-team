@@ -1,0 +1,14 @@
+---
+galaxy_info:
+  role_name: docker
+  namespace: oleksiy_lohoyda
+  author: Oleksiy Lohoyda
+  description: Installs Docker and sets its MTU from the VPC network.
+  license: MIT
+  min_ansible_version: "2.17"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - noble
+  galaxy_tags: []
+dependencies: []

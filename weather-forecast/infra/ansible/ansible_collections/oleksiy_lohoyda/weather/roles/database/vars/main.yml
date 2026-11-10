@@ -1,0 +1,16 @@
+---
+database_privileges:
+  - { roles: PUBLIC, type: database, objs: "{{ app.database_name }}", privs: ALL, state: absent }
+  - { roles: "weather_app,weather_fetcher", type: database, objs: "{{ app.database_name }}", privs: CONNECT }
+  - { roles: weather_app, type: schema, objs: "public,pgmq", privs: USAGE }
+  - { roles: weather_app, type: table, schema: public, objs: "{{ database_app_tables.query_result | map(attribute='tablename') | join(',') }}", privs: "SELECT,INSERT,UPDATE,DELETE" }
+  - { roles: weather_app, type: table, schema: pgmq, objs: ALL_IN_SCHEMA, privs: "SELECT,INSERT,UPDATE,DELETE" }
+  - { roles: weather_app, type: sequence, schema: public, objs: ALL_IN_SCHEMA, privs: "USAGE,SELECT" }
+  - { roles: weather_app, type: sequence, schema: pgmq, objs: ALL_IN_SCHEMA, privs: "USAGE,SELECT" }
+  - { roles: weather_app, type: function, schema: pgmq, objs: ALL_IN_SCHEMA, privs: EXECUTE }
+  - { roles: weather_fetcher, type: schema, objs: pgmq, privs: USAGE }
+  - { roles: weather_fetcher, type: function, schema: pgmq, objs: ALL_IN_SCHEMA, privs: EXECUTE }
+  - { roles: weather_fetcher, type: table, schema: pgmq, objs: meta, privs: SELECT }
+  - { roles: weather_fetcher, type: table, schema: pgmq, objs: q_weather_requests, privs: "SELECT,UPDATE,DELETE" }
+  - { roles: weather_fetcher, type: table, schema: pgmq, objs: q_weather_responses, privs: "SELECT,INSERT" }
+  - { roles: weather_fetcher, type: sequence, schema: pgmq, objs: ALL_IN_SCHEMA, privs: "USAGE,SELECT" }
