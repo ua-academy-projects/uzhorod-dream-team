@@ -3,23 +3,23 @@ compose_dir: /opt/citybikes
 compose_hosts: "{{ groups['app'] | map('extract', hostvars) | list }}"
 compose_vm_ip: "{{ dict(compose_hosts | map(attribute='vm') | zip(compose_hosts | map(attribute='private_ip'))) }}"
 
-compose_placement: "{{ config.vms | dict2items | subelements('value.services') }}"
+compose_placement: "{{ config_json.vms.instances | dict2items | subelements('value.services') }}"
 compose_service_ip: "{{ dict(compose_placement | map('last') | zip(compose_placement | map('first') | map(attribute='key') | map('extract', compose_vm_ip))) }}"
 
 
 compose_db_env:
   DB_HOST: "{{ citybikes_db_host }}" 
   DB_PORT: "5432"
-  DB_NAME: "{{ config.app.db_name }}"
-  DB_USER: "{{ config.app.db_user }}"
+  DB_NAME: "{{ config_json.app.db_name }}"
+  DB_USER: "{{ config_json.app.db_user }}"
   DB_PASSWORD: "${DB_PASSWORD}"
   PGSSLMODE: require 
 compose_rabbitmq_env:
   RABBITMQ_HOST: "{{ compose_service_ip.rabbitmq | default('') }}"
   RABBITMQ_PORT: "5672"
-  RABBITMQ_USER: "{{ config.app.rabbitmq_user }}"
+  RABBITMQ_USER: "{{ config_json.app.rabbitmq_user }}"
   RABBITMQ_PASSWORD: "${RABBITMQ_PASSWORD}"
-  RABBITMQ_VHOST: "{{ config.app.rabbitmq_vhost }}"
+  RABBITMQ_VHOST: "{{ config_json.app.rabbitmq_vhost }}"
 compose_redis_env:
   REDIS_HOST: "{{ compose_service_ip.redis | default('') }}"
   REDIS_PORT: "6379"
@@ -27,15 +27,15 @@ compose_redis_env:
 
 compose_backend_env:
   db: "{{ compose_db_env }}"
-  queue: "{{ compose_db_env if config.app.queue_backend == 'postgres' else compose_rabbitmq_env }}"
-  cache: "{{ compose_redis_env if config.app.cache_backend == 'redis' else {} }}"
+  queue: "{{ compose_db_env if config_json.app.queue_backend == 'postgres' else compose_rabbitmq_env }}"
+  cache: "{{ compose_redis_env if config_json.app.cache_backend == 'redis' else {} }}"
 
 compose_uses:
   fetcher: [queue]
   history: [db, queue, cache]
 
 
-compose_tls_on: "{{ config.tls.domain != '' }}"
+compose_tls_on: "{{ config_json.tls.domain != '' }}"
 
 compose_catalog:
   redis:
@@ -49,17 +49,17 @@ compose_catalog:
     ports: ["5672:5672", "15672:15672"]
     volumes: ["citybikes-rabbitmqdata:/var/lib/rabbitmq"]
     environment:
-      RABBITMQ_DEFAULT_USER: "{{ config.app.rabbitmq_user }}"
+      RABBITMQ_DEFAULT_USER: "{{ config_json.app.rabbitmq_user }}"
       RABBITMQ_DEFAULT_PASS: "${RABBITMQ_PASSWORD}"
-      RABBITMQ_DEFAULT_VHOST: "{{ config.app.rabbitmq_vhost }}"
+      RABBITMQ_DEFAULT_VHOST: "{{ config_json.app.rabbitmq_vhost }}"
 
   fetcher:
     cap_drop: [ALL]
     read_only: true
     tmpfs: [/tmp]
     environment:
-      QUEUE_BACKEND: "{{ config.app.queue_backend }}"
-      CITYBIKES_NETWORK_ID: "{{ config.app.citybikes_network }}"
+      QUEUE_BACKEND: "{{ config_json.app.queue_backend }}"
+      CITYBIKES_NETWORK_ID: "{{ config_json.app.citybikes_network }}"
 
   history:
     cap_drop: [ALL]
@@ -67,9 +67,9 @@ compose_catalog:
     tmpfs: [/tmp]
     ports: ["8002:8002"]
     environment:
-      QUEUE_BACKEND: "{{ config.app.queue_backend }}"
-      CACHE_BACKEND: "{{ config.app.cache_backend }}"
-      POLL_INTERVAL: "{{ config.app.poll_interval }}"
+      QUEUE_BACKEND: "{{ config_json.app.queue_backend }}"
+      CACHE_BACKEND: "{{ config_json.app.cache_backend }}"
+      POLL_INTERVAL: "{{ config_json.app.poll_interval }}"
 
   ui:
       cap_drop: [ALL]
@@ -84,7 +84,7 @@ compose_catalog:
       tmpfs: [/tmp]
       environment:
         TUNNEL_TOKEN: "${TUNNEL_TOKEN}"
-        TUNNEL_TRANSPORT_PROTOCOL: "{{ config.app.cloudflare_tunnel_protocol }}"
+        TUNNEL_TRANSPORT_PROTOCOL: "{{ config_json.app.cloudflare_tunnel_protocol }}"
 
 compose_service_defaults:
   restart: unless-stopped                     
@@ -115,5 +115,5 @@ compose_secret_of:
 
 compose_placeholders: "{{ lookup('ansible.builtin.template', 'compose.yaml.j2') | regex_findall('\\$\\{([A-Z_]+)\\}') | unique }}"
 compose_secrets: "{{ compose_placeholders | map('extract', compose_secret_of) | list }}"
-compose_env_secrets: "{{ dict(compose_placeholders | zip(compose_secrets | map('regex_replace', '^', config.prefix ~ '-'))) }}"
+compose_env_secrets: "{{ dict(compose_placeholders | zip(compose_secrets | map('regex_replace', '^', config_json.prefix ~ '-'))) }}"
 compose_secrets_missing: "{{ compose_secrets | reject('in', citybikes_vm.secrets) | list }}"

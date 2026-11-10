@@ -10,7 +10,7 @@ description:
     C(vm)) and lets it list the VMs.
   - Then it adds what config.json says about every VM. Its groups, by the role it plays, are C(bastion)
     (the way in), C(app) (it runs services of the application) and C(frontend) (it serves the site).
-    Its settings with vm_defaults filled in go to C(citybikes_vm), and how to reach it (the bastion directly
+    Its settings with vms.defaults filled in go to C(citybikes_vm), and how to reach it (the bastion directly
     with your key, every other VM through the bastion with the internal key) to the connection variables.
   - For every host and for localhost it sets C(citybikes_config_file), the path of config.json. The role
     config_validate loads it with include_vars.
@@ -74,7 +74,7 @@ def gcp_compute_settings(project, credentials_file):
 
 
 def vm_settings(config, name):
-    """A VM of config.json with vm_defaults filled in: its own values replace the defaults, its roles are added."""
+    """A VM of config.json with vms.defaults filled in: its own values replace the defaults, its roles are added."""
     defaults = config["vms"]["defaults"]
     vm = config["vms"]["instances"][name]
     settings = {"bastion": False, "services": [], "secrets": []}
@@ -194,12 +194,12 @@ class InventoryModule(BaseInventoryPlugin):
         host_of = {}
         for host in self.inventory.hosts:
             vm = self.inventory.get_host(host).get_vars().get("vm")
-            if vm in config["vms"]:
+            if vm in config["vms"]["instances"]:
                 host_of[vm] = host
             elif vm:
                 display.warning("%s has the label vm=%s, which is not in config.json: left out" % (host, vm))
 
-        vms = {name: vm_settings(config, name) for name in config["vms"]}
+        vms = {name: vm_settings(config, name) for name in config["vms"]["instances"]}
         bastions = [name for name, vm in vms.items() if vm["bastion"] and name in host_of]
         bastion_ip = self.inventory.get_host(host_of[bastions[0]]).get_vars()["public_ip"] if len(bastions) == 1 else None
 

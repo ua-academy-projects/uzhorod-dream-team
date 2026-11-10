@@ -1,23 +1,14 @@
----
-
-- name: Load the configuration (config.json) into the variable "config", on every host of the play
-  ansible.builtin.include_vars:
-    file: "{{ citybikes_config_file }}"
-    name: config
-
 - name: The configuration matches its JSON Schema (config.schema.json)
   ansible.utils.validate:
-    data: "{{ config }}"
+    data: "{{ config_json }}"
     criteria: "{{ lookup('ansible.builtin.file', config_validate_schema_file) | from_json }}"
     engine: ansible.utils.jsonschema
-  run_once: true
 
 - name: Every VM of the configuration exists in GCP
   ansible.builtin.assert:
     that: config_validate_missing | length == 0
-    fail_msg: "Not in GCP: {{ config_validate_missing | join(', ') }}. Run terraform apply."
+    fail_msg: "Not in GCP: {{ config_validate_missing | join(', ') }} (the VMs are made with the infrastructure, infra/)."
     quiet: true
-  run_once: true
 
 - name: The configuration fits together
   ansible.builtin.assert:
@@ -27,4 +18,3 @@
   loop: "{{ config_validate_checks }}"
   loop_control:
     label: "{{ item.msg }}"
-  run_once: true

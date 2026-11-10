@@ -1,0 +1,6 @@
+---
+
+- name: The configuration (config.json) as the variable "config"
+  ansible.builtin.include_vars:
+    file: "{{ citybikes_config_file }}"
+    name: config_json

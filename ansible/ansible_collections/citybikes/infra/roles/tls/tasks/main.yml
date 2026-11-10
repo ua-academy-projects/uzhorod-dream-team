@@ -15,7 +15,7 @@
   citybikes.infra.gcp_secret_file:
     path: "{{ tls_credentials }}"
     secrets:
-      dns_cloudflare_api_token: "{{ config.prefix }}-cloudflare-api-token"
+      dns_cloudflare_api_token: "{{ config_json.prefix }}-cloudflare-api-token"
     format: ini
     mode: "0600"
 

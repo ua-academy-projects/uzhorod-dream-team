@@ -1,5 +1,5 @@
 ---
 
-cloudsql_user_instance: "{{ config.prefix }}-pg"
-cloudsql_user_name: "{{ config.app.db_user }}"
-cloudsql_user_password_secret: "{{ config.prefix }}-db-password"
+cloudsql_user_instance: "{{ config_json.prefix }}-pg"
+cloudsql_user_name: "{{ config_json.app.db_user }}"
+cloudsql_user_password_secret: "{{ config_json.prefix }}-db-password"
