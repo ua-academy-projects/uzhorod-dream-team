@@ -3,12 +3,12 @@ resource "google_compute_firewall" "external" {
 
   name          = "${var.config.project.prefix}-ext-${each.key}"
   network       = var.networks[each.value.network]
-  source_ranges = try(each.value.source_ranges, [var.my_ip_cidr])
+  source_ranges = each.value.source_ranges
   target_tags   = each.value.to
 
   allow {
-    protocol = try(each.value.protocol, "tcp")
-    ports    = try(each.value.ports, [])
+    protocol = lookup(each.value, "protocol", "tcp")
+    ports    = lookup(each.value, "ports", [])
   }
 }
 
@@ -21,7 +21,7 @@ resource "google_compute_firewall" "internal" {
   target_tags = each.value.to
 
   allow {
-    protocol = try(each.value.protocol, "tcp")
-    ports    = try(each.value.ports, [])
+    protocol = lookup(each.value, "protocol", "tcp")
+    ports    = lookup(each.value, "ports", [])
   }
 }

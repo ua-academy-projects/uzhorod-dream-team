@@ -7,9 +7,8 @@ module "network" {
 module "firewall" {
   source = "./modules/firewall"
 
-  config     = local.config
-  my_ip_cidr = var.my_ip_cidr
-  networks   = module.network.networks
+  config   = local.config
+  networks = module.network.networks
 }
 
 module "service_accounts" {
@@ -44,6 +43,7 @@ module "dns" {
 
 module "cloudsql" {
   source = "./modules/cloudsql"
+  count  = { vm = 0, cloudsql = 1 }[local.config.app.database]
 
   config   = local.config
   networks = module.network.network_ids

@@ -2,7 +2,7 @@ resource "google_compute_global_address" "peering" {
   name          = "${var.config.project.prefix}-cloudsql-peering"
   purpose       = "VPC_PEERING"
   address_type  = "INTERNAL"
-  prefix_length = var.config.cloudsql.peering_prefix_length
+  prefix_length = try(var.config.cloudsql.peering_prefix_length, 20)
   network       = var.networks[var.config.cloudsql.network]
 }
 
@@ -16,13 +16,13 @@ resource "google_service_networking_connection" "peering" {
 resource "google_sql_database_instance" "db" {
   name                = "${var.config.project.prefix}-db"
   database_version    = var.config.cloudsql.version
-  deletion_protection = var.config.cloudsql.deletion_protection
+  deletion_protection = try(var.config.cloudsql.deletion_protection, true)
 
   settings {
-    tier              = var.config.cloudsql.tier
-    edition           = var.config.cloudsql.edition
+    tier              = try(var.config.cloudsql.tier, "db-f1-micro")
+    edition           = try(var.config.cloudsql.edition, "ENTERPRISE")
     availability_type = "ZONAL"
-    disk_size         = var.config.cloudsql.disk_gb
+    disk_size         = try(var.config.cloudsql.disk_gb, 10)
 
     location_preference {
       zone = var.config.project.zone
@@ -43,6 +43,6 @@ resource "google_sql_database_instance" "db" {
 }
 
 resource "google_sql_database" "app" {
-  name     = var.config.cloudsql.database
+  name     = var.config.app.database_name
   instance = google_sql_database_instance.db.name
 }

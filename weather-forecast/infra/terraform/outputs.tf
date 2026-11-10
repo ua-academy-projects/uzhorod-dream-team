@@ -11,8 +11,5 @@ output "secrets" {
 }
 
 output "cloudsql" {
-  value = {
-    private_ip = module.cloudsql.private_ip
-    instance   = module.cloudsql.instance
-  }
+  value = one(module.cloudsql)
 }

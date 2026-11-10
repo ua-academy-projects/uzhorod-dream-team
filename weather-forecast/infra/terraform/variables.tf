@@ -3,10 +3,6 @@ variable "project_id" {
   description = "GCP project ID"
 }
 
-variable "my_ip_cidr" {
-  type = string
-}
-
 variable "config_path" {
   type    = string
   default = "~/.config/weather-forecast/deployment.json"

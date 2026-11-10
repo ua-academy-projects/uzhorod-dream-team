@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT=$(cd "$(dirname "$0")/../.." && pwd)
-
 CONFIG=${WEATHER_CONFIG:-$HOME/.config/weather-forecast/deployment.json}
 ENV_FILE=${WEATHER_ENV:-$HOME/.config/weather-forecast/local.env}
 
@@ -78,6 +76,6 @@ if [[ ! -s $KEY_FILE ]]; then
 fi
 
 echo "terraform backend"
-GOOGLE_APPLICATION_CREDENTIALS=$KEY_FILE retry terraform -chdir="$ROOT/infra/terraform" init \
+GOOGLE_APPLICATION_CREDENTIALS=$KEY_FILE retry terraform -chdir="$(dirname "$0")/../terraform" init \
   -input=false -migrate-state -force-copy \
   -backend-config="bucket=${BUCKET#gs://}" -backend-config="prefix=$STATE_PREFIX"

@@ -3,6 +3,7 @@ resource "google_compute_network" "vpc" {
 
   name                    = "${var.config.project.prefix}-${each.key}"
   auto_create_subnetworks = false
+  mtu                     = lookup(each.value, "mtu", 1460)
 }
 
 resource "google_compute_subnetwork" "subnet" {

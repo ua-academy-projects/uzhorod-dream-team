@@ -8,7 +8,7 @@ resource "google_service_account" "vm" {
 resource "google_project_iam_member" "vm_role" {
   for_each = merge([
     for account, sa in var.config.service_accounts : {
-      for role in sa.roles : "${account}/${role}" => { account = account, role = role }
+      for role in lookup(sa, "roles", []) : "${account}/${role}" => { account = account, role = role }
     }
   ]...)
 

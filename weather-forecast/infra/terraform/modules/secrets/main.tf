@@ -11,7 +11,7 @@ resource "google_secret_manager_secret" "secret" {
 resource "google_secret_manager_secret_iam_member" "accessor" {
   for_each = merge([
     for secret, settings in var.config.secrets : {
-      for account in settings.accessors : "${secret}/${account}" => { secret = secret, account = account }
+      for account in lookup(settings, "accessors", []) : "${secret}/${account}" => { secret = secret, account = account }
     }
   ]...)
 

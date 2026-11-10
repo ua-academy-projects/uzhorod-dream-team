@@ -1,7 +1,14 @@
 locals {
+  module_defaults = {
+    role      = "node"
+    public_ip = false
+    disks     = []
+    disk_type = "pd-balanced"
+  }
+
   vms_with_defaults = {
-    for name, vm in var.config.vms.instances : name => merge(var.config.vms.defaults, vm)
-    if try(vm.only_for_backend, var.config.app.backend) == var.config.app.backend
+    for name, vm in var.config.vms.instances : name => merge(local.module_defaults, try(var.config.vms.defaults, {}), vm)
+    if length(try(vm.only_for, {})) == 0 || anytrue([for setting, value in try(vm.only_for, {}) : lookup(var.config.app, setting, null) == value])
   }
 }
 
@@ -16,7 +23,7 @@ resource "google_compute_disk" "data" {
     for name, vm in local.vms_with_defaults : {
       for i, disk in vm.disks : "${name}-disk-${i + 1}" => {
         size_gb = disk.size_gb
-        type    = try(disk.type, vm.disk_type)
+        type    = lookup(disk, "type", vm.disk_type)
       }
     }
   ]...)
