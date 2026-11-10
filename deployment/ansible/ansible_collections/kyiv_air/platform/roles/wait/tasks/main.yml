@@ -2,4 +2,4 @@
   wait_for_connection:
     delay: 5
     sleep: 5
-    timeout: "{{ cfg.vm_options.probe_timeout | default(600) }}"
+    timeout: "{{ config_json.vm_options.probe_timeout | default(600) }}"

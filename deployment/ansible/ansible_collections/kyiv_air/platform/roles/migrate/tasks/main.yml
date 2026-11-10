@@ -2,10 +2,10 @@
   ansible.builtin.set_fact:
     migrate_env: >-
       {{ {
-        'GOOSE_DBSTRING': 'postgres://kyiv_air_migrate:' ~ kyiv_air_secrets['postgres-migration-password'] ~ '@' ~ database_host ~ ':5432/' ~ cfg.database.name ~ '?sslmode=disable',
+        'GOOSE_DBSTRING': 'postgres://kyiv_air_migrate:' ~ kyiv_air_secrets['postgres-migration-password'] ~ '@' ~ database_host ~ ':5432/' ~ config_json.database.name ~ '?sslmode=disable',
         'HISTORY_DB_PASSWORD': kyiv_air_secrets['postgres-history-password'],
-        'POSTGRES_ONLY': cfg.modes.postgres_only | string | lower
-      } | combine({'FETCHER_DB_PASSWORD': kyiv_air_secrets['postgres-fetcher-password']} if cfg.modes.postgres_only else {}) }}
+        'POSTGRES_ONLY': config_json.modes.postgres_only | string | lower
+      } | combine({'FETCHER_DB_PASSWORD': kyiv_air_secrets['postgres-fetcher-password']} if config_json.modes.postgres_only else {}) }}
   no_log: true
 
 - name: Wait for PostgreSQL

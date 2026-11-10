@@ -1,6 +1,6 @@
 galaxy_info:
   author: Kyiv Air
-  description: Sets the SSH connection options
+  description: Sets the SSH connection options, direct to the bastion and through it to the other VMs
   license: MIT
   min_ansible_version: "2.17"
   platforms:

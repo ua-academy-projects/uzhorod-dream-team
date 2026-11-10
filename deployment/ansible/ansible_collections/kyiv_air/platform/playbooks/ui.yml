@@ -13,6 +13,6 @@
     - role: kyiv_air.platform.wait
     - role: kyiv_air.platform.base
     - role: kyiv_air.platform.secrets
-      secrets_names: "{{ cfg.vm.ui.secrets }}"
+      secrets_names: "{{ config_json.vm.ui.secrets }}"
     - role: kyiv_air.platform.certbot
     - role: kyiv_air.platform.ui

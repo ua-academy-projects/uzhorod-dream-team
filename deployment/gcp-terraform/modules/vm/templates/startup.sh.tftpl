@@ -6,15 +6,10 @@ readonly MARKER=/var/lib/kyiv-air/startup-complete
 (( EUID == 0 )) || { echo 'Run startup provisioning as root.' >&2; exit 1; }
 umask 077
 
-install -d -m 0755 /opt/kyiv-air/scripts
-%{ for name, content in scripts ~}
-printf '%s' '${content}' | base64 --decode > '/opt/kyiv-air/scripts/${name}'
-chmod 0755 '/opt/kyiv-air/scripts/${name}'
-%{ endfor ~}
 %{ for key, value in environment ~}
 export ${key}='${replace(value, "'", "'\"'\"'")}'
 %{ endfor ~}
 
-bash '/opt/kyiv-air/scripts/${entrypoint}'
+printf '%s' '${script}' | base64 --decode | bash
 install -d -m 0700 /var/lib/kyiv-air
 touch "$MARKER"

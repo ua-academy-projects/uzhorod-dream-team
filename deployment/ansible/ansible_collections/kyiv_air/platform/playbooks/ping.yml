@@ -5,7 +5,7 @@
   roles:
     - role: kyiv_air.platform.validate
 
-- name: Check connectivity to the VMs
+- name: Check connectivity to the VMs behind the bastion
   hosts: internal
   gather_facts: false
   roles:

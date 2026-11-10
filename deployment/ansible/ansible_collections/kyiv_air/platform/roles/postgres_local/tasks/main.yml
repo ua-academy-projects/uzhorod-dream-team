@@ -4,15 +4,15 @@
   vars:
     container_name: "{{ postgres_local_container }}"
     container_state: absent
-  when: cfg.modes.cloud_sql
+  when: config_json.modes.cloud_sql
 
 - name: Run PostgreSQL on this VM
-  when: not cfg.modes.cloud_sql
+  when: not config_json.modes.cloud_sql
   block:
     - name: Prepare the PostgreSQL data directory
       community.docker.docker_container:
         name: kyiv-air-prepare-postgres
-        image: "{{ cfg.images.POSTGRES_IMAGE }}"
+        image: "{{ config_json.images.POSTGRES_IMAGE }}"
         user: root
         entrypoint: [sh, -c]
         command: ["mkdir -p /data/postgres && chown postgres:postgres /data/postgres && chmod 0700 /data/postgres"]
@@ -29,13 +29,13 @@
         name: kyiv_air.platform.container
       vars:
         container_name: "{{ postgres_local_container }}"
-        container_image: "{{ cfg.images.POSTGRES_IMAGE }}"
+        container_image: "{{ config_json.images.POSTGRES_IMAGE }}"
         container_pull: missing
         container_ports:
-          - "{{ cfg.vm.db.private_ip }}:5432:5432"
+          - "{{ config_json.vm.db.private_ip }}:5432:5432"
           - 127.0.0.1:5432:5432
         container_env:
-          POSTGRES_DB: "{{ cfg.database.name }}"
+          POSTGRES_DB: "{{ config_json.database.name }}"
           POSTGRES_USER: "{{ postgres_local_user }}"
           POSTGRES_PASSWORD: "{{ kyiv_air_secrets['postgres-migration-password'] }}"
         container_mounts:
@@ -43,7 +43,7 @@
             source: "{{ database_data_mount }}/postgres"
             target: /var/lib/postgresql/data
         container_command: [postgres, -c, shared_preload_libraries=]
-        container_probe_exec: [pg_isready, -h, 127.0.0.1, -U, "{{ postgres_local_user }}", -d, "{{ cfg.database.name }}"]
+        container_probe_exec: [pg_isready, -h, 127.0.0.1, -U, "{{ postgres_local_user }}", -d, "{{ config_json.database.name }}"]
 
     - name: Wait for the PostgreSQL database
       ansible.builtin.include_role:
@@ -51,7 +51,7 @@
       vars:
         probe_type: exec
         probe_container: "{{ postgres_local_container }}"
-        probe_argv: [psql, -U, "{{ postgres_local_user }}", -d, "{{ cfg.database.name }}", -v, ON_ERROR_STOP=1, -c, SELECT 1]
+        probe_argv: [psql, -U, "{{ postgres_local_user }}", -d, "{{ config_json.database.name }}", -v, ON_ERROR_STOP=1, -c, SELECT 1]
 
     - name: Apply the migration role password
       community.docker.docker_container_exec:
@@ -61,7 +61,7 @@
           - -U
           - "{{ postgres_local_user }}"
           - -d
-          - "{{ cfg.database.name }}"
+          - "{{ config_json.database.name }}"
           - -v
           - ON_ERROR_STOP=1
           - -c

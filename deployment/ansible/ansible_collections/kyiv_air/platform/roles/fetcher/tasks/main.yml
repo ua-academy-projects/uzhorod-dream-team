@@ -2,7 +2,7 @@
   ansible.builtin.include_role:
     name: kyiv_air.platform.sql_proxy
   vars:
-    sql_proxy_enabled: "{{ cfg.modes.cloud_sql and cfg.modes.postgres_only }}"
+    sql_proxy_enabled: "{{ config_json.modes.cloud_sql and config_json.modes.postgres_only }}"
 
 - name: Validate the OpenAQ API key
   ansible.builtin.assert:
@@ -15,17 +15,17 @@
 
 - name: Build the Fetcher environment
   vars:
-    fetcher_database_url: "postgres://kyiv_air_fetcher:{{ kyiv_air_secrets['postgres-fetcher-password'] }}@{{ database_host }}:5432/{{ cfg.database.name }}?sslmode=disable"
-    fetcher_rabbitmq_url: "amqp://kyiv_air:{{ kyiv_air_secrets['rabbitmq-password'] }}@{{ cfg.vm.db.private_ip }}:5672/kyiv-air"
+    fetcher_database_url: "postgres://kyiv_air_fetcher:{{ kyiv_air_secrets['postgres-fetcher-password'] }}@{{ database_host }}:5432/{{ config_json.database.name }}?sslmode=disable"
+    fetcher_rabbitmq_url: "amqp://kyiv_air:{{ kyiv_air_secrets['rabbitmq-password'] }}@{{ config_json.vm.db.private_ip }}:5672/kyiv-air"
   ansible.builtin.set_fact:
     fetcher_env: >-
-      {{ cfg.vm.fetcher.env | default({}) | combine(
+      {{ config_json.vm.fetcher.env | default({}) | combine(
            {
              'PORT': '8080',
-             'POSTGRES_ONLY': cfg.modes.postgres_only | string | lower,
+             'POSTGRES_ONLY': config_json.modes.postgres_only | string | lower,
              'OPENAQ_API_KEY': kyiv_air_secrets['openaq-api-key']
            },
-           {'DATABASE_URL': fetcher_database_url} if cfg.modes.postgres_only else {'RABBITMQ_URL': fetcher_rabbitmq_url}
+           {'DATABASE_URL': fetcher_database_url} if config_json.modes.postgres_only else {'RABBITMQ_URL': fetcher_rabbitmq_url}
          ) }}
   no_log: true
 
@@ -36,16 +36,16 @@
     probe_type: psql
     probe_database_url: "{{ fetcher_env.DATABASE_URL }}"
     probe_query: SELECT msg_id FROM pgmq.q_kyiv_air_requests LIMIT 0; SELECT msg_id FROM pgmq.q_kyiv_air_replies LIMIT 0
-  when: cfg.modes.postgres_only
+  when: config_json.modes.postgres_only
 
 - name: Wait for RabbitMQ
   ansible.builtin.include_role:
     name: kyiv_air.platform.probe
   vars:
     probe_type: tcp
-    probe_host: "{{ cfg.vm.db.private_ip }}"
+    probe_host: "{{ config_json.vm.db.private_ip }}"
     probe_port: 5672
-  when: not cfg.modes.postgres_only
+  when: not config_json.modes.postgres_only
 
 - name: Fetcher service
   ansible.builtin.include_role:
@@ -60,7 +60,7 @@
         target: /etc/ssl/certs/ca-certificates.crt
         read_only: true
     container_ports:
-      - "{{ cfg.vm.fetcher.private_ip }}:8080:8080"
+      - "{{ config_json.vm.fetcher.private_ip }}:8080:8080"
       - 127.0.0.1:8080:8080
     container_env: "{{ fetcher_env }}"
     container_probe_url: http://127.0.0.1:8080/health

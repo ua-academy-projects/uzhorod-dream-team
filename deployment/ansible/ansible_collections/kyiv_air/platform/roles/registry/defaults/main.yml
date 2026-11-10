@@ -1,3 +1,3 @@
-registry_host: "{{ cfg.google.region }}-docker.pkg.dev"
-registry_url: "{{ registry_host }}/{{ cfg.google.project_id }}/{{ cfg.registry.id | default('kyiv-air') }}"
-registry_tag: "{{ cfg.registry.image_version }}"
+registry_host: "{{ config_json.google.region }}-docker.pkg.dev"
+registry_url: "{{ registry_host }}/{{ config_json.google.project_id }}/{{ config_json.registry.id | default('kyiv-air') }}"
+registry_tag: "{{ config_json.registry.image_version }}"

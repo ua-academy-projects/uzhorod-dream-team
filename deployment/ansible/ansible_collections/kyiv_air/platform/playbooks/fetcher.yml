@@ -13,5 +13,5 @@
     - role: kyiv_air.platform.wait
     - role: kyiv_air.platform.base
     - role: kyiv_air.platform.secrets
-      secrets_names: "{{ cfg.vm.fetcher.secrets }}"
+      secrets_names: "{{ config_json.vm.fetcher.secrets }}"
     - role: kyiv_air.platform.fetcher

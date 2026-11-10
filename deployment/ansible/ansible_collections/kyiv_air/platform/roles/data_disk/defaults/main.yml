@@ -1,2 +1,2 @@
-data_disk_device: "/dev/disk/by-id/google-{{ cfg.vm.db.data_disk.device_name }}"
+data_disk_device: "/dev/disk/by-id/google-{{ config_json.vm.db.data_disk.device_name }}"
 data_disk_mount: "{{ database_data_mount }}"

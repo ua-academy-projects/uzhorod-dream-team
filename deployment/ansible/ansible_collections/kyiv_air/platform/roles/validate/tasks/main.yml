@@ -27,7 +27,7 @@
 
     - name: Check the config against the JSON schema
       ansible.utils.validate:
-        data: "{{ cfg }}"
+        data: "{{ config_json }}"
         criteria: "{{ lookup('file', validate_schema_path) | from_json }}"
         engine: ansible.utils.jsonschema
       register: validate_result
@@ -53,12 +53,12 @@
         fail_msg: "Two VMs share a private IP: {{ validate_vms | map(attribute='private_ip') | list }}"
         quiet: true
       vars:
-        validate_vms: "{{ cfg.vm.values() | list }}"
+        validate_vms: "{{ config_json.vm.values() | list }}"
 
     - name: Check that the zone belongs to the region
       assert:
-        that: cfg.google.zone.startswith(cfg.google.region ~ '-')
-        fail_msg: "Zone {{ cfg.google.zone }} is not in region {{ cfg.google.region }}"
+        that: config_json.google.zone.startswith(config_json.google.region ~ '-')
+        fail_msg: "Zone {{ config_json.google.zone }} is not in region {{ config_json.google.region }}"
         quiet: true
 
     - name: Check that firewall rules reference existing VM tags
@@ -67,9 +67,9 @@
         fail_msg: "Firewall rules use tags that no VM has: {{ validate_unknown_tags }}"
         quiet: true
       vars:
-        validate_rules: "{{ cfg.network.firewall_rules.values() | list }}"
+        validate_rules: "{{ config_json.network.firewall_rules.values() | list }}"
         validate_rule_tags: >-
           {{ (validate_rules | map(attribute='target_tags') | flatten)
              + (validate_rules | map(attribute='source_tags', default=[]) | flatten) }}
-        validate_vm_tags: "{{ cfg.vm.values() | map(attribute='tags') | flatten }}"
+        validate_vm_tags: "{{ config_json.vm.values() | map(attribute='tags') | flatten }}"
         validate_unknown_tags: "{{ validate_rule_tags | unique | difference(validate_vm_tags) }}"

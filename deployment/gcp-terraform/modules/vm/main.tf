@@ -47,9 +47,11 @@ resource "google_compute_instance" "vms" {
     }
   }
 
-  metadata = {
-    enable-oslogin         = "TRUE"
-    block-project-ssh-keys = "TRUE"
-    startup-script         = local.startup_scripts[each.key]
-  }
+  metadata = merge(
+    {
+      enable-oslogin         = "TRUE"
+      block-project-ssh-keys = "TRUE"
+    },
+    each.key == "bastion" ? { startup-script = local.bastion_startup_script } : {}
+  )
 }

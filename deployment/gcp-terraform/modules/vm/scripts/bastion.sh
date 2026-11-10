@@ -1,6 +1,30 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
-source "$(dirname "${BASH_SOURCE[0]}")/ssh.sh"
+
+: "${SSH_PORT:?Set SSH_PORT in the startup environment.}"
+[[ "$SSH_PORT" =~ ^[0-9]+$ ]] || { echo "Invalid SSH_PORT" >&2; exit 1; }
+
+fail() { echo "$*" >&2; exit 1; }
+
+configure_ssh() {
+  install -d -m 0755 /etc/ssh/sshd_config.d
+  sed -i -E '/^[[:space:]]*Port[[:space:]]+/d' /etc/ssh/sshd_config
+  local snippet
+  for snippet in /etc/ssh/sshd_config.d/*.conf; do
+    [[ -f "$snippet" ]] || continue
+    sed -i -E '/^[[:space:]]*Port[[:space:]]+/d' "$snippet"
+  done
+  printf 'Port %s\n' "$SSH_PORT" > /etc/ssh/sshd_config.d/00-kyiv-air-port.conf
+  chmod 0644 /etc/ssh/sshd_config.d/00-kyiv-air-port.conf
+  /usr/sbin/sshd -t
+  systemctl daemon-reload
+  if systemctl is-active --quiet ssh.socket || systemctl is-enabled --quiet ssh.socket; then
+    systemctl restart ssh.socket
+  fi
+  systemctl restart ssh.service
+}
+
+(( EUID == 0 )) || fail "Run this script with sudo."
 
 : "${PRIVATE_IP:?Set PRIVATE_IP in the startup environment.}"
 DB_IP=${DB_IP:-}
@@ -23,7 +47,7 @@ HOSTS
 targets=(kyiv-air-fetcher "$FETCHER_IP" kyiv-air-history "$HISTORY_IP" kyiv-air-ui "$UI_IP")
 [[ -z "$DB_IP" ]] || targets+=(kyiv-air-db "$DB_IP")
 permit_open=
-for target in "${targets[@]}"; do permit_open+="$target:$SSH_PORT "; done
+for target in "${targets[@]}"; do permit_open+="$target:22 "; done
 
 cat > /etc/ssh/sshd_config.d/00-kyiv-air-bastion.conf <<SSH
 PubkeyAuthentication yes
@@ -37,8 +61,10 @@ PermitOpen ${permit_open% }
 PermitTunnel no
 GatewayPorts no
 SSH
+
 chmod 0644 /etc/ssh/sshd_config.d/00-kyiv-air-bastion.conf
 sed -i '\|^Include /etc/ssh/kyiv-air-bastion-public.conf$|d' /etc/ssh/sshd_config
+
 if [[ "$BASTION_SSH" == true ]]; then
   rm -f /etc/ssh/kyiv-air-bastion-public.conf
 else
@@ -49,4 +75,5 @@ SSH
   chmod 0644 /etc/ssh/kyiv-air-bastion-public.conf
   printf '\nInclude /etc/ssh/kyiv-air-bastion-public.conf\n' >> /etc/ssh/sshd_config
 fi
+
 configure_ssh

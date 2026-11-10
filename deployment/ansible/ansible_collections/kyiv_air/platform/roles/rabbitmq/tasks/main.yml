@@ -1,5 +1,5 @@
 - name: Remove RabbitMQ when PostgreSQL replaces it
-  when: cfg.modes.postgres_only
+  when: config_json.modes.postgres_only
   block:
     - name: Remove the container
       ansible.builtin.include_role:
@@ -14,12 +14,12 @@
         state: absent
 
 - name: Run RabbitMQ on this VM
-  when: not cfg.modes.postgres_only
+  when: not config_json.modes.postgres_only
   block:
     - name: Prepare the data directory
       community.docker.docker_container:
         name: kyiv-air-prepare-rabbitmq
-        image: "{{ cfg.images.RABBITMQ_IMAGE }}"
+        image: "{{ config_json.images.RABBITMQ_IMAGE }}"
         user: root
         entrypoint: [sh, -c]
         command: ["mkdir -p /data/rabbitmq && chown rabbitmq:rabbitmq /data/rabbitmq && chmod 0700 /data/rabbitmq"]
@@ -43,11 +43,11 @@
         name: kyiv_air.platform.container
       vars:
         container_name: kyiv-air-rabbitmq
-        container_image: "{{ cfg.images.RABBITMQ_IMAGE }}"
+        container_image: "{{ config_json.images.RABBITMQ_IMAGE }}"
         container_pull: missing
         container_hostname: kyiv-air-rabbitmq
         container_ports:
-          - "{{ cfg.vm.db.private_ip }}:5672:5672"
+          - "{{ config_json.vm.db.private_ip }}:5672:5672"
           - 127.0.0.1:5672:5672
           - 127.0.0.1:15672:15672
         container_env:

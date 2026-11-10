@@ -1,5 +1,5 @@
 - name: Remove Redis when PostgreSQL replaces it
-  when: cfg.modes.postgres_only
+  when: config_json.modes.postgres_only
   block:
     - name: Remove the container
       ansible.builtin.include_role:
@@ -14,12 +14,12 @@
         state: absent
 
 - name: Run Redis on this VM
-  when: not cfg.modes.postgres_only
+  when: not config_json.modes.postgres_only
   block:
     - name: Prepare the data directory
       community.docker.docker_container:
         name: kyiv-air-prepare-redis
-        image: "{{ cfg.images.REDIS_IMAGE }}"
+        image: "{{ config_json.images.REDIS_IMAGE }}"
         user: root
         entrypoint: [sh, -c]
         command: ["mkdir -p /data/redis && chown redis:redis /data/redis && chmod 0700 /data/redis"]
@@ -43,10 +43,10 @@
         name: kyiv_air.platform.container
       vars:
         container_name: kyiv-air-redis
-        container_image: "{{ cfg.images.REDIS_IMAGE }}"
+        container_image: "{{ config_json.images.REDIS_IMAGE }}"
         container_pull: missing
         container_ports:
-          - "{{ cfg.vm.db.private_ip }}:6379:6379"
+          - "{{ config_json.vm.db.private_ip }}:6379:6379"
           - 127.0.0.1:6379:6379
         container_mounts:
           - type: bind

@@ -177,7 +177,7 @@ jq -e '.billingEnabled == true' <<< "$billing" >/dev/null || die 'Billing is not
 # Enabling services
 gcloud services enable \
   cloudresourcemanager.googleapis.com cloudbilling.googleapis.com serviceusage.googleapis.com \
-  iam.googleapis.com storage.googleapis.com compute.googleapis.com oslogin.googleapis.com iap.googleapis.com \
+  iam.googleapis.com storage.googleapis.com compute.googleapis.com oslogin.googleapis.com \
   secretmanager.googleapis.com artifactregistry.googleapis.com sqladmin.googleapis.com dns.googleapis.com \
   --project="$BOOTSTRAP_PROJECT_ID" --quiet
 
@@ -200,12 +200,12 @@ for role in \
     --member="serviceAccount:$ACCOUNT" --role="$role" --condition=None --quiet
 done
 
-# Granting the caller SSH access through IAP and OS Login
+# Granting the caller SSH access through OS Login
 case "$caller" in
   *.gserviceaccount.com) caller_member=serviceAccount:$caller ;;
   *) caller_member=user:$caller ;;
 esac
-for role in roles/compute.osAdminLogin roles/iam.serviceAccountUser roles/iap.tunnelResourceAccessor; do
+for role in roles/compute.osAdminLogin roles/iam.serviceAccountUser; do
   retry_iam gcloud projects add-iam-policy-binding "$BOOTSTRAP_PROJECT_ID" \
     --member="$caller_member" --role="$role" --condition=None --quiet
 done

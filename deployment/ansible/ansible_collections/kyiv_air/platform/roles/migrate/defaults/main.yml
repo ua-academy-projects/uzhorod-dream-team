@@ -1,2 +1,2 @@
 migrate_image: "{{ registry_url }}/migrate:{{ registry_tag }}"
-migrate_client_image: "{{ cfg.images.POSTGRES_CLIENT_IMAGE }}"
+migrate_client_image: "{{ config_json.images.POSTGRES_CLIENT_IMAGE }}"

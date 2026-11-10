@@ -13,5 +13,5 @@
     - role: kyiv_air.platform.wait
     - role: kyiv_air.platform.base
     - role: kyiv_air.platform.secrets
-      secrets_names: "{{ cfg.vm.history.secrets }}"
+      secrets_names: "{{ config_json.vm.history.secrets }}"
     - role: kyiv_air.platform.history

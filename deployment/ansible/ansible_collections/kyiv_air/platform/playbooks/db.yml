@@ -13,7 +13,7 @@
     - role: kyiv_air.platform.wait
     - role: kyiv_air.platform.base
     - role: kyiv_air.platform.secrets
-      secrets_names: "{{ cfg.vm.db.secrets }}"
+      secrets_names: "{{ config_json.vm.db.secrets }}"
     - role: kyiv_air.platform.data_disk
     - role: kyiv_air.platform.postgres_local
     - role: kyiv_air.platform.redis
