@@ -1,0 +1,46 @@
+---
+- name: Require the complete immutable release manifest
+  ansible.builtin.assert:
+    that:
+      - app_release_commit | default('') is match('^[0-9a-f]{40}$')
+      - app_images | default({}) is mapping
+      - (app_images | default({})).keys() | list | sort == ['fetcher', 'history', 'ui']
+    fail_msg: Build a release with playbooks/build.yaml and pass its JSON manifest using -e @/path/release.json.
+
+- name: Require images pinned to this repository by digest
+  ansible.builtin.assert:
+    that:
+      - app_images[item] is match('^' ~ ((region ~ '-docker.pkg.dev/' ~ project_id ~ '/' ~ registry.repository_id ~ '/' ~ item) | regex_escape) ~ '@sha256:[0-9a-f]{64}$')
+    fail_msg: Every application image must use its own Artifact Registry repository path and a sha256 digest.
+  loop: [fetcher, history, ui]
+
+- name: Authenticate the VM to Artifact Registry
+  when: not ansible_check_mode
+  block:
+    - name: Read a short-lived token from this VM service account
+      ansible.builtin.uri:
+        url: http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token
+        headers:
+          Metadata-Flavor: Google
+        use_proxy: false
+        use_netrc: false
+        return_content: true
+        timeout: 10
+      register: registry_token
+      until: registry_token is succeeded
+      retries: 4
+      delay: 5
+      changed_when: false
+      no_log: true
+
+    - name: Log in to this regional Docker registry
+      community.docker.docker_login:
+        registry_url: "{{ region }}-docker.pkg.dev"
+        username: oauth2accesstoken
+        password: "{{ registry_token.json.access_token }}"
+      no_log: true
+  always:
+    - name: Clear the temporary registry token
+      ansible.builtin.set_fact:
+        registry_token: {}
+      no_log: true

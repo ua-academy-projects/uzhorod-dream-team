@@ -10,8 +10,6 @@ ui_bind_ip: 0.0.0.0
 ui_https_enabled: "{{ compute.instances.ui.startup.ip_https | default(false) | bool }}"
 # Empty means discover the attached public IPv4 address through GCP metadata.
 ui_public_ip: ''
-ui_force_build: false
-ui_revision_file: "{{ ui_app_dir }}/.ui-deployed-revision"
 ui_nginx_dir: /var/lib/datamonitor/nginx
 ui_acme_webroot: /var/lib/letsencrypt
 ui_certbot_dir: /opt/datamonitor-certbot

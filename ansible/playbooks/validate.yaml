@@ -1,0 +1,9 @@
+---
+- name: Validate shared deployment settings
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars_files:
+    - ../../config.json
+  roles:
+    - role: ../roles/validate

@@ -25,40 +25,6 @@
   "firewall": {
     "rules": [
       {
-        "name": "allow-ssh-bastion",
-        "priority": 900,
-        "target_tags": [
-          "bastion-service"
-        ],
-        "allowed": [
-          {
-            "protocol": "tcp",
-            "ports": [
-              "56789"
-            ]
-          }
-        ],
-        "source_ranges_key": "admin"
-      },
-      {
-        "name": "allow-internal",
-        "priority": 1000,
-        "source_ranges": [
-          "10.10.0.0/24"
-        ],
-        "allowed": [
-          {
-            "protocol": "tcp"
-          },
-          {
-            "protocol": "udp"
-          },
-          {
-            "protocol": "icmp"
-          }
-        ]
-      },
-      {
         "name": "allow-ui-web",
         "target_tags": [
           "ui-service"
@@ -74,6 +40,130 @@
               "443"
             ]
           }
+        ]
+      },
+      {
+        "name": "allow-iap-bastion",
+        "target_tags": [
+          "bastion-service"
+        ],
+        "allowed": [
+          {
+            "protocol": "tcp",
+            "ports": [
+              "56789"
+            ]
+          }
+        ],
+        "source_ranges": [
+          "35.235.240.0/20"
+        ]
+      },
+      {
+        "name": "allow-bastion-ssh",
+        "target_tags": [
+          "fetcher-service",
+          "history-service",
+          "postgres-service",
+          "ui-service"
+        ],
+        "allowed": [
+          {
+            "protocol": "tcp",
+            "ports": [
+              "22"
+            ]
+          }
+        ],
+        "source_tags": [
+          "bastion-service"
+        ]
+      },
+      {
+        "name": "allow-ui-history",
+        "target_tags": [
+          "history-service"
+        ],
+        "allowed": [
+          {
+            "protocol": "tcp",
+            "ports": [
+              "8000"
+            ]
+          }
+        ],
+        "source_tags": [
+          "ui-service"
+        ]
+      },
+      {
+        "name": "allow-history-fetcher",
+        "target_tags": [
+          "fetcher-service"
+        ],
+        "allowed": [
+          {
+            "protocol": "tcp",
+            "ports": [
+              "8000"
+            ]
+          }
+        ],
+        "source_tags": [
+          "history-service"
+        ]
+      },
+      {
+        "name": "allow-app-postgres",
+        "target_tags": [
+          "postgres-service"
+        ],
+        "allowed": [
+          {
+            "protocol": "tcp",
+            "ports": [
+              "5432"
+            ]
+          }
+        ],
+        "source_tags": [
+          "fetcher-service",
+          "history-service"
+        ]
+      },
+      {
+        "name": "allow-app-rabbitmq",
+        "target_tags": [
+          "postgres-service"
+        ],
+        "allowed": [
+          {
+            "protocol": "tcp",
+            "ports": [
+              "5672"
+            ]
+          }
+        ],
+        "source_tags": [
+          "fetcher-service",
+          "history-service"
+        ]
+      },
+      {
+        "name": "allow-ui-redis",
+        "target_tags": [
+          "postgres-service"
+        ],
+        "allowed": [
+          {
+            "protocol": "tcp",
+            "ports": [
+              "6379"
+            ]
+          }
+        ],
+        "source_tags": [
+          "ui-service"
         ]
       }
     ]
@@ -127,7 +217,7 @@
         "tags": [
           "bastion-service"
         ],
-        "public_ip": true,
+        "public_ip": false,
         "attach_service_account": false,
         "boot_disk": {
           "size_gb": 10
@@ -136,7 +226,7 @@
           "type": "bastion",
           "ssh_port": 56789
         },
-        "static_public_ip": true
+        "static_public_ip": false
       },
       "fetcher": {
         "name": "fetcher-instance",
@@ -204,5 +294,11 @@
   "database": {
     "provider": "cloud_sql",
     "name": "history"
+  },
+  "registry": {
+    "repository_id": "datamonitor"
+  },
+  "ssh": {
+    "iap_enabled": true
   }
 }

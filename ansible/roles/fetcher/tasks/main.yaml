@@ -9,24 +9,15 @@
       - fetcher_port | int < 65536
     fail_msg: Fetcher must use Ansible deployment and valid backend, database and port settings.
 
-- name: Get the configured application revision
-  ansible.builtin.git:
-    repo: "{{ compute.application.repo_url }}"
-    version: "{{ compute.application.repo_branch }}"
-    dest: "{{ fetcher_app_dir }}"
-    force: false
-  register: fetcher_source
+- name: Validate release and authenticate to Artifact Registry
+  ansible.builtin.include_role:
+    name: "{{ role_path }}/../registry_access"
 
-- name: Check for a previously deployed revision
-  ansible.builtin.stat:
-    path: "{{ fetcher_revision_file }}"
-  register: fetcher_revision_stat
-
-- name: Read the previously deployed revision
-  ansible.builtin.slurp:
-    src: "{{ fetcher_revision_file }}"
-  register: fetcher_deployed_revision
-  when: fetcher_revision_stat.stat.exists
+- name: Get application code
+  ansible.builtin.include_role:
+    name: "{{ role_path }}/../app_source"
+  vars:
+    app_source_dir: "{{ fetcher_app_dir }}"
 
 - name: Fetch the Fetcher environment using the VM service account
   ansible.builtin.include_role:
@@ -36,30 +27,17 @@
     secret_access_dest: "{{ fetcher_compose_dir }}/fetcher/.env"
   when: not ansible_check_mode
 
-- name: Write the Fetcher-only Compose configuration
-  ansible.builtin.template:
-    src: compose.fetcher.yaml.j2
-    dest: "{{ fetcher_compose_dir }}/compose.fetcher.yaml"
-    owner: root
-    group: root
-    mode: '0644'
-
-- name: Build and start Fetcher
-  community.docker.docker_compose_v2:
-    project_src: "{{ fetcher_compose_dir }}"
-    files: [compose.fetcher.yaml]
-    services: [fetcher]
-    dependencies: false
-    state: present
-    build: >-
-      {{ 'always' if (fetcher_force_build | bool or
-         (fetcher_deployed_revision.content | default('') | b64decode | trim)
-         != fetcher_source.after) else 'policy' }}
-    pull: never
-    wait: true
-    wait_timeout: "{{ fetcher_wait_timeout }}"
-  no_log: true
-  when: not ansible_check_mode
+- name: Deploy Fetcher containers
+  ansible.builtin.include_role:
+    name: "{{ role_path }}/../compose_app"
+  vars:
+    compose_app_dir: "{{ fetcher_compose_dir }}"
+    compose_app_template: "{{ role_path }}/../fetcher/templates/compose.fetcher.yaml.j2"
+    compose_app_files: [compose.fetcher.yaml]
+    compose_app_services: [fetcher]
+    compose_app_build: never
+    compose_app_pull: missing
+    compose_app_wait_timeout: "{{ fetcher_wait_timeout }}"
 
 - name: Wait for the Fetcher HTTP endpoint
   ansible.builtin.uri:
@@ -73,19 +51,9 @@
   delay: 5
   when: not ansible_check_mode
 
-- name: Record the revision only after successful deployment and HTTP check
-  ansible.builtin.copy:
-    content: "{{ fetcher_source.after }}\n"
-    dest: "{{ fetcher_revision_file }}"
-    owner: root
-    group: root
-    mode: '0644'
-  when: not ansible_check_mode
-
-- name: Remove the legacy shared environment after successful deployment
-  ansible.builtin.file:
-    path: "{{ fetcher_compose_dir }}/.env"
-    state: absent
-  no_log: true
-  diff: false
-  when: not ansible_check_mode
+- name: Remove the legacy shared environment
+  ansible.builtin.include_role:
+    name: "{{ role_path }}/../compose_app"
+    tasks_from: cleanup.yaml
+  vars:
+    compose_app_dir: "{{ fetcher_compose_dir }}"

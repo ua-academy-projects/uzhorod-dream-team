@@ -2,7 +2,7 @@
 {% set definition = {'name': postgres_compose_base.name, 'services': {}, 'volumes': {}} %}
 {% set ports = {'postgres': [postgres_port, 5432], 'rabbitmq': [rabbitmq_port, 5672], 'redis': [redis_port, 6379]} %}
 {% for name, port in ports.items() %}
-{% set service = postgres_compose_base.services[name] | combine({'ports': [postgres_bind_ip ~ ':' ~ port[0] ~ ':' ~ port[1]]}) %}
+{% set service = postgres_compose_base.services[name] | combine({'ports': [postgres_bind_ip ~ ':' ~ port[0] ~ ':' ~ port[1]], 'logging': compose_app_logging, 'security_opt': ['no-new-privileges:true']}) %}
 {% if name == 'postgres' %}
 {% set service = service | combine({'environment': service.environment | combine({'POSTGRES_DB': database.name})}) %}
 {% endif %}

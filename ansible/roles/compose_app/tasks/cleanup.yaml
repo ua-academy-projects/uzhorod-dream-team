@@ -1,0 +1,8 @@
+---
+- name: Remove the legacy shared environment after successful deployment
+  ansible.builtin.file:
+    path: "{{ compose_app_dir }}/.env"
+    state: absent
+  no_log: true
+  diff: false
+  when: not ansible_check_mode

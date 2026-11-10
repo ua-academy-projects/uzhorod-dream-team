@@ -1,0 +1,70 @@
+---
+- name: Validate shared settings on the controller before changing a VM
+  delegate_to: localhost
+  become: false
+  run_once: true
+  tags: [always]
+  block:
+    - name: Validate config.json against its tracked schema
+      ansible.utils.validate:
+        data: "{{ lookup('ansible.builtin.file', role_path ~ '/../../../config.json') | from_json }}"
+        criteria: "{{ lookup('ansible.builtin.file', role_path ~ '/../../../config.schema.json') | from_json }}"
+        engine: ansible.utils.jsonschema
+
+    - name: Check address, zone and firewall consistency
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - zone.startswith(region ~ '-')
+          - network.subnet.region == region
+          - compute.instances.values() | map(attribute='network_ip') | list | unique | length == compute.instances | length
+          - compute.instances.values() | map(attribute='name') | list | unique | length == compute.instances | length
+          - firewall.rules | map(attribute='name') | list | unique | length == firewall.rules | length
+          - not compute.instances.bastion.public_ip
+          - not compute.instances.bastion.static_public_ip
+          - compute.instances.bastion.startup.type == 'bastion'
+          - compute.instances.fetcher.startup.type == 'none'
+          - compute.instances.history.startup.type == 'none'
+          - compute.instances.postgres.startup.type == 'none'
+          - compute.instances.ui.startup.type == 'none'
+        fail_msg: Use unique VM names/IPs, unique firewall names, a zone in the configured region and a private IAP bastion.
+
+    - name: Require firewall tags to match configured VM tags
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - (item.target_tags | default([]) + item.source_tags | default([])) | difference(compute.instances.values() | map(attribute='tags') | flatten | unique) | length == 0
+      loop: "{{ firewall.rules }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Require valid TCP ports in firewall rules
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - item.1.ports | map('int') | min > 0
+          - item.1.ports | map('int') | max < 65536
+      loop: "{{ firewall.rules | subelements('allowed') }}"
+      loop_control:
+        label: "{{ item.0.name }}"
+
+    - name: Require firewall ports to match the selected Ansible ports
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - item.key in (firewall.rules | map(attribute='name') | list)
+          - (firewall.rules | selectattr('name', 'equalto', item.key) | first).allowed | map(attribute='ports') | flatten | sort == item.value | map('string') | sort
+        fail_msg: Update the matching firewall rule in config.json when changing a service port.
+      loop: "{{ validate_ports | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"
+      vars:
+        validate_ports:
+          allow-iap-bastion: ["{{ compute.instances.bastion.startup.ssh_port }}"]
+          allow-bastion-ssh: [22]
+          allow-ui-web: ["{{ ui_http_port | default(80) }}", "{{ ui_https_port | default(443) }}"]
+          allow-ui-history: ["{{ history_port | default(8000) }}"]
+          allow-history-fetcher: ["{{ fetcher_port | default(8000) }}"]
+          allow-app-postgres: ["{{ postgres_port | default(5432) }}"]
+          allow-app-rabbitmq: ["{{ rabbitmq_port | default(5672) }}"]
+          allow-ui-redis: ["{{ redis_port | default(6379) }}"]

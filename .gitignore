@@ -83,3 +83,6 @@ terraform.rc
 
 # Local bootstrap dependencies
 /gcp-terra/bootstrap/.tools/
+
+# Local deployment environment and release manifests
+/.deploy/

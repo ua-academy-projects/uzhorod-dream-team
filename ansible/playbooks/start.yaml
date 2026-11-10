@@ -1,0 +1,40 @@
+---
+- name: Start the existing deployment VMs without changing infrastructure
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars_files:
+    - ../../config.json
+  roles:
+    - role: ../roles/validate
+  tasks:
+    - name: Read VM names and power states in the configured zone
+      ansible.builtin.command:
+        argv:
+          - gcloud
+          - compute
+          - instances
+          - list
+          - "--project={{ project_id }}"
+          - "--zones={{ zone }}"
+          - --format=json(name,status)
+      register: start_vm_list
+      changed_when: false
+
+    - name: Select only this deployment's VMs
+      ansible.builtin.set_fact:
+        start_vms: "{{ start_vm_list.stdout | from_json | selectattr('name', 'in', compute.instances.values() | map(attribute='name') | list) | list }}"
+
+    - name: Require all deployment VMs to exist and have a stable power state
+      ansible.builtin.assert:
+        that:
+          - start_vms | length == compute.instances | length
+          - start_vms | map(attribute='status') | difference(['RUNNING', 'TERMINATED']) | length == 0
+        fail_msg: Apply the reviewed Terraform configuration first. If a VM is stopping or starting, wait and retry.
+        quiet: true
+
+    - name: Start stopped deployment VMs
+      ansible.builtin.command:
+        argv: "{{ ['gcloud', 'compute', 'instances', 'start'] + (start_vms | selectattr('status', 'equalto', 'TERMINATED') | map(attribute='name') | list) + ['--project=' ~ project_id, '--zone=' ~ zone, '--quiet'] }}"
+      when: start_vms | selectattr('status', 'equalto', 'TERMINATED') | list | length > 0
+      changed_when: true

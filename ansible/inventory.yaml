@@ -12,14 +12,10 @@ internal:
 bastion:
   hosts:
     bastion-host1:
-      ansible_host: 34.141.143.135
+      ansible_host: 10.10.0.11
       ansible_port: 56789
 
 myhosts:
-  vars:
-    ansible_user: phantom_s
-    ansible_ssh_private_key_file: ~/.ssh/google_compute_engine
-    ansible_python_interpreter: /usr/bin/python3.12
   children:
     internal:
     bastion:

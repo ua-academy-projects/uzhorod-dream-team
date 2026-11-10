@@ -1,0 +1,26 @@
+---
+# Plugin source options are literal; keep project, zone and names in sync with config.json.
+plugin: google.cloud.gcp_compute
+auth_kind: application
+projects:
+  - project-a5588ddc-4a2e-4c04-879
+zones:
+  - europe-west4-a
+filters:
+  - status = RUNNING
+  - '(name = bastion-instance OR name = fetcher-instance OR name = postgres-instance OR name = history-instance OR name = ui-instance)'
+hostnames:
+  - name
+vars_prefix: gcp_
+retrieve_image_info: false
+cache: false
+compose:
+  ansible_host: networkInterfaces[0].networkIP
+groups:
+  gcp_dynamic: "true"
+  bastion: "name == 'bastion-instance'"
+  internal: "name in ['fetcher-instance', 'postgres-instance', 'history-instance', 'ui-instance']"
+  fetcher: "name == 'fetcher-instance'"
+  postgres: "name == 'postgres-instance'"
+  history: "name == 'history-instance'"
+  ui: "name == 'ui-instance'"

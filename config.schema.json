@@ -1,0 +1,550 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Data Monitor deployment configuration",
+  "type": "object",
+  "properties": {
+    "ansible_user": {
+      "type": "string",
+      "pattern": "^[a-z_][a-z0-9_-]*$"
+    },
+    "project_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{4,28}[a-z0-9]$"
+    },
+    "region": {
+      "type": "string",
+      "minLength": 1
+    },
+    "zone": {
+      "type": "string",
+      "minLength": 1
+    },
+    "bootstrap": {
+      "type": "object",
+      "properties": {
+        "project_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "service_account_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "service_account_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "bucket_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "state_prefix": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "project_name",
+        "service_account_id",
+        "service_account_name",
+        "bucket_name",
+        "state_prefix"
+      ],
+      "additionalProperties": true
+    },
+    "network": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "subnet": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "cidr": {
+              "type": "string",
+              "minLength": 1
+            },
+            "region": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "name",
+            "cidr",
+            "region"
+          ],
+          "additionalProperties": true
+        },
+        "nat": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "enabled": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "name",
+            "enabled"
+          ],
+          "additionalProperties": true
+        }
+      },
+      "required": [
+        "name",
+        "subnet",
+        "nat"
+      ],
+      "additionalProperties": true
+    },
+    "firewall": {
+      "type": "object",
+      "properties": {
+        "rules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "source_tags": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "minItems": 1,
+                "uniqueItems": true
+              },
+              "source_ranges": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "minItems": 1,
+                "uniqueItems": true
+              },
+              "target_tags": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "minItems": 1,
+                "uniqueItems": true
+              },
+              "priority": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 65535
+              },
+              "allowed": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "protocol": {
+                      "const": "tcp"
+                    },
+                    "ports": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "pattern": "^[0-9]{1,5}$"
+                      },
+                      "minItems": 1,
+                      "uniqueItems": true
+                    }
+                  },
+                  "required": [
+                    "protocol",
+                    "ports"
+                  ],
+                  "additionalProperties": true
+                },
+                "minItems": 1,
+                "uniqueItems": true
+              }
+            },
+            "required": [
+              "name",
+              "target_tags",
+              "allowed"
+            ],
+            "additionalProperties": true,
+            "oneOf": [
+              {
+                "required": [
+                  "source_tags"
+                ],
+                "not": {
+                  "required": [
+                    "source_ranges"
+                  ]
+                }
+              },
+              {
+                "required": [
+                  "source_ranges"
+                ],
+                "not": {
+                  "required": [
+                    "source_tags"
+                  ]
+                }
+              }
+            ]
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "rules"
+      ],
+      "additionalProperties": true
+    },
+    "secret_manager": {
+      "type": "object",
+      "properties": {
+        "secret_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "account_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "display_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "roles": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 0,
+          "uniqueItems": true
+        },
+        "services": {
+          "type": "object",
+          "properties": {
+            "fetcher": {
+              "$ref": "#/$defs/serviceSecret"
+            },
+            "postgres": {
+              "$ref": "#/$defs/serviceSecret"
+            },
+            "history": {
+              "$ref": "#/$defs/serviceSecret"
+            },
+            "ui": {
+              "$ref": "#/$defs/serviceSecret"
+            }
+          },
+          "required": [
+            "fetcher",
+            "postgres",
+            "history",
+            "ui"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "secret_id",
+        "account_id",
+        "display_name",
+        "roles",
+        "services"
+      ],
+      "additionalProperties": true
+    },
+    "compute": {
+      "type": "object",
+      "properties": {
+        "defaults": {
+          "type": "object",
+          "properties": {
+            "machine_type": {
+              "type": "string",
+              "minLength": 1
+            },
+            "boot_disk": {
+              "type": "object",
+              "properties": {
+                "image": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "size_gb": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "type": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "image",
+                "size_gb",
+                "type"
+              ],
+              "additionalProperties": true
+            },
+            "public_ip": {
+              "type": "boolean"
+            },
+            "attach_service_account": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "machine_type",
+            "boot_disk",
+            "public_ip",
+            "attach_service_account"
+          ],
+          "additionalProperties": true
+        },
+        "instances": {
+          "type": "object",
+          "properties": {
+            "bastion": {
+              "$ref": "#/$defs/vm"
+            },
+            "fetcher": {
+              "$ref": "#/$defs/vm"
+            },
+            "postgres": {
+              "$ref": "#/$defs/vm"
+            },
+            "history": {
+              "$ref": "#/$defs/vm"
+            },
+            "ui": {
+              "$ref": "#/$defs/vm"
+            }
+          },
+          "required": [
+            "bastion",
+            "fetcher",
+            "postgres",
+            "history",
+            "ui"
+          ],
+          "additionalProperties": false
+        },
+        "application": {
+          "type": "object",
+          "properties": {
+            "repo_url": {
+              "type": "string",
+              "minLength": 1
+            },
+            "repo_branch": {
+              "type": "string",
+              "minLength": 1
+            },
+            "app_backend": {
+              "enum": [
+                "hybrid",
+                "postgres"
+              ]
+            }
+          },
+          "required": [
+            "repo_url",
+            "repo_branch",
+            "app_backend"
+          ],
+          "additionalProperties": true
+        }
+      },
+      "required": [
+        "defaults",
+        "instances",
+        "application"
+      ],
+      "additionalProperties": true
+    },
+    "cloud_sql": {
+      "type": "object",
+      "properties": {
+        "instance_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "region": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "instance_name",
+        "region"
+      ],
+      "additionalProperties": true
+    },
+    "database": {
+      "type": "object",
+      "properties": {
+        "provider": {
+          "enum": [
+            "cloud_sql",
+            "container"
+          ]
+        },
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z_][a-z0-9_]*$"
+        }
+      },
+      "required": [
+        "provider",
+        "name"
+      ],
+      "additionalProperties": true
+    },
+    "registry": {
+      "type": "object",
+      "properties": {
+        "repository_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$"
+        }
+      },
+      "required": [
+        "repository_id"
+      ],
+      "additionalProperties": false
+    },
+    "ssh": {
+      "type": "object",
+      "properties": {
+        "iap_enabled": {
+          "const": true
+        }
+      },
+      "required": [
+        "iap_enabled"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "ansible_user",
+    "project_id",
+    "region",
+    "zone",
+    "bootstrap",
+    "network",
+    "firewall",
+    "secret_manager",
+    "compute",
+    "cloud_sql",
+    "database",
+    "registry",
+    "ssh"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "vm": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{0,61}[a-z0-9]$"
+        },
+        "network_ip": {
+          "type": "string",
+          "format": "ipv4"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "startup": {
+          "type": "object",
+          "properties": {
+            "type": {
+              "enum": [
+                "none",
+                "bastion"
+              ]
+            },
+            "ssh_port": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65535
+            },
+            "ip_https": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": true
+        },
+        "public_ip": {
+          "type": "boolean"
+        },
+        "static_public_ip": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "network_ip",
+        "tags",
+        "startup"
+      ],
+      "additionalProperties": true
+    },
+    "serviceSecret": {
+      "type": "object",
+      "properties": {
+        "secret_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "account_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "display_name": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "secret_id",
+        "account_id",
+        "display_name"
+      ],
+      "additionalProperties": true
+    }
+  }
+}

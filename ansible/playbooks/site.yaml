@@ -1,0 +1,8 @@
+---
+- ansible.builtin.import_playbook: wait.yaml
+- ansible.builtin.import_playbook: bastion.yaml
+- ansible.builtin.import_playbook: prepare.yaml
+- ansible.builtin.import_playbook: postgres.yaml
+- ansible.builtin.import_playbook: history.yaml
+- ansible.builtin.import_playbook: fetcher.yaml
+- ansible.builtin.import_playbook: ui.yaml

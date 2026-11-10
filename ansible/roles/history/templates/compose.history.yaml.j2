@@ -2,9 +2,11 @@ name: datamonitor
 
 services:
   history:
-    build:
-      context: ./history
-    image: datamonitor-history:latest
+    image: {{ app_images.history | to_json }}
+    logging: {{ compose_app_logging | to_json }}
+{% for key, value in compose_app_security.items() %}
+    {{ key }}: {{ value | to_json }}
+{% endfor %}
     container_name: datamonitor-history
     env_file:
       - ./history/.env

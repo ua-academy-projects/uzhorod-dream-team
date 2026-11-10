@@ -1,0 +1,6 @@
+---
+- name: Render the service Compose configuration
+  ansible.builtin.import_tasks: render.yaml
+
+- name: Start the service containers
+  ansible.builtin.import_tasks: start.yaml

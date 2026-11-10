@@ -1,0 +1,23 @@
+---
+- name: Require explicitly selected containers
+  ansible.builtin.assert:
+    that:
+      - compose_app_services | length > 0
+    fail_msg: Specify a nonempty service list; an empty Compose list would start all services.
+
+- name: Build and start the selected containers
+  community.docker.docker_compose_v2:
+    project_src: "{{ compose_app_dir }}"
+    files: "{{ compose_app_files }}"
+    env_files: "{{ compose_app_env_files if compose_app_env_files | length > 0 else omit }}"
+    profiles: "{{ compose_app_profiles }}"
+    services: "{{ compose_app_services }}"
+    dependencies: "{{ compose_app_dependencies }}"
+    state: present
+    build: "{{ compose_app_build }}"
+    pull: "{{ compose_app_pull }}"
+    wait: true
+    wait_timeout: "{{ compose_app_wait_timeout }}"
+  register: compose_app_result
+  no_log: true
+  when: not ansible_check_mode

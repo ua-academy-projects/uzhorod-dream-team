@@ -177,7 +177,7 @@
 - name: Verify a fresh SSH connection through the configured firewall
   ansible.builtin.wait_for_connection:
     timeout: "{{ bastion_connection_timeout }}"
-    connect_timeout: 10
+    connect_timeout: "{{ ansible_ssh_timeout | default(60) }}"
     sleep: 5
   when: not ansible_check_mode
 

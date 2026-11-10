@@ -29,6 +29,23 @@ flowchart LR
 
 In `hybrid` mode, RabbitMQ carries requests between History and Fetcher, while Redis caches UI preferences. PostgreSQL stores history and preferences. In `postgres` mode, PGMQ in PostgreSQL provides the queue and HSTORE stores preferences; the applications do not connect to RabbitMQ or Redis.
 
+## Deploy to GCP
+
+From the repository root, after the one-time Registry/IAP setup and local
+authentication:
+
+```bash
+make setup       # once per machine: local Python environment and Ansible collections
+make deploy      # start existing VMs, build/reuse a release, deploy all services
+make deploy-ui   # update UI only, without system preparation
+```
+
+Commit and push changes in `DataFetcher/` before deploying. Releases are saved in
+`.deploy/releases/` by the most recent application commit; repeated deployments
+reuse that manifest and its immutable image digests. Terraform is never applied
+by these commands. See [Ansible setup](ansible/README.md) and
+[GCP infrastructure](gcp-terra/README.md) for credentials and the initial setup.
+
 ## Quick start with Docker Compose
 
 You need Docker with Docker Compose and network access to pull images and call the price APIs.

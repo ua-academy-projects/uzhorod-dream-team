@@ -12,6 +12,8 @@ variable "config" {
       direction          = optional(string, "INGRESS")
       priority           = optional(number, 1000)
       source_ranges      = optional(list(string), [])
+      source_tags        = optional(list(string), [])
+      enabled            = optional(bool, true)
       source_ranges_key  = optional(string)
       destination_ranges = optional(list(string), [])
       target_tags        = optional(list(string), [])

@@ -29,11 +29,18 @@ module "network" {
 }
 
 module "firewall" {
-  source     = "./modules/firewall"
-  config     = local.config.firewall
+  source = "./modules/firewall"
+  config = {
+    rules = [for rule in local.config.firewall.rules : merge(rule, {
+      enabled = (
+        rule.name == "allow-app-postgres" ? local.config.database.provider == "container" :
+        contains(["allow-app-rabbitmq", "allow-ui-redis"], rule.name) ? local.config.compute.application.app_backend == "hybrid" : true
+      )
+    })]
+  }
   network_id = module.network.network_id
   source_ranges_by_key = {
-    admin = [var.admin_ip_cidr]
+    admin = var.admin_ip_cidr == null ? [] : [var.admin_ip_cidr]
   }
 }
 

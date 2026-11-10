@@ -1,8 +1,8 @@
 {# Keep images, upstream configuration and healthchecks in the shared Compose. #}
-{% set ui = ui_compose_base.services.ui %}
+{% set ui = dict(ui_compose_base.services.ui.items() | rejectattr('0', 'equalto', 'build')) %}
 {% set nginx = ui_compose_base.services.nginx %}
 {% set ui_environment = ui.environment | combine({'APP_BACKEND': compute.application.app_backend, 'COOKIE_SECURE': (ui_https_enabled | bool | ternary('true', 'false'))}) %}
-{% set ui_service = ui | combine({'ports': ['127.0.0.1:' ~ ui_port ~ ':8000'], 'environment': ui_environment, 'pull_policy': 'never'}) %}
+{% set ui_service = ui | combine(compose_app_security) | combine({'image': app_images.ui, 'ports': ['127.0.0.1:' ~ ui_port ~ ':8000'], 'environment': ui_environment, 'pull_policy': 'missing', 'logging': compose_app_logging}) %}
 {% set mounts = [] %}
 {% for mount in nginx.volumes %}
 {% set _ = mounts.append(mount | replace('${NGINX_CONFIG_DIR:-./nginx}', ui_nginx_dir) | replace('/var/lib/letsencrypt:', ui_acme_webroot ~ ':')) %}
@@ -11,5 +11,5 @@
 {% if ui_https_enabled | bool %}
 {% set _ = nginx_ports.append(ui_bind_ip ~ ':' ~ ui_https_port ~ ':443') %}
 {% endif %}
-{% set nginx_service = nginx | combine({'ports': nginx_ports, 'volumes': mounts, 'pull_policy': 'missing'}) %}
+{% set nginx_service = nginx | combine({'ports': nginx_ports, 'volumes': mounts, 'pull_policy': 'missing', 'logging': compose_app_logging, 'security_opt': ['no-new-privileges:true'], 'read_only': true, 'tmpfs': ['/var/cache/nginx:rw,noexec,nosuid,size=64m', '/var/run:rw,noexec,nosuid,size=8m', '/tmp:rw,noexec,nosuid,size=16m']}) %}
 {{ {'name': ui_compose_base.name, 'services': {'ui': ui_service, 'nginx': nginx_service}} | to_nice_yaml(indent=2, sort_keys=false) }}

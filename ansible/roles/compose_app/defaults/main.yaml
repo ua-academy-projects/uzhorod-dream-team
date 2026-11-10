@@ -1,0 +1,18 @@
+---
+compose_app_files: [compose.yaml]
+compose_app_env_files: []
+compose_app_profiles: []
+compose_app_build: never
+compose_app_pull: missing
+compose_app_dependencies: false
+compose_app_wait_timeout: 120
+compose_app_logging:
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: '3'
+compose_app_security:
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  tmpfs: ['/tmp:rw,noexec,nosuid,size=64m,mode=1777']

@@ -5,6 +5,12 @@
   vars_files:
     - ../../config.json
   
+  pre_tasks:
+    - name: Validate shared deployment settings
+      ansible.builtin.import_role:
+        name: ../roles/validate
+      tags: [always]
+
   roles:
     - role: ../roles/common
     - role: ../roles/docker

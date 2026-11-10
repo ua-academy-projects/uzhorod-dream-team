@@ -1,0 +1,21 @@
+---
+inventory_config: "{{ lookup('ansible.builtin.file', inventory_dir ~ '/../config.json') | from_json }}"
+ansible_user: "{{ inventory_config.ansible_user }}"
+ansible_ssh_private_key_file: ~/.ssh/google_compute_engine
+ansible_python_interpreter: /usr/bin/python3.12
+ansible_ssh_timeout: 60
+ansible_pipelining: true
+ansible_port: "{{ inventory_config.compute.instances.bastion.startup.ssh_port if 'bastion' in group_names else 22 }}"
+inventory_iap_command: >-
+  gcloud compute start-iap-tunnel {{ inventory_config.compute.instances.bastion.name | quote }}
+  {{ inventory_config.compute.instances.bastion.startup.ssh_port }} --listen-on-stdin
+  --project={{ inventory_config.project_id | quote }} --zone={{ inventory_config.zone | quote }}
+  --verbosity=warning
+inventory_jump_command: >-
+  ssh -W %h:%p -p {{ inventory_config.compute.instances.bastion.startup.ssh_port }}
+  -l {{ ansible_user | quote }} -i {{ ansible_ssh_private_key_file | expanduser | quote }}
+  -o IdentitiesOnly=yes -o ProxyCommand={{ inventory_iap_command | quote }}
+  {{ hostvars[groups['bastion'][0]].ansible_host | quote }}
+ansible_ssh_common_args: >-
+  -o IdentitiesOnly=yes
+  -o ProxyCommand={{ (inventory_iap_command if 'bastion' in group_names else inventory_jump_command) | quote }}

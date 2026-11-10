@@ -13,12 +13,11 @@
       {{ (['postgres'] if database.provider == 'container' else []) +
          (['rabbitmq', 'redis'] if compute.application.app_backend == 'hybrid' else []) }}
 
-- name: Get the configured application revision
-  ansible.builtin.git:
-    repo: "{{ compute.application.repo_url }}"
-    version: "{{ compute.application.repo_branch }}"
-    dest: "{{ postgres_app_dir }}"
-    force: false
+- name: Get application code
+  ansible.builtin.include_role:
+    name: "{{ role_path }}/../app_source"
+  vars:
+    app_source_dir: "{{ postgres_app_dir }}"
 
 - name: Read the shared Compose service definitions
   ansible.builtin.slurp:
@@ -37,13 +36,14 @@
     secret_access_dest: "{{ postgres_compose_dir }}/postgres/.env"
   when: not ansible_check_mode
 
-- name: Write the database VM Compose configuration
-  ansible.builtin.template:
-    src: compose.postgres.yaml.j2
-    dest: "{{ postgres_compose_dir }}/compose.postgres.yaml"
-    owner: root
-    group: root
-    mode: '0644'
+- name: Render the database VM Compose configuration
+  ansible.builtin.include_role:
+    name: "{{ role_path }}/../compose_app"
+    tasks_from: render.yaml
+  vars:
+    compose_app_dir: "{{ postgres_compose_dir }}"
+    compose_app_template: "{{ role_path }}/../postgres/templates/compose.postgres.yaml.j2"
+    compose_app_files: [compose.postgres.yaml]
 
 - name: Stop services no longer required without deleting containers or volumes
   community.docker.docker_compose_v2:
@@ -59,28 +59,24 @@
     - not ansible_check_mode
     - postgres_services | length < 3
 
-- name: Start selected database VM services and wait for their healthchecks
-  community.docker.docker_compose_v2:
-    project_src: "{{ postgres_compose_dir }}"
-    files: [compose.postgres.yaml]
-    env_files: [postgres/.env]
-    profiles: [database]
-    services: "{{ postgres_services }}"
-    dependencies: false
-    state: present
-    build: never
-    pull: missing
-    wait: true
-    wait_timeout: "{{ postgres_wait_timeout }}"
-  no_log: true
-  when:
-    - not ansible_check_mode
-    - postgres_services | length > 0
+- name: Start the selected database VM containers
+  ansible.builtin.include_role:
+    name: "{{ role_path }}/../compose_app"
+    tasks_from: start.yaml
+  vars:
+    compose_app_dir: "{{ postgres_compose_dir }}"
+    compose_app_files: [compose.postgres.yaml]
+    compose_app_env_files: [postgres/.env]
+    compose_app_profiles: [database]
+    compose_app_services: "{{ postgres_services }}"
+    compose_app_build: never
+    compose_app_pull: missing
+    compose_app_wait_timeout: "{{ postgres_wait_timeout }}"
+  when: postgres_services | length > 0
 
-- name: Remove the legacy shared environment after successful deployment
-  ansible.builtin.file:
-    path: "{{ postgres_compose_dir }}/.env"
-    state: absent
-  no_log: true
-  diff: false
-  when: not ansible_check_mode
+- name: Remove the legacy shared environment
+  ansible.builtin.include_role:
+    name: "{{ role_path }}/../compose_app"
+    tasks_from: cleanup.yaml
+  vars:
+    compose_app_dir: "{{ postgres_compose_dir }}"

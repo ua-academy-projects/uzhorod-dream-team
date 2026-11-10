@@ -1,0 +1,7 @@
+---
+- name: Get application code from the configured Git ref
+  ansible.builtin.git:
+    repo: "{{ app_source_repo }}"
+    version: "{{ app_source_ref }}"
+    dest: "{{ app_source_dir }}"
+    force: false

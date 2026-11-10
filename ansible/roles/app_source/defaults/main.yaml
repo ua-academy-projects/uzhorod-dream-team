@@ -1,0 +1,3 @@
+---
+app_source_repo: "{{ compute.application.repo_url }}"
+app_source_ref: "{{ app_release_commit | default(compute.application.repo_branch) }}"

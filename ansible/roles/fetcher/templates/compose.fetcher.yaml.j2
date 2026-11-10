@@ -2,9 +2,11 @@ name: datamonitor
 
 services:
   fetcher:
-    build:
-      context: ./fetcher
-    image: datamonitor-fetcher:latest
+    image: {{ app_images.fetcher | to_json }}
+    logging: {{ compose_app_logging | to_json }}
+{% for key, value in compose_app_security.items() %}
+    {{ key }}: {{ value | to_json }}
+{% endfor %}
     container_name: datamonitor-fetcher
     env_file:
       - ./fetcher/.env

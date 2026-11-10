@@ -1,0 +1,114 @@
+---
+- name: Build and publish one immutable application release
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars_files:
+    - ../../config.json
+  vars:
+    build_source_dir: "{{ playbook_dir }}/../.."
+    build_registry: "{{ region }}-docker.pkg.dev/{{ project_id }}/{{ registry.repository_id }}"
+    build_services: [fetcher, history, ui]
+  pre_tasks:
+    - name: Validate shared deployment settings
+      ansible.builtin.import_role:
+        name: ../roles/validate
+      tags: [always]
+
+    - name: Require a real build rather than check mode
+      ansible.builtin.assert:
+        that: not ansible_check_mode
+        fail_msg: Use validate.yaml for a read-only configuration check.
+
+    - name: Read the source commit
+      ansible.builtin.command:
+        argv: [git, -C, "{{ build_source_dir }}", log, '-1', '--format=%H', --, DataFetcher]
+      register: build_commit
+      changed_when: false
+
+    - name: Check application source for uncommitted or untracked files
+      ansible.builtin.command:
+        argv: [git, -C, "{{ build_source_dir }}", status, --porcelain, --untracked-files=all, --, DataFetcher]
+      register: build_dirty
+      changed_when: false
+
+    - name: Require committed application source for a reproducible release
+      ansible.builtin.assert:
+        that:
+          - build_commit.stdout is match('^[0-9a-f]{40}$')
+          - build_dirty.stdout | length == 0
+        fail_msg: Commit and push DataFetcher changes before building; the VMs also need this commit for Compose, SQL and nginx assets.
+
+  tasks:
+    - name: Build the three application images on the controller
+      ansible.builtin.command:
+        argv:
+          - docker
+          - build
+          - --platform=linux/amd64
+          - --tag
+          - "{{ build_registry }}/{{ item }}:{{ build_commit.stdout }}"
+          - "{{ build_source_dir }}/DataFetcher/{{ item }}"
+      loop: "{{ build_services }}"
+      changed_when: true
+
+    - name: Publish images using a short-lived controller ADC token
+      block:
+        - name: Read the publisher token
+          ansible.builtin.command:
+            argv: [gcloud, auth, application-default, print-access-token]
+          register: build_token
+          changed_when: false
+          no_log: true
+
+        - name: Authenticate the local Docker client
+          community.docker.docker_login:
+            registry_url: "{{ region }}-docker.pkg.dev"
+            username: oauth2accesstoken
+            password: "{{ build_token.stdout }}"
+          no_log: true
+
+        - name: Push the immutable commit tags
+          ansible.builtin.command:
+            argv: [docker, push, "{{ build_registry }}/{{ item }}:{{ build_commit.stdout }}"]
+          loop: "{{ build_services }}"
+          changed_when: true
+      always:
+        - name: Clear the publisher token from temporary variables
+          ansible.builtin.set_fact:
+            build_token: {}
+          no_log: true
+
+    - name: Read the published image digests
+      community.docker.docker_image_info:
+        name: "{{ build_registry }}/{{ item }}:{{ build_commit.stdout }}"
+      loop: "{{ build_services }}"
+      register: build_image_info
+      no_log: true
+
+    - name: Start the release manifest
+      ansible.builtin.set_fact:
+        build_manifest:
+          app_release_commit: "{{ build_commit.stdout }}"
+          app_images: {}
+
+    - name: Add each repository digest to the release manifest
+      ansible.builtin.set_fact:
+        build_manifest: >-
+          {{ build_manifest | combine({'app_images': build_manifest.app_images | combine({
+             item.item: (item.images[0].RepoDigests | select('match', '^' ~ ((build_registry ~ '/' ~ item.item) | regex_escape) ~ '@sha256:[0-9a-f]{64}$') | first)
+          })}) }}
+      loop: "{{ build_image_info.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+      no_log: true
+
+    - name: Write the nonsecret release manifest for deployment and rollback
+      ansible.builtin.copy:
+        content: "{{ build_manifest | to_nice_json }}\n"
+        dest: "{{ build_release_file | default('/tmp/datamonitor-release-' ~ build_commit.stdout ~ '.json') }}"
+        mode: '0644'
+
+    - name: Show the manifest path
+      ansible.builtin.debug:
+        msg: "Release manifest: {{ build_release_file | default('/tmp/datamonitor-release-' ~ build_commit.stdout ~ '.json') }}"
