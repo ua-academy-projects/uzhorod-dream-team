@@ -17,7 +17,7 @@ import (
 	"weather-history/internal/testutil"
 )
 
-const migrationsDirectory = "../../../../../infra/postgres/migrations/"
+const migrationsDirectory = "../../../../../services/postgres/migrations/"
 
 // TEST_DATABASE_URL must identify a disposable database: PGMQ queues are reset.
 func postgresTestStore(t *testing.T) *Store {

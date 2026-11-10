@@ -50,20 +50,20 @@ func run() error {
 	_, err = pool.Exec(checkCtx, "SELECT "+postgres.Columns+" FROM weather_snapshots LIMIT 0")
 	checkCancel()
 	if err != nil {
-		return fmt.Errorf("check weather_snapshots: apply infra/postgres/migrations/001_create_weather_snapshots.sql: %w", err)
+		return fmt.Errorf("check weather_snapshots: apply services/postgres/migrations/001_create_weather_snapshots.sql: %w", err)
 	}
 	checkCtx, checkCancel = context.WithTimeout(ctx, 5*time.Second)
 	_, err = pool.Exec(checkCtx, "SELECT city, weather_time, temperature_c FROM temperature_history LIMIT 0")
 	checkCancel()
 	if err != nil {
-		return fmt.Errorf("check temperature_history: apply infra/postgres/migrations/003_temperature_history.sql: %w", err)
+		return fmt.Errorf("check temperature_history: apply services/postgres/migrations/003_temperature_history.sql: %w", err)
 	}
 
 	checkCtx, checkCancel = context.WithTimeout(ctx, 5*time.Second)
 	_, err = pool.Exec(checkCtx, "SELECT request_id, backend FROM weather_jobs LIMIT 0")
 	checkCancel()
 	if err != nil {
-		return fmt.Errorf("apply infra/postgres/migrations/004_weather_jobs.sql and 005_postgres_queue.sql before starting History")
+		return fmt.Errorf("apply services/postgres/migrations/004_weather_jobs.sql and 005_postgres_queue.sql before starting History")
 	}
 	var preferencesStore domain.PreferenceStore
 	var publisher domain.JobPublisher
@@ -73,13 +73,13 @@ func run() error {
 		_, err = pool.Exec(checkCtx, "SELECT msg_id, message FROM pgmq.q_weather_requests LIMIT 0; SELECT msg_id, message FROM pgmq.q_weather_responses LIMIT 0")
 		checkCancel()
 		if err != nil {
-			return fmt.Errorf("enable PGMQ and apply infra/postgres/migrations/005_postgres_queue.sql before starting History")
+			return fmt.Errorf("enable PGMQ and apply services/postgres/migrations/005_postgres_queue.sql before starting History")
 		}
 		checkCtx, checkCancel = context.WithTimeout(ctx, 5*time.Second)
 		_, err = pool.Exec(checkCtx, "SELECT session_id, preferences OPERATOR(public.->) 'theme', expires_at FROM weather_preferences LIMIT 0")
 		checkCancel()
 		if err != nil {
-			return fmt.Errorf("apply infra/postgres/migrations/006_postgres_preferences.sql before starting History")
+			return fmt.Errorf("apply services/postgres/migrations/006_postgres_preferences.sql before starting History")
 		}
 		preferencesStore = store
 		workers.Add(2)
