@@ -30,7 +30,7 @@ class InventoryModule(BaseInventoryPlugin):
             zone = cfg["google"]["zone"]
         except (OSError, KeyError, ValueError) as error:
             raise AnsibleParserError(f"Cannot read the deployment config: {error}") from error
-        prefix = cfg.get("vm_options", {}).get("name_prefix", "kyiv-air")
+        prefix = cfg.get("vm", {}).get("name_prefix", "kyiv-air")
 
         with open(path, encoding="utf-8") as handle:
             settings = {key: value for key, value in yaml.safe_load(handle).items() if key not in OWN_OPTIONS}

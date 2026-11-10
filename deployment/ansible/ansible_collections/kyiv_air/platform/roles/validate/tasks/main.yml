@@ -52,8 +52,6 @@
           == (validate_vms | map(attribute='private_ip') | list | unique | length)
         fail_msg: "Two VMs share a private IP: {{ validate_vms | map(attribute='private_ip') | list }}"
         quiet: true
-      vars:
-        validate_vms: "{{ config_json.vm.values() | list }}"
 
     - name: Check that the zone belongs to the region
       assert:
@@ -71,5 +69,5 @@
         validate_rule_tags: >-
           {{ (validate_rules | map(attribute='target_tags') | flatten)
              + (validate_rules | map(attribute='source_tags', default=[]) | flatten) }}
-        validate_vm_tags: "{{ config_json.vm.values() | map(attribute='tags') | flatten }}"
+        validate_vm_tags: "{{ validate_vms | map(attribute='tags') | flatten }}"
         validate_unknown_tags: "{{ validate_rule_tags | unique | difference(validate_vm_tags) }}"

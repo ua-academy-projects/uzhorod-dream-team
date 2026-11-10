@@ -1,0 +1,2 @@
+ui_vm: "{{ config_json.vm.instances.ui }}"
+ui_history_ip: "{{ config_json.vm.instances.history.private_ip }}"

@@ -1,4 +1,4 @@
-connection_bastion_port: "{{ config_json.vm_options.ssh_port | default(222) }}"
+connection_bastion_port: "{{ config_json.vm.ssh_port | default(222) }}"
 
 ansible_port: "{{ connection_bastion_port if 'bastion' in group_names else 22 }}"
 ansible_become: true

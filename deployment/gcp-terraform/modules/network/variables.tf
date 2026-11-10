@@ -4,9 +4,6 @@ variable "cfg" {
       project_id = string
       region     = string
     })
-    vm_options = optional(object({
-      ssh_port = optional(number, 222)
-    }), {})
     network = object({
       name        = string
       subnet_cidr = string
@@ -19,11 +16,14 @@ variable "cfg" {
         ports         = set(number)
       }))
     })
-    vm = map(object({
-      private_ip = string
-      tags       = set(string)
-      public_ip  = optional(bool, false)
-    }))
+    vm = object({
+      ssh_port = optional(number, 222)
+      instances = map(object({
+        private_ip = string
+        tags       = set(string)
+        public_ip  = optional(bool, false)
+      }))
+    })
   })
 }
 

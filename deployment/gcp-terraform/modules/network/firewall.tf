@@ -1,9 +1,9 @@
 locals {
-  vm_tags       = { for name, vm in var.cfg.vm : name => vm.tags }
-  bastion_port  = tostring(var.cfg.vm_options.ssh_port)
+  vm_tags       = { for name, vm in var.cfg.vm.instances : name => vm.tags }
+  bastion_port  = tostring(var.cfg.vm.ssh_port)
   internal_port = "22"
   bastion_tags  = toset(["bastion"])
-  internal_tags = toset(flatten([for vm in var.cfg.vm : vm.tags if !contains(vm.tags, "bastion")]))
+  internal_tags = toset(flatten([for vm in var.cfg.vm.instances : vm.tags if !contains(vm.tags, "bastion")]))
 }
 
 resource "google_compute_firewall" "ssh_public" {

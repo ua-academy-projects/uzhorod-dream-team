@@ -1,5 +1,5 @@
 resource "google_compute_address" "private" {
-  for_each = var.cfg.vm
+  for_each = var.cfg.vm.instances
 
   project      = var.cfg.google.project_id
   name         = "${var.cfg.network.name}-${each.key}-private"
@@ -10,7 +10,7 @@ resource "google_compute_address" "private" {
 }
 
 resource "google_compute_address" "public" {
-  for_each = { for name, vm in var.cfg.vm : name => vm if vm.public_ip }
+  for_each = { for name, vm in var.cfg.vm.instances : name => vm if vm.public_ip }
 
   project      = var.cfg.google.project_id
   name         = "${var.cfg.network.name}-${each.key}-public"

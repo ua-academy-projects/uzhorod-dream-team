@@ -1,1 +1,2 @@
 validate_schema_path: "{{ lookup('env', 'DEPLOYMENT_SCHEMA') or ((config_path | dirname) ~ '/deployment.schema.json') }}"
+validate_vms: "{{ config_json.vm.instances.values() | list }}"

@@ -1,3 +1,10 @@
+- name: Require a committed source tree
+  ansible.builtin.command:
+    argv: "{{ ['git', '-C', registry_source_dir, 'status', '--porcelain', '--'] + registry_source_paths }}"
+  register: images_status
+  changed_when: false
+  failed_when: images_status.stdout | length > 0 or images_status.rc != 0
+
 - name: Read a registry access token for the deployment service account
   ansible.builtin.command: gcloud auth application-default print-access-token
   register: images_token
@@ -12,22 +19,35 @@
   changed_when: false
   no_log: true
 
-- name: Build images
-  community.docker.docker_image_build:
-    name: "{{ registry_url }}/{{ item.name }}"
-    tag: "{{ registry_tag }}"
-    path: "{{ images_source_dir }}/{{ item.context }}"
-    target: "{{ item.target | default(omit) }}"
-    platform: "{{ images_platform }}"
-    rebuild: always
-  loop: "{{ images_components | selectattr('name', 'in', images_only | default(images_components | map(attribute='name'))) | list }}"
+- name: Look for images that are already pushed
+  ansible.builtin.command: "docker manifest inspect {{ registry_url }}/{{ item.name }}:{{ registry_tag }}"
+  register: images_existing
+  changed_when: false
+  failed_when: false
+  loop: "{{ images_selected }}"
   loop_control:
     label: "{{ item.name }}"
 
-- name: Push images
+- name: List the images to build
+  ansible.builtin.set_fact:
+    images_missing: "{{ images_existing.results | selectattr('rc', 'ne', 0) | map(attribute='item') | list }}"
+
+- name: Build missing images
+  community.docker.docker_image_build:
+    name: "{{ registry_url }}/{{ item.name }}"
+    tag: "{{ registry_tag }}"
+    path: "{{ registry_source_dir }}/{{ item.context }}"
+    target: "{{ item.target | default(omit) }}"
+    platform: "{{ images_platform }}"
+    rebuild: always
+  loop: "{{ images_missing }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Push missing images
   community.docker.docker_image_push:
     name: "{{ registry_url }}/{{ item.name }}"
     tag: "{{ registry_tag }}"
-  loop: "{{ images_components | selectattr('name', 'in', images_only | default(images_components | map(attribute='name'))) | list }}"
+  loop: "{{ images_missing }}"
   loop_control:
     label: "{{ item.name }}"

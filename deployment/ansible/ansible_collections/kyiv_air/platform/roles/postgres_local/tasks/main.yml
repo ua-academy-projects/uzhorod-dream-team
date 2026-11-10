@@ -32,7 +32,7 @@
         container_image: "{{ config_json.images.POSTGRES_IMAGE }}"
         container_pull: missing
         container_ports:
-          - "{{ config_json.vm.db.private_ip }}:5432:5432"
+          - "{{ database_vm.private_ip }}:5432:5432"
           - 127.0.0.1:5432:5432
         container_env:
           POSTGRES_DB: "{{ config_json.database.name }}"

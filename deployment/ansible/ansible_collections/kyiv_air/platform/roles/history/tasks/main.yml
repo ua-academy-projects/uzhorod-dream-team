@@ -9,19 +9,19 @@
 - name: Build the History environment
   vars:
     history_database_url: "postgres://kyiv_air:{{ kyiv_air_secrets['postgres-history-password'] }}@{{ database_host }}:5432/{{ config_json.database.name }}?sslmode=disable"
-    history_redis_url: "redis://:{{ kyiv_air_secrets['redis-password'] }}@{{ config_json.vm.db.private_ip }}:6379/0"
-    history_rabbitmq_url: "amqp://kyiv_air:{{ kyiv_air_secrets['rabbitmq-password'] }}@{{ config_json.vm.db.private_ip }}:5672/kyiv-air"
+    history_redis_url: "redis://:{{ kyiv_air_secrets['redis-password'] }}@{{ database_vm.private_ip }}:6379/0"
+    history_rabbitmq_url: "amqp://kyiv_air:{{ kyiv_air_secrets['rabbitmq-password'] }}@{{ database_vm.private_ip }}:5672/kyiv-air"
     history_origins: >-
-      {{ (((config_json.vm.history.env | default({})).ALLOWED_ORIGINS | default('')).split(',') | select | list
+      {{ (((history_vm.env | default({})).ALLOWED_ORIGINS | default('')).split(',') | select | list
            + ['https://' ~ config_json.cloudflare.domain]) | unique | join(',') }}
   ansible.builtin.set_fact:
     history_env: >-
-      {{ config_json.vm.history.env | default({}) | combine(
+      {{ history_vm.env | default({}) | combine(
            {
              'PORT': '8081',
              'POSTGRES_ONLY': config_json.modes.postgres_only | string | lower,
              'DATABASE_URL': history_database_url,
-             'FETCHER_SERVICE_URL': 'http://' ~ config_json.vm.fetcher.private_ip ~ ':8080',
+             'FETCHER_SERVICE_URL': 'http://' ~ history_fetcher_ip ~ ':8080',
              'ALLOWED_ORIGINS': history_origins
            },
            {} if config_json.modes.postgres_only else {'REDIS_URL': history_redis_url, 'RABBITMQ_URL': history_rabbitmq_url}
@@ -41,7 +41,7 @@
     name: kyiv_air.platform.probe
   vars:
     probe_type: tcp
-    probe_host: "{{ config_json.vm.db.private_ip }}"
+    probe_host: "{{ database_vm.private_ip }}"
     probe_port: 5672
   when: not config_json.modes.postgres_only
 
@@ -53,7 +53,7 @@
     probe_image: "{{ config_json.images.REDIS_IMAGE }}"
     probe_env:
       REDISCLI_AUTH: "{{ kyiv_air_secrets['redis-password'] }}"
-    probe_command: [redis-cli, -h, "{{ config_json.vm.db.private_ip }}", PING]
+    probe_command: [redis-cli, -h, "{{ database_vm.private_ip }}", PING]
     probe_expect: PONG
   when: not config_json.modes.postgres_only
 
@@ -65,7 +65,7 @@
     container_image: "{{ registry_url }}/history:{{ registry_tag }}"
     container_hardened: true
     container_ports:
-      - "{{ config_json.vm.history.private_ip }}:8081:8081"
+      - "{{ history_vm.private_ip }}:8081:8081"
       - 127.0.0.1:8081:8081
     container_env: "{{ history_env }}"
     container_probe_url: http://127.0.0.1:8081/health

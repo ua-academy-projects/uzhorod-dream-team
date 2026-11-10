@@ -16,10 +16,10 @@
 - name: Build the Fetcher environment
   vars:
     fetcher_database_url: "postgres://kyiv_air_fetcher:{{ kyiv_air_secrets['postgres-fetcher-password'] }}@{{ database_host }}:5432/{{ config_json.database.name }}?sslmode=disable"
-    fetcher_rabbitmq_url: "amqp://kyiv_air:{{ kyiv_air_secrets['rabbitmq-password'] }}@{{ config_json.vm.db.private_ip }}:5672/kyiv-air"
+    fetcher_rabbitmq_url: "amqp://kyiv_air:{{ kyiv_air_secrets['rabbitmq-password'] }}@{{ database_vm.private_ip }}:5672/kyiv-air"
   ansible.builtin.set_fact:
     fetcher_env: >-
-      {{ config_json.vm.fetcher.env | default({}) | combine(
+      {{ fetcher_vm.env | default({}) | combine(
            {
              'PORT': '8080',
              'POSTGRES_ONLY': config_json.modes.postgres_only | string | lower,
@@ -43,7 +43,7 @@
     name: kyiv_air.platform.probe
   vars:
     probe_type: tcp
-    probe_host: "{{ config_json.vm.db.private_ip }}"
+    probe_host: "{{ database_vm.private_ip }}"
     probe_port: 5672
   when: not config_json.modes.postgres_only
 
@@ -60,7 +60,7 @@
         target: /etc/ssl/certs/ca-certificates.crt
         read_only: true
     container_ports:
-      - "{{ config_json.vm.fetcher.private_ip }}:8080:8080"
+      - "{{ fetcher_vm.private_ip }}:8080:8080"
       - 127.0.0.1:8080:8080
     container_env: "{{ fetcher_env }}"
     container_probe_url: http://127.0.0.1:8080/health

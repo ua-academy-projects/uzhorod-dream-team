@@ -1,0 +1,37 @@
+ops_agent_docker_config:
+  logging:
+    receivers:
+      docker_containers:
+        type: files
+        include_paths:
+          - /var/lib/docker/containers/*/*-json.log
+    processors:
+      docker_json:
+        type: parse_json
+        time_key: time
+        time_format: "%Y-%m-%dT%H:%M:%S.%LZ"
+      docker_message:
+        type: modify_fields
+        fields:
+          jsonPayload.message:
+            move_from: jsonPayload.log
+    service:
+      pipelines:
+        docker_containers:
+          receivers: [docker_containers]
+          processors: [docker_json, docker_message]
+
+ops_agent_nginx_config:
+  metrics:
+    receivers:
+      nginx:
+        type: nginx
+        stub_status_url: http://127.0.0.1:8082/nginx_status
+    service:
+      pipelines:
+        nginx:
+          receivers: [nginx]
+
+ops_agent_config: >-
+  {{ ops_agent_docker_config
+     | combine(ops_agent_nginx_config if 'ui' in group_names else {}, recursive=true) }}

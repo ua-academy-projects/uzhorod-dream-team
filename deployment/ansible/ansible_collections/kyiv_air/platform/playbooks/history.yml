@@ -12,6 +12,7 @@
     - role: kyiv_air.platform.connection
     - role: kyiv_air.platform.wait
     - role: kyiv_air.platform.base
+    - role: kyiv_air.platform.ops_agent
     - role: kyiv_air.platform.secrets
-      secrets_names: "{{ config_json.vm.history.secrets }}"
+      secrets_names: "{{ config_json.vm.instances.history.secrets }}"
     - role: kyiv_air.platform.history

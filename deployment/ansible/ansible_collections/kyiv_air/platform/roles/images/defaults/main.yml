@@ -1,7 +1,7 @@
-images_source_dir: "{{ lookup('env', 'KYIV_AIR_SOURCE_DIR') }}"
 images_platform: linux/amd64
 images_components:
   - { name: fetcher, context: fetcher }
   - { name: history, context: history, target: runtime }
   - { name: ui, context: ui }
   - { name: migrate, context: history, target: migrate }
+images_selected: "{{ images_components | selectattr('name', 'in', images_only | default(images_components | map(attribute='name'))) | list }}"

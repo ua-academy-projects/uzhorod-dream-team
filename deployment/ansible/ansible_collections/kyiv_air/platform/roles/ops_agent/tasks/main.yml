@@ -1,0 +1,44 @@
+- name: Gather the distribution facts
+  ansible.builtin.setup:
+    gather_subset: [min]
+
+- name: Create the apt keyring directory
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: "0755"
+
+- name: Download the Google Cloud signing key
+  ansible.builtin.get_url:
+    url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
+    dest: /etc/apt/keyrings/google-cloud.asc
+    mode: "0644"
+
+- name: Add the Ops Agent apt repository
+  ansible.builtin.deb822_repository:
+    name: google-cloud-ops-agent
+    uris: https://packages.cloud.google.com/apt
+    suites: ["google-cloud-ops-agent-{{ ansible_facts.distribution_release }}-all"]
+    components: [main]
+    signed_by: /etc/apt/keyrings/google-cloud.asc
+  register: ops_agent_repo
+
+- name: Install the Ops Agent
+  ansible.builtin.apt:
+    name: google-cloud-ops-agent
+    install_recommends: false
+    update_cache: "{{ ops_agent_repo is changed }}"
+
+- name: Write the Ops Agent config
+  ansible.builtin.copy:
+    content: "{{ ops_agent_config | to_nice_yaml(indent=2) }}"
+    dest: /etc/google-cloud-ops-agent/config.yaml
+    mode: "0644"
+  when: ops_agent_config | length > 0
+  register: ops_agent_config_file
+
+- name: Enable and start the Ops Agent
+  ansible.builtin.systemd_service:
+    name: google-cloud-ops-agent
+    enabled: true
+    state: "{{ 'restarted' if ops_agent_config_file is changed else 'started' }}"

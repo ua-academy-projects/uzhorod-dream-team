@@ -6,9 +6,11 @@ variable "cfg" {
     secrets = object({
       passwords = optional(set(string), [])
     })
-    vm = map(object({
-      secrets = optional(set(string), [])
-    }))
+    vm = object({
+      instances = map(object({
+        secrets = optional(set(string), [])
+      }))
+    })
   })
 }
 

@@ -1,0 +1,1 @@
+fetcher_vm: "{{ config_json.vm.instances.fetcher }}"

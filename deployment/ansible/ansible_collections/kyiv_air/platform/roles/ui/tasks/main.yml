@@ -3,7 +3,7 @@
     name: kyiv_air.platform.probe
   vars:
     probe_type: http
-    probe_url: "http://{{ config_json.vm.history.private_ip }}:8081/health"
+    probe_url: "http://{{ ui_history_ip }}:8081/health"
 
 - name: Install the nginx template
   ansible.builtin.copy:
@@ -13,7 +13,7 @@
 
 - name: Build the UI environment
   ansible.builtin.set_fact:
-    ui_env: "{{ (config_json.vm.ui.env | default({})) | combine({'HISTORY_URL': 'http://' ~ config_json.vm.history.private_ip ~ ':8081', 'CERTBOT_DOMAIN': config_json.cloudflare.domain}) }}"
+    ui_env: "{{ (ui_vm.env | default({})) | combine({'HISTORY_URL': 'http://' ~ ui_history_ip ~ ':8081', 'CERTBOT_DOMAIN': config_json.cloudflare.domain}) }}"
     ui_mounts:
       - type: bind
         source: /etc/letsencrypt
@@ -46,10 +46,11 @@
     container_name: kyiv-air-ui
     container_image: "{{ registry_url }}/ui:{{ registry_tag }}"
     container_ports:
-      - "{{ config_json.vm.ui.private_ip }}:80:8080"
+      - "{{ ui_vm.private_ip }}:80:8080"
       - 127.0.0.1:80:8080
-      - "{{ config_json.vm.ui.private_ip }}:443:8443"
+      - "{{ ui_vm.private_ip }}:443:8443"
       - 127.0.0.1:443:8443
+      - 127.0.0.1:8082:8082
     container_env: "{{ ui_env }}"
     container_groups: ["{{ kyiv_air_certificate_gid }}"]
     container_mounts: "{{ ui_mounts }}"
@@ -70,6 +71,6 @@
       - --noproxy
       - "*"
       - --resolve
-      - "{{ config_json.cloudflare.domain }}:443:{{ config_json.vm.ui.private_ip }}"
+      - "{{ config_json.cloudflare.domain }}:443:{{ ui_vm.private_ip }}"
       - "https://{{ config_json.cloudflare.domain }}{{ item }}"
   loop: ["/", /api/v1/session]

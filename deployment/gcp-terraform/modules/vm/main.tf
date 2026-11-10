@@ -1,8 +1,8 @@
 resource "google_compute_instance" "vms" {
-  for_each = var.cfg.vm_options.deploy ? local.vms : {}
+  for_each = var.cfg.vm.deploy ? local.vms : {}
 
   project                   = local.google.project_id
-  name                      = "${var.cfg.vm_options.name_prefix}-${each.key}"
+  name                      = "${var.cfg.vm.name_prefix}-${each.key}"
   zone                      = local.google.zone
   machine_type              = each.value.machine_type
   tags                      = each.value.tags

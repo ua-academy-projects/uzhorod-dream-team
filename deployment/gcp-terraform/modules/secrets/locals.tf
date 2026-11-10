@@ -3,7 +3,7 @@ locals {
   vm_access = {
     for name, account in var.service_accounts : name => {
       email   = account.email
-      secrets = var.cfg.vm[name].secrets
+      secrets = var.cfg.vm.instances[name].secrets
     }
   }
   passwords      = var.cfg.secrets.passwords
@@ -12,7 +12,7 @@ locals {
     for name in local.passwords : name => ephemeral.random_password.service[name].result
   })
   names = setunion(local.passwords, toset(flatten([
-    for vm in values(var.cfg.vm) : tolist(vm.secrets)
+    for vm in values(var.cfg.vm.instances) : tolist(vm.secrets)
   ])))
   secret_members = flatten([
     for vm_name, vm in local.vm_access : [

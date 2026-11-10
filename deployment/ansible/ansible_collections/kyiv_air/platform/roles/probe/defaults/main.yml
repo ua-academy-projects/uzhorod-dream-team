@@ -1,4 +1,4 @@
-probe_timeout: "{{ config_json.vm_options.probe_timeout | default(600) }}"
+probe_timeout: "{{ config_json.vm.probe_timeout | default(600) }}"
 probe_delay: 2
 probe_retries: "{{ ((probe_timeout | int) / probe_delay) | int }}"
 probe_env: {}

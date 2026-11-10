@@ -5,27 +5,27 @@ variable "cfg" {
       region     = string
       zone       = string
     })
-    vm_options = optional(object({
+    vm = object({
       name_prefix = optional(string, "kyiv-air")
       deploy      = optional(bool, true)
       ssh_port    = optional(number, 222)
       bastion_ssh = optional(bool, false)
-    }), {})
-    vm = map(object({
-      machine_type = optional(string, "e2-micro")
-      private_ip   = string
-      tags         = set(string)
-      boot_disk = object({
-        image   = optional(string, "ubuntu-os-cloud/ubuntu-minimal-2604-lts-amd64")
-        size_gb = number
-        type    = optional(string, "pd-balanced")
-      })
-      data_disk = optional(object({
-        size_gb     = number
-        type        = string
-        device_name = string
+      instances = map(object({
+        machine_type = optional(string, "e2-micro")
+        private_ip   = string
+        tags         = set(string)
+        boot_disk = object({
+          image   = optional(string, "ubuntu-os-cloud/ubuntu-minimal-2604-lts-amd64")
+          size_gb = number
+          type    = optional(string, "pd-balanced")
+        })
+        data_disk = optional(object({
+          size_gb     = number
+          type        = string
+          device_name = string
+        }))
       }))
-    }))
+    })
     network = object({
       public_tier = optional(string, "STANDARD")
     })

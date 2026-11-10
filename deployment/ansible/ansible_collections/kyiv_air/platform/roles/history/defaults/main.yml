@@ -1,0 +1,2 @@
+history_vm: "{{ config_json.vm.instances.history }}"
+history_fetcher_ip: "{{ config_json.vm.instances.fetcher.private_ip }}"

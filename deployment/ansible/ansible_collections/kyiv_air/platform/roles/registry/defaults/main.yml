@@ -1,3 +1,6 @@
 registry_host: "{{ config_json.google.region }}-docker.pkg.dev"
 registry_url: "{{ registry_host }}/{{ config_json.google.project_id }}/{{ config_json.registry.id | default('kyiv-air') }}"
-registry_tag: "{{ config_json.registry.image_version }}"
+registry_source_dir: "{{ lookup('env', 'KYIV_AIR_SOURCE_DIR') }}"
+registry_source_paths: [fetcher, history, ui]
+registry_source_commit: "{{ lookup('pipe', 'git -C ' ~ registry_source_dir | quote ~ ' log -1 --format=%h --abbrev=12 -- ' ~ registry_source_paths | join(' ')) }}"
+registry_tag: "{{ config_json.registry.image_version }}-{{ registry_source_commit }}"
