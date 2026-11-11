@@ -1,5 +1,5 @@
 resource "google_project_service" "iap" {
-  project            = var.project_id
+  project            = var.config.project_id
   service            = "iap.googleapis.com"
   disable_on_destroy = false
   lifecycle {
@@ -12,14 +12,14 @@ resource "google_project_service" "iap" {
 
 resource "google_iap_tunnel_instance_iam_member" "operator" {
   for_each = var.members
-  project  = var.project_id
-  zone     = var.zone
-  instance = var.instance_name
+  project  = var.config.project_id
+  zone     = var.config.zone
+  instance = var.config.compute.instances.bastion.name
   role     = "roles/iap.tunnelResourceAccessor"
   member   = each.value
   condition {
     title      = "bastion-ssh-only"
-    expression = "destination.port == ${var.ssh_port}"
+    expression = "destination.port == ${var.config.compute.instances.bastion.startup.ssh_port}"
   }
   depends_on = [google_project_service.iap]
 }

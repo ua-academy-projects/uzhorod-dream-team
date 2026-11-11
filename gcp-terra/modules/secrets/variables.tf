@@ -1,14 +1,16 @@
 variable "config" {
-  description = "Configuration for secrets"
+  description = "Shared configuration; this module selects its own settings."
   type = object({
-    secret_id    = string
-    account_id   = string
-    display_name = string
-    roles        = set(string)
-    services = map(object({
+    secret_manager = object({
       secret_id    = string
       account_id   = string
       display_name = string
-    }))
+      roles        = set(string)
+      services = map(object({
+        secret_id    = string
+        account_id   = string
+        display_name = string
+      }))
+    })
   })
 }

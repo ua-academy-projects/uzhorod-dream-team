@@ -1,13 +1,10 @@
 ---
-- name: Validate History deployment settings
+- name: Validate History port
   ansible.builtin.assert:
     that:
-      - compute.instances.history.startup.type == 'none'
-      - compute.application.app_backend in ['hybrid', 'postgres']
-      - database.provider in ['cloud_sql', 'container']
       - history_port | int > 0
       - history_port | int < 65536
-    fail_msg: History must use Ansible deployment and valid backend, database and port settings.
+    fail_msg: History must use a port between 1 and 65535.
 
 - name: Validate release and authenticate to Artifact Registry
   ansible.builtin.include_role:
@@ -38,8 +35,6 @@
     compose_app_template: "{{ deployment_root }}/ansible/roles/history/templates/compose.history.yaml.j2"
     compose_app_files: [compose.history.yaml]
     compose_app_services: [history]
-    compose_app_build: never
-    compose_app_pull: missing
     compose_app_wait_timeout: "{{ history_wait_timeout }}"
 
 - name: Wait for the History HTTP endpoint

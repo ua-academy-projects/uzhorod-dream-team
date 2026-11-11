@@ -322,8 +322,7 @@
       "peering_ranges": [
         "google-managed-services-analyzer"
       ]
-    },
-    "adopt_existing": false
+    }
   },
   "database": {
     "provider": "cloud_sql",

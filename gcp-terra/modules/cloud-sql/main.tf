@@ -1,18 +1,26 @@
+locals {
+  enabled         = try(var.config.cloud_sql.managed, false)
+  client_services = local.enabled && var.config.database.provider == "cloud_sql" ? toset(["fetcher", "history"]) : toset([])
+  config          = var.config.cloud_sql
+}
+
 resource "google_project_service" "sqladmin" {
-  project            = var.project_id
+  count              = local.enabled ? 1 : 0
+  project            = var.config.project_id
   service            = "sqladmin.googleapis.com"
   disable_on_destroy = false
 }
 
 resource "google_project_service" "service_networking" {
-  project            = var.project_id
+  count              = local.enabled ? 1 : 0
+  project            = var.config.project_id
   service            = "servicenetworking.googleapis.com"
   disable_on_destroy = false
 }
 
 resource "google_compute_global_address" "private_services" {
-  for_each      = var.config.private_service_access.ranges
-  project       = var.project_id
+  for_each      = local.enabled ? local.config.private_service_access.ranges : {}
+  project       = var.config.project_id
   name          = each.key
   address       = each.value.address
   prefix_length = each.value.prefix_length
@@ -23,50 +31,52 @@ resource "google_compute_global_address" "private_services" {
 }
 
 resource "google_service_networking_connection" "private_services" {
+  count                   = local.enabled ? 1 : 0
   network                 = var.network_id
   service                 = "servicenetworking.googleapis.com"
-  reserved_peering_ranges = var.config.private_service_access.peering_ranges
+  reserved_peering_ranges = local.config.private_service_access.peering_ranges
   depends_on              = [google_compute_global_address.private_services, google_project_service.service_networking]
   lifecycle { prevent_destroy = true }
 }
 
 resource "google_sql_database_instance" "main" {
-  project             = var.project_id
-  name                = var.config.instance_name
-  region              = var.config.region
-  database_version    = var.config.database_version
+  count               = local.enabled ? 1 : 0
+  project             = var.config.project_id
+  name                = local.config.instance_name
+  region              = local.config.region
+  database_version    = local.config.database_version
   deletion_protection = true
   settings {
-    tier                        = var.config.tier
-    edition                     = var.config.edition
-    availability_type           = var.config.availability_type
+    tier                        = local.config.tier
+    edition                     = local.config.edition
+    availability_type           = local.config.availability_type
     activation_policy           = "ALWAYS"
-    disk_size                   = var.config.disk_size_gb
-    disk_type                   = var.config.disk_type
-    disk_autoresize             = var.config.disk_autoresize
-    deletion_protection_enabled = var.config.deletion_protection
-    enable_dataplex_integration = var.config.enable_dataplex_integration
-    data_cache_config { data_cache_enabled = var.config.data_cache_enabled }
-    location_preference { zone = var.config.zone }
+    disk_size                   = local.config.disk_size_gb
+    disk_type                   = local.config.disk_type
+    disk_autoresize             = local.config.disk_autoresize
+    deletion_protection_enabled = local.config.deletion_protection
+    enable_dataplex_integration = local.config.enable_dataplex_integration
+    data_cache_config { data_cache_enabled = local.config.data_cache_enabled }
+    location_preference { zone = local.config.zone }
     ip_configuration {
-      ipv4_enabled    = var.config.public_ip
+      ipv4_enabled    = local.config.public_ip
       private_network = var.network_id
       ssl_mode        = "ALLOW_UNENCRYPTED_AND_ENCRYPTED"
     }
     dynamic "database_flags" {
-      for_each = var.config.database_flags
+      for_each = local.config.database_flags
       content {
         name  = database_flags.key
         value = database_flags.value
       }
     }
     backup_configuration {
-      enabled                        = var.config.backup.enabled
-      point_in_time_recovery_enabled = var.config.backup.point_in_time_recovery_enabled
-      start_time                     = var.config.backup.start_time
-      transaction_log_retention_days = var.config.backup.transaction_log_retention_days
+      enabled                        = local.config.backup.enabled
+      point_in_time_recovery_enabled = local.config.backup.point_in_time_recovery_enabled
+      start_time                     = local.config.backup.start_time
+      transaction_log_retention_days = local.config.backup.transaction_log_retention_days
       backup_retention_settings {
-        retained_backups = var.config.backup.retained_backups
+        retained_backups = local.config.backup.retained_backups
         retention_unit   = "COUNT"
       }
     }
@@ -80,9 +90,10 @@ resource "google_sql_database_instance" "main" {
 }
 
 resource "google_sql_database" "application" {
-  project         = var.project_id
-  instance        = google_sql_database_instance.main.name
-  name            = var.database_name
+  count           = local.enabled ? 1 : 0
+  project         = var.config.project_id
+  instance        = google_sql_database_instance.main[0].name
+  name            = var.config.database.name
   charset         = "UTF8"
   collation       = "en_US.UTF8"
   deletion_policy = "ABANDON"
@@ -95,8 +106,8 @@ resource "google_sql_database" "application" {
 }
 
 resource "google_project_iam_member" "client" {
-  for_each = var.client_services
-  project  = var.project_id
+  for_each = local.client_services
+  project  = var.config.project_id
   role     = "roles/cloudsql.client"
   member   = "serviceAccount:${var.service_account_emails[each.key]}"
 }

@@ -1,7 +1,11 @@
 {# Keep images, upstream configuration and healthchecks in the shared Compose. #}
 {% set ui = dict(ui_compose_base.services.ui.items() | rejectattr('0', 'equalto', 'build')) %}
 {% set nginx = ui_compose_base.services.nginx %}
-{% set ui_environment = ui.environment | combine({'APP_BACKEND': compute.application.app_backend, 'COOKIE_SECURE': (ui_https_enabled | bool | ternary('true', 'false'))}) %}
+{% set ui_environment = ui.environment | combine({
+  'APP_BACKEND': compute.application.app_backend,
+  'COOKIE_SECURE': ui_https_enabled | bool | ternary('true', 'false'),
+  'HISTORY_SERVICE_URL': '${HISTORY_SERVICE_URL:-http://' ~ compute.instances.history.network_ip ~ ':' ~ (history_port | default(8000)) ~ '}'
+}) %}
 {% set ui_service = ui | combine(compose_app_security) | combine({'image': app_images.ui, 'ports': ['127.0.0.1:' ~ ui_port ~ ':8000'], 'environment': ui_environment, 'pull_policy': 'missing', 'logging': compose_app_logging}) %}
 {% set mounts = [] %}
 {% for mount in nginx.volumes %}

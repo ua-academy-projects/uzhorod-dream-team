@@ -1,10 +1,10 @@
-build_source_dir: '{{ deployment_root }}'
-build_registry: '{{ region }}-docker.pkg.dev/{{ project_id }}/{{ registry.repository_id
-  }}'
+---
+build_source_dir: "{{ deployment_root }}"
+build_registry: "{{ region }}-docker.pkg.dev/{{ project_id }}/{{ registry.repository_id }}"
 build_services:
-- fetcher
-- history
-- ui
+  - fetcher
+  - history
+  - ui
 build_release_file: >-
   {{ deployment_root }}/.deploy/releases/{{ lookup('pipe',
      'git -C ' ~ (deployment_root | quote) ~

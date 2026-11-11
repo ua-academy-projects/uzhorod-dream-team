@@ -17,9 +17,10 @@ terraform -chdir=gcp-terra init -backend-config=bootstrap/backend.hcl
 перевірки джерела state. Bootstrap не запускає VM, application deployment, Cloud SQL
 створення чи private-service peering. Це належить Terraform та Ansible collection.
 
-Наявний Cloud SQL і private services access приймаються через декларативні imports
-з cloud_sql.adopt_existing=true. Для нового середовища прапорець false, а ресурси
-створює модуль cloud-sql. Порядок, обмеження та IAM описані в ../README.md.
+Наявний Cloud SQL і private services access уже перебувають у Terraform state.
+Для нового середовища ресурси створює модуль cloud-sql. Якщо потрібно підключити
+інші наявні ресурси до нового state, спочатку виконайте явний `terraform import`
+і перегляньте plan перед apply. Автоматичних import/moved блоків у коді немає.
 
 Постійні права terraform-deployer не розширювалися для цього переходу. Import/API/IAM
 міграція може потребувати активного адміністраторського account і тимчасового

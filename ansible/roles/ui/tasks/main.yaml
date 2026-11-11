@@ -2,8 +2,6 @@
 - name: Validate UI deployment settings
   ansible.builtin.assert:
     that:
-    - compute.instances.ui.startup.type == 'none'
-    - compute.application.app_backend in ['hybrid', 'postgres']
     - ui_port | int > 0
     - ui_port | int < 65536
     - ui_http_port | int > 0
@@ -13,7 +11,7 @@
     - ([ui_port | int, ui_http_port | int, ui_https_port | int] | unique | length) == 3
     - ui_wait_timeout | int > 0
     - not (ui_https_enabled | bool) or (ui_http_port | int == 80 and ui_https_port | int == 443)
-    fail_msg: Use Ansible deployment, distinct valid ports and public ports 80/443 for IP HTTPS.
+    fail_msg: Use distinct valid ports, a positive wait timeout and public ports 80/443 for IP HTTPS.
 - name: Validate release and authenticate to Artifact Registry
   ansible.builtin.include_role:
     name: registry_access
@@ -83,7 +81,6 @@
       - ui
       - nginx
       compose_app_dependencies: true
-      compose_app_build: never
       compose_app_wait_timeout: '{{ ui_wait_timeout }}'
   - name: Apply nginx configuration before certificate validation
     ansible.builtin.meta: flush_handlers

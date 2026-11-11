@@ -198,8 +198,9 @@ SQL and nginx assets. Commit and push application changes before a new release.
 Cloud SQL and private services access are managed by Terraform. PostgreSQL
 schema/runtime-role initialization remains in History, so History starts before
 Fetcher. Backend changes do not migrate data automatically or delete volumes
-through Ansible. See [Ansible](../ansible/README.md) and
-[Terraform](../gcp-terra/README.md) for ownership and mode-change details.
+through Ansible. Terraform changes require a reviewed plan. Switching to
+`cloud_sql + postgres` removes the broker/cache VM from Terraform selection;
+back up any required boot-disk volumes before applying that transition.
 
 ## PGMQ SQL-only on Cloud SQL
 

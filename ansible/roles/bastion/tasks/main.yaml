@@ -172,12 +172,11 @@
 
 - name: Close the persistent SSH session to test a fresh connection
   ansible.builtin.meta: reset_connection
-  when: not ansible_check_mode
 
 - name: Verify a fresh SSH connection through the configured firewall
   ansible.builtin.wait_for_connection:
     timeout: "{{ bastion_connection_timeout }}"
-    connect_timeout: "{{ ansible_ssh_timeout | default(60) }}"
+    connect_timeout: "{{ ansible_ssh_timeout | default(lookup('ansible.builtin.config', 'DEFAULT_TIMEOUT')) }}"
     sleep: 5
   when: not ansible_check_mode
 

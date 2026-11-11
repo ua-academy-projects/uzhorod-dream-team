@@ -1,2 +1,2 @@
-output "connection_name" { value = google_sql_database_instance.main.connection_name }
-output "private_ip" { value = google_sql_database_instance.main.private_ip_address }
+output "connection_name" { value = try(google_sql_database_instance.main[0].connection_name, null) }
+output "private_ip" { value = try(google_sql_database_instance.main[0].private_ip_address, null) }

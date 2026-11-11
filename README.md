@@ -43,8 +43,10 @@ make deploy-ui   # update UI only, without system preparation
 Commit and push changes in `DataFetcher/` before deploying. Releases are saved in
 `.deploy/releases/` by the most recent application commit; repeated deployments
 reuse that manifest and its immutable image digests. Terraform is never applied
-by these commands. See [Ansible setup](ansible/README.md) and
-[GCP infrastructure](gcp-terra/README.md) for credentials and the initial setup.
+by these commands. Bootstrap instructions are in
+[gcp-terra/bootstrap/README.md](gcp-terra/bootstrap/README.md). For Ansible,
+authenticate with `gcloud auth login` and `gcloud auth application-default login`,
+then run `make setup`. SSH access also requires the configured key and trusted host keys.
 
 ## Quick start with Docker Compose
 

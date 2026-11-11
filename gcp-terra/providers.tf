@@ -1,3 +1,8 @@
+# Read the shared configuration once; modules select and process their own fields.
+locals {
+  config = jsondecode(file("${path.root}/../config.json"))
+}
+
 terraform {
   backend "gcs" {}
 

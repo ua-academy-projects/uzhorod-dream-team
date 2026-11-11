@@ -1,19 +1,10 @@
-variable "project_id" {
-  type = string
+variable "config" {
+  description = "Shared configuration; this module selects its own settings."
+  type = object({
+    project_id = string
+    region     = string
+    registry   = object({ repository_id = string })
+  })
 }
-
-variable "region" {
-  type = string
-}
-
-variable "repository_id" {
-  type = string
-}
-
-variable "service_account_emails" {
-  type = map(string)
-}
-
-variable "publishers" {
-  type = set(string)
-}
+variable "service_account_emails" { type = map(string) }
+variable "publishers" { type = set(string) }

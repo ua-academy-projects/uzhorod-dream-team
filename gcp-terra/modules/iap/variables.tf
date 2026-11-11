@@ -1,19 +1,9 @@
-variable "project_id" {
-  type = string
+variable "config" {
+  description = "Shared configuration; this module selects its own settings."
+  type = object({
+    project_id = string
+    zone       = string
+    compute    = object({ instances = object({ bastion = object({ name = string, startup = object({ ssh_port = number }) }) }) })
+  })
 }
-
-variable "zone" {
-  type = string
-}
-
-variable "instance_name" {
-  type = string
-}
-
-variable "ssh_port" {
-  type = number
-}
-
-variable "members" {
-  type = set(string)
-}
+variable "members" { type = set(string) }

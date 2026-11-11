@@ -14,5 +14,5 @@ output "ui_public_ip" {
 }
 
 output "cloud_sql_connection_name" {
-  value = try(module.cloud_sql[0].connection_name, null)
+  value = module.cloud_sql.connection_name
 }

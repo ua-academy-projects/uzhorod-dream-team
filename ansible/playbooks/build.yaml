@@ -1,9 +1,10 @@
+---
 - name: Build deployment artifacts
   hosts: localhost
   connection: local
   gather_facts: false
   vars_files:
-  - "{{ lookup('env', 'DATAMONITOR_CONFIG') | default(playbook_dir ~ '/../../config.json', true) }}"
+    - "{{ lookup('env', 'DATAMONITOR_CONFIG') | default(playbook_dir ~ '/../../config.json', true) }}"
   roles:
-  - role: validate
-  - role: images
+    - role: validate
+    - role: images

@@ -1,15 +1,16 @@
 locals {
+  config = var.config.compute
   instances = {
-    for key, vm in var.config.instances : key => merge(vm, {
-      machine_type           = coalesce(vm.machine_type, var.config.defaults.machine_type)
-      public_ip              = coalesce(vm.public_ip, var.config.defaults.public_ip)
-      attach_service_account = coalesce(vm.attach_service_account, var.config.defaults.attach_service_account)
+    for key, vm in local.config.instances : key => merge(vm, {
+      machine_type           = coalesce(vm.machine_type, local.config.defaults.machine_type)
+      public_ip              = coalesce(vm.public_ip, local.config.defaults.public_ip)
+      attach_service_account = coalesce(vm.attach_service_account, local.config.defaults.attach_service_account)
       boot_disk = {
-        image   = coalesce(vm.boot_disk.image, var.config.defaults.boot_disk.image)
-        size_gb = coalesce(vm.boot_disk.size_gb, var.config.defaults.boot_disk.size_gb)
-        type    = coalesce(vm.boot_disk.type, var.config.defaults.boot_disk.type)
+        image   = coalesce(vm.boot_disk.image, local.config.defaults.boot_disk.image)
+        size_gb = coalesce(vm.boot_disk.size_gb, local.config.defaults.boot_disk.size_gb)
+        type    = coalesce(vm.boot_disk.type, local.config.defaults.boot_disk.type)
       }
-    }) if key != "postgres" || var.database_provider != "cloud_sql" || var.config.application.app_backend != "postgres"
+    }) if key != "postgres" || var.config.database.provider != "cloud_sql" || local.config.application.app_backend != "postgres"
   }
 }
 
@@ -17,8 +18,8 @@ resource "google_compute_address" "static_public_ips" {
   for_each = { for key, vm in local.instances : key => vm if vm.static_public_ip }
 
   name         = "${each.value.name}-ip"
-  project      = var.project_id
-  region       = var.region
+  project      = var.config.project_id
+  region       = var.config.region
   address_type = "EXTERNAL"
   network_tier = "PREMIUM"
 }
@@ -27,8 +28,8 @@ resource "google_compute_instance" "instances" {
   for_each = local.instances
 
   name                      = each.value.name
-  project                   = var.project_id
-  zone                      = var.zone
+  project                   = var.config.project_id
+  zone                      = var.config.zone
   machine_type              = each.value.machine_type
   allow_stopping_for_update = true
   tags                      = each.value.tags

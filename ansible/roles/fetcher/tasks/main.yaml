@@ -1,13 +1,10 @@
 ---
-- name: Validate Fetcher deployment settings
+- name: Validate Fetcher port
   ansible.builtin.assert:
     that:
-      - compute.instances.fetcher.startup.type == 'none'
-      - compute.application.app_backend in ['hybrid', 'postgres']
-      - database.provider in ['cloud_sql', 'container']
       - fetcher_port | int > 0
       - fetcher_port | int < 65536
-    fail_msg: Fetcher must use Ansible deployment and valid backend, database and port settings.
+    fail_msg: Fetcher must use a port between 1 and 65535.
 
 - name: Validate release and authenticate to Artifact Registry
   ansible.builtin.include_role:
@@ -38,8 +35,6 @@
     compose_app_template: "{{ deployment_root }}/ansible/roles/fetcher/templates/compose.fetcher.yaml.j2"
     compose_app_files: [compose.fetcher.yaml]
     compose_app_services: [fetcher]
-    compose_app_build: never
-    compose_app_pull: missing
     compose_app_wait_timeout: "{{ fetcher_wait_timeout }}"
 
 - name: Wait for the Fetcher HTTP endpoint

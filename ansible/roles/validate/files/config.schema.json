@@ -177,6 +177,9 @@
                 },
                 "minItems": 1,
                 "uniqueItems": true
+              },
+              "enabled": {
+                "type": "boolean"
               }
             },
             "required": [
@@ -443,9 +446,6 @@
             }
           }
         },
-        "adopt_existing": {
-          "type": "boolean"
-        },
         "database_version": {
           "type": "string"
         },
@@ -644,12 +644,30 @@
         }
       },
       "required": [
-        "enabled",
-        "notification_email",
-        "cpu_threshold",
-        "disk_threshold",
-        "memory_threshold",
-        "duration"
+        "enabled"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "enabled": {
+                "const": true
+              }
+            },
+            "required": [
+              "enabled"
+            ]
+          },
+          "then": {
+            "required": [
+              "notification_email",
+              "cpu_threshold",
+              "disk_threshold",
+              "memory_threshold",
+              "duration"
+            ]
+          }
+        }
       ]
     }
   },

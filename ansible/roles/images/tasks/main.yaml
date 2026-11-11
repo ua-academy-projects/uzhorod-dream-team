@@ -102,21 +102,23 @@
           app_images: {}
     - name: Add each repository digest to the release manifest
       ansible.builtin.set_fact:
-        build_manifest: "{{ build_manifest | combine({'app_images': build_manifest.app_images | combine({\n   item.item:\
-          \ (item.images[0].RepoDigests | select('match', '^' ~ ((build_registry ~ '/' ~ item.item) | regex_escape) ~\
-          \ '@sha256:[0-9a-f]{64}$') | first)\n})}) }}"
+        build_manifest: >-
+          {{ build_manifest | combine({
+            'app_images': build_manifest.app_images | combine({
+              item.item: item.images[0].RepoDigests
+                | select('match', '^' ~ ((build_registry ~ '/' ~ item.item) | regex_escape)
+                  ~ '@sha256:[0-9a-f]{64}$') | first
+            })
+          }) }}
       loop: '{{ build_image_info.results }}'
       loop_control:
         label: '{{ item.item }}'
       no_log: true
     - name: Write the nonsecret release manifest for deployment and rollback
       ansible.builtin.copy:
-        content: '{{ build_manifest | to_nice_json }}
-
-          '
-        dest: '{{ build_release_file | default(''/tmp/datamonitor-release-'' ~ build_commit.stdout ~ ''.json'') }}'
+        content: "{{ build_manifest | to_nice_json }}\n"
+        dest: "{{ build_release_file }}"
         mode: '0644'
     - name: Show the manifest path
       ansible.builtin.debug:
-        msg: 'Release manifest: {{ build_release_file | default(''/tmp/datamonitor-release-'' ~ build_commit.stdout ~
-          ''.json'') }}'
+        msg: "Release manifest: {{ build_release_file }}"

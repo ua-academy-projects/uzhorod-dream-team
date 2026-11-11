@@ -19,6 +19,8 @@
       ansible.builtin.assert:
         quiet: true
         that:
+          - database.provider in ['cloud_sql', 'container']
+          - compute.application.app_backend in ['hybrid', 'postgres']
           - zone.startswith(region ~ '-')
           - network.subnet.region == region
           - compute.instances.values() | map(attribute='network_ip') | list | unique | length == compute.instances | length
@@ -31,7 +33,7 @@
           - compute.instances.history.startup.type == 'none'
           - compute.instances.postgres.startup.type == 'none'
           - compute.instances.ui.startup.type == 'none'
-        fail_msg: Use unique VM names/IPs, unique firewall names, a zone in the configured region and a private IAP bastion.
+        fail_msg: Use supported database/backend modes, unique VM names/IPs, unique firewall names, a zone in the configured region and a private IAP bastion.
 
     - name: Require firewall tags to match configured VM tags
       ansible.builtin.assert:

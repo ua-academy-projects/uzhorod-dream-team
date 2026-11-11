@@ -8,8 +8,8 @@ export DATAMONITOR_ROOT := $(CURDIR)
 export DATAMONITOR_CONFIG := $(CURDIR)/config.json
 export ANSIBLE_CONFIG := $(CURDIR)/ansible.cfg
 PLAYBOOK := $(VENV)/bin/ansible-playbook
-LOCAL_PLAYBOOK := $(PLAYBOOK) -i localhost, -e ansible_python_interpreter=$(VENV)/bin/python
 INVENTORY ?= $(CURDIR)/.deploy/inventory.gcp.yaml
+LOCAL_PLAYBOOK = $(PLAYBOOK) -i localhost, -e ansible_python_interpreter=$(VENV)/bin/python -e 'deployment_inventory=$(INVENTORY)'
 # Documentation-only commits don't create a new application release.
 RELEASE ?= $(CURDIR)/.deploy/releases/$(shell git log -1 --format=%H -- DataFetcher ':(exclude)DataFetcher/**/*.md' ':(exclude)DataFetcher/*.md').json
 
@@ -20,6 +20,9 @@ help:
 	@echo 'make deploy     — start VMs, build/reuse the release, deploy all services'
 	@echo 'make deploy-ui  — start VMs, build/reuse the release, update UI only'
 	@echo 'make validate   — check config.json locally'
+	@echo 'make configure  — validate config and generate the dynamic inventory source'
+	@echo 'make start      — start existing stopped VMs'
+	@echo 'make build      — build/reuse the application release'
 	@echo 'make inventory  — list running GCP hosts'
 	@echo 'make deploy RELEASE=/absolute/path/release.json — deploy an existing release'
 

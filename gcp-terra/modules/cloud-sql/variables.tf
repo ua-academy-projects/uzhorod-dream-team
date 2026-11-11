@@ -1,35 +1,45 @@
-variable "project_id" { type = string }
-variable "network_id" { type = string }
-variable "database_name" { type = string }
-variable "service_account_emails" { type = map(string) }
-variable "client_services" { type = set(string) }
 variable "config" {
+  description = "Shared configuration; this module selects its own settings."
   type = object({
-    instance_name               = string
-    database_version            = string
-    region                      = string
-    zone                        = string
-    tier                        = string
-    edition                     = string
-    public_ip                   = bool
-    deletion_protection         = bool
-    disk_size_gb                = number
-    disk_type                   = string
-    disk_autoresize             = bool
-    availability_type           = string
-    data_cache_enabled          = bool
-    enable_dataplex_integration = bool
-    database_flags              = map(string)
-    backup = object({
-      enabled                        = bool
-      point_in_time_recovery_enabled = bool
-      start_time                     = string
-      transaction_log_retention_days = number
-      retained_backups               = number
-    })
-    private_service_access = object({
-      ranges         = map(object({ address = string, prefix_length = number }))
-      peering_ranges = list(string)
-    })
+    project_id = string
+    database   = object({ provider = string, name = string })
+    cloud_sql = optional(object({
+      managed = optional(bool, false)
+
+      instance_name               = optional(string)
+      database_version            = optional(string)
+      region                      = optional(string)
+      zone                        = optional(string)
+      tier                        = optional(string)
+      edition                     = optional(string)
+      public_ip                   = optional(bool)
+      deletion_protection         = optional(bool)
+      disk_size_gb                = optional(number)
+      disk_type                   = optional(string)
+      disk_autoresize             = optional(bool)
+      availability_type           = optional(string)
+      data_cache_enabled          = optional(bool)
+      enable_dataplex_integration = optional(bool)
+      database_flags              = optional(map(string))
+      backup = optional(object({
+        enabled                        = bool
+        point_in_time_recovery_enabled = bool
+        start_time                     = string
+        transaction_log_retention_days = number
+        retained_backups               = number
+      }))
+      private_service_access = optional(object({
+        ranges         = map(object({ address = string, prefix_length = number }))
+        peering_ranges = list(string)
+      }))
+    }))
   })
+  validation {
+    condition = !try(var.config.cloud_sql.managed, false) || try(
+      alltrue([for value in var.config.cloud_sql : value != null]), false
+    )
+    error_message = "Managed Cloud SQL requires complete instance, backup and private service access settings."
+  }
 }
+variable "network_id" { type = string }
+variable "service_account_emails" { type = map(string) }
