@@ -11,6 +11,7 @@
     "rule": {
       "type": "object",
       "required": ["network", "to"],
+      "additionalProperties": false,
       "properties": {
         "network": { "type": "string" },
         "from": { "$ref": "#/$defs/names" },
@@ -22,6 +23,7 @@
     },
     "vm": {
       "type": "object",
+      "additionalProperties": false,
       "properties": {
         "role": { "enum": ["bastion", "node"] },
         "ip": { "$ref": "#/$defs/ip" },
@@ -37,7 +39,7 @@
           "items": {
             "type": "object",
             "required": ["size_gb"],
-            "properties": { "size_gb": { "type": "integer", "minimum": 1 }, "type": { "type": "string" } }
+            "additionalProperties": false, "properties": { "size_gb": { "type": "integer", "minimum": 1 }, "type": { "type": "string" } }
           }
         },
         "only_for": {
@@ -53,6 +55,7 @@
     "service": {
       "type": "object",
       "required": ["host"],
+      "additionalProperties": false,
       "properties": {
         "host": { "type": "string" },
         "image": { "type": "string" },
@@ -60,10 +63,12 @@
       }
     }
   },
+  "additionalProperties": false,
   "properties": {
     "project": {
       "type": "object",
       "required": ["name", "prefix", "region", "zone"],
+      "additionalProperties": false,
       "properties": {
         "name": { "type": "string" },
         "prefix": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
@@ -74,14 +79,15 @@
     "bootstrap": {
       "type": "object",
       "required": ["apis", "terraform_sa", "state"],
+      "additionalProperties": false,
       "properties": {
         "apis": { "$ref": "#/$defs/names" },
         "terraform_sa": {
           "type": "object",
           "required": ["name", "roles"],
-          "properties": { "name": { "type": "string" }, "roles": { "$ref": "#/$defs/names" } }
+          "additionalProperties": false, "properties": { "name": { "type": "string" }, "roles": { "$ref": "#/$defs/names" } }
         },
-        "state": { "type": "object", "required": ["prefix"], "properties": { "prefix": { "type": "string" } } }
+        "state": { "type": "object", "required": ["prefix"], "additionalProperties": false, "properties": { "prefix": { "type": "string" } } }
       }
     },
     "networks": {
@@ -89,7 +95,7 @@
       "minProperties": 1,
       "additionalProperties": {
         "type": "object",
-        "properties": { "mtu": { "type": "integer", "minimum": 1300, "maximum": 8896 } }
+        "additionalProperties": false, "properties": { "mtu": { "type": "integer", "minimum": 1300, "maximum": 8896 } }
       }
     },
     "subnets": {
@@ -98,11 +104,12 @@
       "additionalProperties": {
         "type": "object",
         "required": ["network", "cidr"],
-        "properties": { "network": { "type": "string" }, "cidr": { "$ref": "#/$defs/cidr" } }
+        "additionalProperties": false, "properties": { "network": { "type": "string" }, "cidr": { "$ref": "#/$defs/cidr" } }
       }
     },
     "firewall": {
       "type": "object",
+      "additionalProperties": false,
       "properties": {
         "external": {
           "type": "object",
@@ -118,7 +125,7 @@
       "type": "object",
       "additionalProperties": {
         "type": "object",
-        "properties": { "roles": { "type": "array", "items": { "type": "string" } } }
+        "additionalProperties": false, "properties": { "roles": { "type": "array", "items": { "type": "string" } } }
       }
     },
     "secrets": {
@@ -126,12 +133,13 @@
       "required": ["db-password", "cloudflare-api-token"],
       "additionalProperties": {
         "type": "object",
-        "properties": { "accessors": { "type": "array", "items": { "type": "string" } } }
+        "additionalProperties": false, "properties": { "accessors": { "type": "array", "items": { "type": "string" } } }
       }
     },
     "vms": {
       "type": "object",
       "required": ["instances"],
+      "additionalProperties": false,
       "properties": {
         "defaults": { "$ref": "#/$defs/vm" },
         "instances": {
@@ -146,6 +154,7 @@
     "cloudsql": {
       "type": "object",
       "required": ["network", "version"],
+      "additionalProperties": false,
       "properties": {
         "network": { "type": "string" },
         "version": { "type": "string", "pattern": "^POSTGRES_[0-9]+$" },
@@ -159,6 +168,7 @@
     "app": {
       "type": "object",
       "required": ["backend", "database", "database_name", "session_cookie_secure", "public", "services"],
+      "additionalProperties": false,
       "properties": {
         "backend": { "enum": ["postgres", "rabbitmq_redis"] },
         "database": { "enum": ["vm", "cloudsql"] },
@@ -167,6 +177,7 @@
         "public": {
           "type": "object",
           "required": ["host", "domain", "dns_zone", "letsencrypt_staging"],
+          "additionalProperties": false,
           "properties": {
             "host": { "type": "string" },
             "domain": { "type": "string" },
@@ -189,6 +200,7 @@
     "ssh": {
       "type": "object",
       "required": ["port", "jump_user", "public_keys"],
+      "additionalProperties": false,
       "properties": {
         "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
         "jump_user": { "type": "string" },
