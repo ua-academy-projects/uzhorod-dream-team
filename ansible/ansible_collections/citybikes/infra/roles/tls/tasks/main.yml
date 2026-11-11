@@ -1,29 +1,32 @@
 ---
-
 - name: certbot with its Cloudflare plugin (the package brings certbot.timer, which renews)
   ansible.builtin.apt:
     name: "{{ tls_packages }}"
     cache_valid_time: 3600
 
-- name: Folder of the Cloudflare credentials
-  ansible.builtin.file:
-    path: "{{ tls_credentials | dirname }}"
-    state: directory
-    mode: "0700"
+- name: The script that puts the Cloudflare token into memory (/run) for certbot, and takes it out again
+  ansible.builtin.template:
+    src: cloudflare-credentials.sh.j2
+    dest: "{{ tls_credentials_script }}"
+    mode: "0750"
 
-- name: The Cloudflare API token for certbot (read on the VM with its own service account)
-  citybikes.infra.gcp_secret_file:
-    path: "{{ tls_credentials }}"
-    secrets:
-      dns_cloudflare_api_token: "{{ config_json.prefix }}-cloudflare-api-token"
-    format: ini
-    mode: "0600"
-
-- name: Folder of certbot's deploy hooks (certbot makes it only on its first run)
+- name: Folders of certbot's hooks (certbot makes them only on its first run)
   ansible.builtin.file:
-    path: "{{ tls_hook | dirname }}"
+    path: "/etc/letsencrypt/renewal-hooks/{{ item }}"
     state: directory
     mode: "0755"
+  loop: [pre, post, deploy]
+
+- name: Renewals by certbot.timer get the token before and lose it after (pre and post hooks)
+  ansible.builtin.copy:
+    dest: "/etc/letsencrypt/renewal-hooks/{{ item.hook }}/citybikes-cloudflare"
+    content: |
+      #!/bin/sh
+      exec {{ tls_credentials_script }} {{ item.action }}
+    mode: "0755"
+  loop:
+    - { hook: pre, action: write }
+    - { hook: post, action: remove }
 
 - name: After every renewal, the new certificate goes to nginx (certbot's deploy hook)
   ansible.builtin.template:
@@ -31,11 +34,22 @@
     dest: "{{ tls_hook }}"
     mode: "0755"
 
-- name: The certificate (nothing happens while it is not due for renewal)
-  ansible.builtin.command:
-    argv: "{{ tls_certbot_argv }}"
-  register: tls_certbot
-  changed_when: "'not yet due for renewal' not in (tls_certbot.stdout ~ tls_certbot.stderr)"
+- name: The certificate, with the token in memory only while certbot runs
+  block:
+    - name: The token for certbot
+      ansible.builtin.command: "{{ tls_credentials_script }} write"
+      changed_when: false
+
+    - name: The certificate (nothing happens while it is not due for renewal)
+      ansible.builtin.command:
+        argv: "{{ tls_certbot_argv }}"
+      register: tls_certbot
+      changed_when: "'not yet due for renewal' not in (tls_certbot.stdout ~ tls_certbot.stderr)"
+
+  always:
+    - name: The token is taken out again
+      ansible.builtin.command: "{{ tls_credentials_script }} remove"
+      changed_when: false
 
 - name: The certificate of the other mode is removed (after "staging" was switched)
   ansible.builtin.command:
@@ -47,6 +61,18 @@
   ansible.builtin.stat:
     path: "{{ tls_live_dir }}/fullchain.pem"
   register: tls_cert
+
+- name: Renewals read the token from memory (/run), not from the old file on disk
+  ansible.builtin.lineinfile:
+    path: "/etc/letsencrypt/renewal/{{ tls_cert_name }}.conf"
+    regexp: '^dns_cloudflare_credentials\s*='
+    line: "dns_cloudflare_credentials = {{ tls_credentials }}"
+  when: tls_cert.stat.exists
+
+- name: No secret file is left from before (the old token, the env files of the old startup script)
+  ansible.builtin.file:
+    path: /etc/citybikes
+    state: absent
 
 - name: Folder of what nginx reads
   ansible.builtin.file:
@@ -79,4 +105,3 @@
     name: certbot.timer
     state: started
     enabled: true
-    

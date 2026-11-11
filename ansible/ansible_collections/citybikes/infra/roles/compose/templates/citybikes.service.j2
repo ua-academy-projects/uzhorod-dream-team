@@ -1,0 +1,15 @@
+# Managed by Ansible (role citybikes.infra.compose): do not edit it here.
+[Unit]
+Description=CityBikes containers (their secrets read from Secret Manager at start)
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart={{ compose_dir }}/up.sh
+TimeoutStartSec=900
+
+[Install]
+WantedBy=multi-user.target

@@ -27,7 +27,16 @@
       "bastion": { "host": 54, "services": [], "bastion": true }
     }
   },
-  "database": { "version": "POSTGRES_16", "tier": "db-f1-micro", "disk_size_gb": 10, "private_range": "10.21.0.0/24" },
+    "database": {
+    "type": "cloudsql",
+    "cloudsql": {
+      "version": "POSTGRES_16",
+      "tier": "db-f1-micro",
+      "disk_size_gb": 10,
+      "private_range": "10.21.0.0/24",
+      "deletion_protection": true
+    }
+  },
   "tls": { "vm": "ui", "domain": "citybikes-tracker.pp.ua", "email": "fikusivan777@gmail.com", "staging": false },
   "app": {
     "queue_backend": "rabbitmq",

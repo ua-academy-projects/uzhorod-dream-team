@@ -4,10 +4,13 @@ variable "config" {
     prefix   = string
     location = object({ region = string, zone = string })
     database = object({
-      version       = string
-      tier          = string
-      disk_size_gb  = number
-      private_range = string
+      cloudsql = object({
+        version             = string
+        tier                = string
+        disk_size_gb        = number
+        private_range       = string
+        deletion_protection = optional(bool, true)
+      })
     })
     app = object({
       db_name = string

@@ -29,17 +29,39 @@
     dest: "{{ compose_dir }}/compose.yaml"
     mode: "0644"
 
-- name: The secrets for docker compose (.env, read on the VM with its own service account)
-  citybikes.infra.gcp_secret_file:
-    path: "{{ compose_dir }}/.env"
-    secrets: "{{ compose_env_secrets }}"
-    format: env
-    mode: "0600"
+- name: The start script of this VM (the names of its secrets only, no values)
+  ansible.builtin.template:
+    src: up.sh.j2
+    dest: "{{ compose_dir }}/up.sh"
+    mode: "0750"
 
-- name: Build and start the containers (a container is recreated only when its image or settings changed)
-  community.docker.docker_compose_v2:
-    project_src: "{{ compose_dir }}"
-    build: "{{ 'always' if compose_code is changed else 'policy' }}"
-    remove_orphans: true
-    wait: true       
-    wait_timeout: 600
+- name: The containers start with the VM too (systemd runs the same script at boot)
+  ansible.builtin.template:
+    src: citybikes.service.j2
+    dest: /etc/systemd/system/citybikes.service
+    mode: "0644"
+  register: compose_unit
+
+- name: systemd knows the service and starts it at boot
+  ansible.builtin.systemd_service:
+    name: citybikes
+    enabled: true
+    daemon_reload: "{{ compose_unit is changed }}"
+
+- name: No secret file is left from before
+  ansible.builtin.file:
+    path: "{{ compose_dir }}/.env"
+    state: absent
+
+- name: The images of the code that changed
+  ansible.builtin.command:
+    cmd: docker compose build
+    chdir: "{{ compose_dir }}"
+  when: compose_code is changed
+  changed_when: true
+
+- name: The containers (the secrets are read now; a container is recreated only when its image or settings changed)
+  ansible.builtin.command: "{{ compose_dir }}/up.sh"
+  register: compose_up
+  changed_when: compose_up.stderr is search('Recreated|Created|Started|Removed')
+  

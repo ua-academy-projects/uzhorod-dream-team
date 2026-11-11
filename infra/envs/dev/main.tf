@@ -5,7 +5,9 @@ module "network" {
 }
 
 module "cloudsql" {
-  source     = "../../modules/cloudsql"
+  source = "../../modules/cloudsql"
+  count  = can(jsondecode(file("${path.module}/../../config.json")).database.cloudsql) ? 1 : 0
+
   config     = jsondecode(file("${path.module}/../../config.json"))
   network_id = module.network.network_id
 }

@@ -1,6 +1,6 @@
 locals {
   name     = "${var.config.prefix}-pg"
-  database = var.config.database
+  database = var.config.database.cloudsql
   labels   = { app = var.config.prefix, managed-by = "terraform" }
 }
 
@@ -23,7 +23,7 @@ resource "google_sql_database_instance" "pg" {
   name                = local.name
   region              = var.config.location.region
   database_version    = local.database.version
-  deletion_protection = true
+  deletion_protection = local.database.deletion_protection
 
   settings {
     edition           = "ENTERPRISE"
@@ -53,6 +53,6 @@ resource "google_sql_database_instance" "pg" {
 }
 
 resource "google_sql_database" "app" {
-  name     = var.config.app.db_name
-  instance = google_sql_database_instance.pg.name
+  name                = var.config.app.db_name
+  instance            = google_sql_database_instance.pg.name
 }

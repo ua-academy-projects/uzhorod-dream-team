@@ -88,16 +88,28 @@
     },
 
     "database": {
-      "description": "Cloud SQL for PostgreSQL, private IP only",
+      "description": "Which PostgreSQL the application uses (type), and Cloud SQL while it exists (cloudsql). PostgreSQL on a VM = the service postgres in that VM's services",
       "type": "object",
       "additionalProperties": false,
-      "required": ["version", "tier", "disk_size_gb", "private_range"],
+      "required": ["type"],
       "properties": {
-        "version": { "type": "string", "pattern": "^POSTGRES_[0-9]+$" },
-        "tier": { "type": "string", "pattern": "^db-" },
-        "disk_size_gb": { "type": "integer", "minimum": 10 },
-        "private_range": { "description": "Free range for Google's side of the private connection", "$ref": "#/$defs/cidr" }
-      }
+        "type": { "description": "cloudsql: the application uses Cloud SQL. vm: the container postgres on the VM that runs it", "enum": ["cloudsql", "vm"] },
+        "cloudsql": {
+          "description": "Cloud SQL exists while this block is here (private IP only)",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["version", "tier", "disk_size_gb", "private_range", "deletion_protection"],
+          "properties": {
+            "version": { "type": "string", "pattern": "^POSTGRES_[0-9]+$" },
+            "tier": { "type": "string", "pattern": "^db-" },
+            "disk_size_gb": { "type": "integer", "minimum": 10 },
+            "private_range": { "description": "Free range for Google's side of the private connection", "$ref": "#/$defs/cidr" },
+            "deletion_protection": { "description": "false only right before Cloud SQL is removed (its block taken out)", "type": "boolean" }
+          }
+        }
+      },
+      "if": { "properties": { "type": { "const": "cloudsql" } } },
+      "then": { "required": ["cloudsql"] }
     },
 
     "tls": {
@@ -150,7 +162,7 @@
           "description": "The containers on this VM",
           "type": "array",
           "uniqueItems": true,
-          "items": { "enum": ["redis", "rabbitmq", "fetcher", "history", "ui", "cloudflared"] }
+          "items": { "enum": ["postgres", "redis", "rabbitmq", "fetcher", "history", "ui", "cloudflared"] }
         },
         "roles": { "description": "Project roles in ADDITION to vms.defaults.roles", "$ref": "#/$defs/roles" },
         "secrets": {

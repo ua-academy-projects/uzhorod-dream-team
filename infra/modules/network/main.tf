@@ -3,6 +3,9 @@ locals {
   region      = var.config.location.region
   network     = var.config.network
   bastion_tag = "bastion"
+
+  postgres_on_vm = anytrue([for vm in var.config.vms.instances : contains(vm.services, "postgres")])
+  internal_ports = distinct(concat(local.network.internal_ports, local.postgres_on_vm ? ["5432"] : []))
 }
 
 resource "google_compute_network" "vpc" {
@@ -64,7 +67,7 @@ resource "google_compute_firewall" "internal" {
 
   allow {
     protocol = "tcp"
-    ports    = local.network.internal_ports
+    ports    = local.internal_ports
   }
   allow {
     protocol = "icmp"

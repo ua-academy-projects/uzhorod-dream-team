@@ -1,0 +1,12 @@
+#!/bin/sh
+# Managed by Ansible (role citybikes.infra.compose): do not edit it here.
+# Starts the containers of this VM. Its secrets are read from Secret Manager by the VM's own service account
+# right now and live only in the environment of this run (and of the containers): no file holds them.
+set -eu
+PATH="$PATH:/snap/bin"   # gcloud of the Ubuntu image
+cd {{ compose_dir }}
+{% for name, secret in compose_env_secrets.items() %}
+{{ name }}="$(gcloud secrets versions access latest --secret={{ secret }} --quiet)"
+export {{ name }}
+{% endfor %}
+exec docker compose up --detach --wait --wait-timeout 600 --remove-orphans

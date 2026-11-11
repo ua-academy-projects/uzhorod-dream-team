@@ -6,7 +6,9 @@ tls_other_cert_name: "{{ tls_domain ~ ('' if tls_staging else '-staging') }}"
 tls_live_dir: "/etc/letsencrypt/live/{{ tls_cert_name }}"
 
 tls_packages: [certbot, python3-certbot-dns-cloudflare]
-tls_credentials: /etc/citybikes/cloudflare.ini         
+tls_credentials: /run/citybikes/cloudflare.ini
+tls_credentials_script: /usr/local/sbin/citybikes-cloudflare-credentials
+tls_cloudflare_secret: "{{ config_json.prefix }}-cloudflare-api-token"    
 tls_hook: /etc/letsencrypt/renewal-hooks/deploy/citybikes.sh
 
 tls_dir: /opt/citybikes/tls

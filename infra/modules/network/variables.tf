@@ -1,6 +1,11 @@
 variable "config" {
   description = "infra/config.json as a whole; this module uses prefix, location.region, network and ssh.bastion_port"
   type = object({
+    vms = object({
+      instances = map(object({
+        services = optional(list(string), [])
+      }))
+    })
     prefix   = string
     location = object({ region = string })
     network = object({

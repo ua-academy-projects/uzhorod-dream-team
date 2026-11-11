@@ -25,6 +25,11 @@ variable "config" {
       }))
     })
   })
+
+  validation {
+    condition     = alltrue([for vm in var.config.vms.instances : !contains(vm.services, "postgres") || contains(vm.secrets, "db-password")])
+    error_message = "config.json: a VM with the service postgres needs \"db-password\" in its \"secrets\"."
+  }
 }
 
 variable "name" {
