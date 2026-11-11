@@ -1,0 +1,27 @@
+---
+
+- name: python3-debian, for the module that writes the apt repository
+  ansible.builtin.apt:
+    name: python3-debian
+    cache_valid_time: 3600
+
+- name: Google's apt repository of the Ops Agent
+  ansible.builtin.deb822_repository:
+    name: google-cloud-ops-agent
+    types: [deb]
+    uris: https://packages.cloud.google.com/apt
+    suites: ["google-cloud-ops-agent-{{ ops_agent_codename }}-all"]
+    components: [main]
+    signed_by: https://packages.cloud.google.com/apt/doc/apt-key.gpg
+  register: ops_agent_repo
+
+- name: The Ops Agent (its built-in configuration - host metrics such as disk, memory and CPU, and syslog)
+  ansible.builtin.apt:
+    name: google-cloud-ops-agent
+    update_cache: "{{ ops_agent_repo is changed }}"
+
+- name: The Ops Agent runs and starts at boot
+  ansible.builtin.systemd_service:
+    name: google-cloud-ops-agent
+    state: started
+    enabled: true

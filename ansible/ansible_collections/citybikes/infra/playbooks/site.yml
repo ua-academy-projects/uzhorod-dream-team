@@ -32,3 +32,10 @@
   become: true
   roles:
     - citybikes.infra.tls
+
+- name: The monitoring agent on every VM (disk, memory and CPU from inside, for Cloud Monitoring)
+  hosts: all
+  gather_facts: false
+  become: true
+  roles:
+    - citybikes.infra.ops_agent

@@ -17,7 +17,7 @@
       "disk_size_gb": 10,
       "image": "ubuntu-os-cloud/ubuntu-2404-lts-amd64",
       "cloud_logging": true,
-      "roles": ["roles/logging.logWriter"]
+      "roles": ["roles/logging.logWriter", "roles/monitoring.metricWriter"]
     },
     "instances": {
       "db": { "host": 50, "disk_size_gb": 20, "services": ["redis", "rabbitmq"], "secrets": ["redis-password", "rabbitmq-password"] },
@@ -49,5 +49,12 @@
     "rabbitmq_user": "citybikes",
     "rabbitmq_vhost": "citybikes",
     "cloudflare_tunnel_protocol": "auto"
+  },
+  "monitoring": {
+    "email": "fikusivan777@gmail.com",
+    "disk_used_percent": 40,
+    "silence_minutes": 10,
+    "poll_failures": 3,
+    "uptime_path": "/api/status"
   }
 }

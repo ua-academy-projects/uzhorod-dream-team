@@ -5,7 +5,7 @@
   "description": "WHAT is built. Read by Terraform (infra/envs/dev). Checked against this schema before every run.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["prefix", "location", "network", "ssh", "vms", "database", "tls", "app"],
+  "required": ["prefix", "location", "network", "ssh", "vms", "database", "tls", "app", "monitoring"],
 
   "properties": {
     "prefix": {
@@ -143,6 +143,19 @@
         "rabbitmq_user": { "$ref": "#/$defs/identifier" },
         "rabbitmq_vhost": { "$ref": "#/$defs/identifier" },
         "cloudflare_tunnel_protocol": { "enum": ["auto", "quic", "http2"] }
+      }
+    },
+    "monitoring": {
+    "description": "Cloud Monitoring (modules/monitoring): the alerts go to this e-mail",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["email", "disk_used_percent", "silence_minutes", "poll_failures", "uptime_path"],
+    "properties": {
+      "email": { "type": "string", "pattern": "^[^@\\s]+@[^@\\s]+$" },
+      "disk_used_percent": { "description": "A disk of a VM (or of Cloud SQL) fuller than this = an alert", "type": "integer", "minimum": 10, "maximum": 99 },
+      "silence_minutes": { "description": "No data from a VM, or no snapshot stored, for this long = an alert", "type": "integer", "minimum": 5, "maximum": 60 },
+      "poll_failures": { "description": "More failed polls of History in 15 minutes than this = an alert", "type": "integer", "minimum": 1 },
+      "uptime_path": { "description": "What the uptime check opens on tls.domain; it must answer \"db_ok\": true", "type": "string", "pattern": "^/" }
       }
     }
   },

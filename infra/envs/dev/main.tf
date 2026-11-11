@@ -38,3 +38,9 @@ module "secrets" {
   vms     = module.service_accounts.vms
   members = module.service_accounts.members
 }
+
+module "monitoring" {
+  source     = "../../modules/monitoring"
+  config     = jsondecode(file("${path.module}/../../config.json"))
+  project_id = var.project_id
+}

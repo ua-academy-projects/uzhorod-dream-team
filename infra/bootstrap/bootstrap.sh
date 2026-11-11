@@ -7,7 +7,7 @@ APIS=(
   cloudresourcemanager.googleapis.com serviceusage.googleapis.com orgpolicy.googleapis.com
   iam.googleapis.com iamcredentials.googleapis.com
   compute.googleapis.com storage.googleapis.com secretmanager.googleapis.com logging.googleapis.com
-  sqladmin.googleapis.com servicenetworking.googleapis.com
+  sqladmin.googleapis.com servicenetworking.googleapis.com monitoring.googleapis.com
 )
 
 
@@ -20,7 +20,9 @@ ROLES=(
   roles/resourcemanager.projectIamAdmin   
   roles/serviceusage.serviceUsageConsumer 
   roles/cloudsql.admin                    
-  roles/servicenetworking.networksAdmin  
+  roles/servicenetworking.networksAdmin
+  roles/logging.configWriter
+  roles/monitoring.editor
 )
 
 KEY_POLICIES=(iam.disableServiceAccountKeyCreation iam.managed.disableServiceAccountKeyCreation)
@@ -47,7 +49,7 @@ load_config() {
   ME=$(gcloud config get-value account 2>/dev/null)
   BUCKET="${PROJECT_ID}-tfstate"
   SA="terraform@${PROJECT_ID}.iam.gserviceaccount.com"
-  KEY_FILE="$PWD/terraform-key.json"
+  KEY_FILE="$PWD/terraform-kemonitoring.googleapis.comy.json"
   P=(--project "$PROJECT_ID" --quiet)
 }
 
