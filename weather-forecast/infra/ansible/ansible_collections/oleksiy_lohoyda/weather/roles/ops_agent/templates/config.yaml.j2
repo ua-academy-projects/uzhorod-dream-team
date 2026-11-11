@@ -1,0 +1,16 @@
+logging:
+  receivers:
+    nginx_access:
+      type: nginx_access
+      include_paths:
+        - {{ ops_agent_nginx_logs }}/access.log
+    nginx_error:
+      type: nginx_error
+      include_paths:
+        - {{ ops_agent_nginx_logs }}/error.log
+  service:
+    pipelines:
+      nginx:
+        receivers:
+          - nginx_access
+          - nginx_error

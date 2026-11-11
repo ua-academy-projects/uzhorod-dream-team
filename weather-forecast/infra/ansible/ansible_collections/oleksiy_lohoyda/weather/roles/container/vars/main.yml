@@ -54,4 +54,5 @@ container_specs:
     volumes:
       - /etc/weather-forecast/nginx.conf:/etc/nginx/conf.d/default.conf:ro
       - weather-letsencrypt:/etc/letsencrypt:ro
+      - /var/log/weather-nginx:/var/log/nginx
     env: {}

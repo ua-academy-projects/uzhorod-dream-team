@@ -384,7 +384,10 @@ disk, so recreating or removing that VM deletes them.
 Containers use Docker's default logging, read with
 `ssh gcp-tf-<vm> 'sudo docker logs <container>'`. cloud-init output is in
 `/var/log/cloud-init-output.log` on each VM. The Ops Agent on every node sends
-system logs and metrics to Cloud Logging and Cloud Monitoring.
+system logs and metrics to Cloud Logging and Cloud Monitoring. nginx on `ui`
+writes its logs to `/var/log/weather-nginx`, and the Ops Agent sends them to
+Cloud Logging with the HTTP status in `httpRequest.status`. logrotate rotates
+them daily and keeps 7 days.
 
 ## Source layout
 

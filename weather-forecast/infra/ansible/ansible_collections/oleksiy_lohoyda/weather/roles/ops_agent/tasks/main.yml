@@ -13,6 +13,19 @@
     name: google-cloud-ops-agent
     update_cache: "{{ ops_agent_repo.changed }}"
 
+- name: Configure the Ops Agent
+  ansible.builtin.template:
+    src: config.yaml.j2
+    dest: /etc/google-cloud-ops-agent/config.yaml
+    mode: "0644"
+  notify: Restart the Ops Agent
+
+- name: Rotate the nginx logs
+  ansible.builtin.template:
+    src: logrotate.j2
+    dest: /etc/logrotate.d/weather-nginx
+    mode: "0644"
+
 - name: Start the Ops Agent
   ansible.builtin.service:
     name: google-cloud-ops-agent
