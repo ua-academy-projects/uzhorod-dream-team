@@ -96,21 +96,24 @@ def groups_of(config, name, vm):
 
 
 def connection(ssh, vm, private_ip, bastion_ip):
-    user_key = os.path.expanduser(ssh["user_public_key_file"])
-    args = ["-o StrictHostKeyChecking=accept-new", "-o IdentitiesOnly=yes"]
+    """How Ansible reaches the VM over SSH, with the key of this run (role ssh_access): its private half is only
+    in YOUR ssh-agent, its public half in ssh.access_public_key_file (IdentitiesOnly: the agent's matching key is
+    the only one tried). The bastion directly, on ssh.bastion_port. The others through it: "ssh -W" is what
+    ProxyJump runs, written out so the jump gets its own options; the bastion only passes the bytes on."""
+    key = os.path.expanduser(ssh["access_public_key_file"])
+    args = ["-o StrictHostKeyChecking=accept-new", "-o IdentitiesOnly=yes", "-o IdentityFile={}".format(key)]
     settings = {
         "ansible_user": ssh["user"],
-        "ansible_pipelining": True,
-        "ansible_python_interpreter": "/usr/bin/python3",
+        "ansible_ssh_retries": 5, 
+        "ansible_pipelining": True, 
+        "ansible_python_interpreter": "/usr/bin/python3", 
     }
     if vm["bastion"]:
         settings.update(ansible_host=bastion_ip, ansible_port=ssh["bastion_port"])
-        args.append("-o IdentityFile={}".format(user_key))
     else:
         jump = "ssh -W %h:%p -q -p {} -o StrictHostKeyChecking=accept-new -o IdentitiesOnly=yes -o IdentityFile={} {}@{}".format(
-            ssh["bastion_port"], user_key, ssh["user"], bastion_ip)
+            ssh["bastion_port"], key, ssh["user"], bastion_ip)
         settings["ansible_host"] = private_ip
-        args.append("-o IdentityFile={}".format(os.path.expanduser(ssh["internal_public_key_file"])))
         args.append('-o ProxyCommand="{}"'.format(jump))
     settings["ansible_ssh_common_args"] = " ".join(args)
     return settings

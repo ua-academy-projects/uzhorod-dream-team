@@ -5,10 +5,8 @@ variable "config" {
     location = object({ region = string, zone = string })
     network  = object({ subnet_cidr = string })
     ssh = object({
-      user                     = string
-      user_public_key_file     = string
-      internal_public_key_file = string
-      bastion_port             = number
+      user         = string
+      bastion_port = number
     })
     vms = object({
       defaults = object({

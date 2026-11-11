@@ -1,5 +1,14 @@
 ---
 
+- name: Validate the configuration (config.json), then an SSH key for this run
+  hosts: localhost
+  gather_facts: false
+  any_errors_fatal: true
+  roles:
+    - citybikes.infra.config
+    - citybikes.infra.config_validate
+    - citybikes.infra.ssh_access
+
 - name: Every VM answers over SSH (the bastion directly, the others through it)
   hosts: all
   gather_facts: false

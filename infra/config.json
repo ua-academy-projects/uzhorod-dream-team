@@ -7,9 +7,9 @@
   },
   "ssh": {
     "user": "citybikes",
-    "user_public_key_file": "~/.ssh/citybikes_ed25519.pub",
-    "internal_public_key_file": "~/.ssh/citybikes_internal_ed25519.pub",
-    "bastion_port": 505
+    "bastion_port": 505,
+    "access_public_key_file": "~/.ssh/citybikes_access.pub",
+    "key_ttl_minutes": 15
   },
   "vms": {
     "defaults": {

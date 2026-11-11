@@ -43,15 +43,18 @@
     "ssh": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["user", "user_public_key_file", "internal_public_key_file", "bastion_port"],
+      "required": ["user", "bastion_port", "access_public_key_file", "key_ttl_minutes"],
       "properties": {
         "user": { "type": "string", "pattern": "^[a-z_][a-z0-9_-]{0,31}$" },
-        "user_public_key_file": { "description": "YOUR key: the bastion accepts it", "$ref": "#/$defs/pubkey_file" },
-        "internal_public_key_file": { "description": "The key the other VMs accept", "$ref": "#/$defs/pubkey_file" },
         "bastion_port": {
-              "description": "The port the bastion's sshd listens on (the only SSH port open to the internet)",
-              "type": "integer", "minimum": 1, "maximum": 65535, "not": { "const": 22 }
-        }
+          "description": "The port the bastion's sshd listens on (the only SSH port open to the internet)",
+          "type": "integer", "minimum": 1, "maximum": 65535, "not": { "const": 22 }
+        },
+        "access_public_key_file": {
+          "description": "The public half of the key of the current run (role ssh_access writes it; the private half is only in your ssh-agent)",
+          "$ref": "#/$defs/pubkey_file"
+        },
+        "key_ttl_minutes": { "description": "How long the key of a run is valid on the VMs", "type": "integer", "minimum": 5, "maximum": 120 }
       }
     },
 

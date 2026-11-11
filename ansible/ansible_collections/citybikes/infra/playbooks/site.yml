@@ -7,6 +7,7 @@
   roles:
     - citybikes.infra.config 
     - citybikes.infra.config_validate
+    - citybikes.infra.ssh_access
 
 - name: Load the configuration on every VM (config_json, for the roles below)
   hosts: all

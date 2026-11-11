@@ -8,9 +8,6 @@ locals {
 
   internal_ip = cidrhost(var.config.network.subnet_cidr, local.vm.host)
 
-
-  ssh_key = trimspace(file(pathexpand(local.vm.bastion ? local.ssh.user_public_key_file : local.ssh.internal_public_key_file)))
-
   bastion_user_data = <<-EOT
     #cloud-config
     write_files:
@@ -66,7 +63,6 @@ resource "google_compute_instance" "vm" {
 
   metadata = merge(
     {
-      ssh-keys               = "${local.ssh.user}:${local.ssh_key}"
       block-project-ssh-keys = "true"
       enable-oslogin         = "FALSE"
     },
@@ -83,4 +79,8 @@ resource "google_compute_instance" "vm" {
   }
 
   allow_stopping_for_update = true
+
+  lifecycle {
+    ignore_changes = [metadata["ssh-keys"]] # the keys belong to Ansible
+  }
 }

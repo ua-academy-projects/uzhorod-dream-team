@@ -16,7 +16,7 @@ spec.loader.exec_module(gcp)
 
 CONFIG = {
     "prefix": "citybikes",
-    "ssh": {"user": "citybikes", "user_public_key_file": "~/.ssh/me.pub", "internal_public_key_file": "~/.ssh/internal.pub", "bastion_port": 505},
+     "ssh": {"user": "citybikes", "bastion_port": 505, "access_public_key_file": "~/.ssh/access.pub", "key_ttl_minutes": 15},
     "tls": {"vm": "ui", "domain": "example.org"},
     "vms": {
         "defaults": {"machine_type": "e2-small", "disk_size_gb": 10, "cloud_logging": True, "roles": ["roles/logging.logWriter"]},
@@ -95,24 +95,26 @@ class DatabaseTests(unittest.TestCase):
 
 
 class ConnectionTests(unittest.TestCase):
-    def test_the_bastion_directly_on_its_port_with_your_key_from_the_agent(self):
+    KEY = "-o IdentityFile=" + os.path.expanduser("~/.ssh/access.pub")
+
+    def test_the_bastion_directly_on_its_port_with_the_key_of_this_run(self):
         c = gcp.connection(CONFIG["ssh"], {"bastion": True}, "10.20.0.54", "34.1.2.3")
         self.assertEqual((c["ansible_host"], c["ansible_port"]), ("34.1.2.3", 505))
-        self.assertNotIn("ansible_ssh_private_key_file", c)
-        self.assertIn("-o IdentityFile=" + os.path.expanduser("~/.ssh/me.pub"), c["ansible_ssh_common_args"])
+        self.assertNotIn("ansible_ssh_private_key_file", c) 
+        self.assertIn(self.KEY, c["ansible_ssh_common_args"])
         self.assertIn("-o IdentitiesOnly=yes", c["ansible_ssh_common_args"])
         self.assertNotIn("ProxyCommand", c["ansible_ssh_common_args"])
 
-    def test_the_others_through_the_bastion_the_keys_stay_in_the_agent(self):
+    def test_the_others_through_the_bastion_with_the_same_key(self):
         c = gcp.connection(CONFIG["ssh"], {"bastion": False}, "10.20.0.50", "34.1.2.3")
         self.assertEqual(c["ansible_host"], "10.20.0.50")
-        self.assertNotIn("ansible_port", c) 
+        self.assertNotIn("ansible_port", c)  
         self.assertNotIn("ansible_ssh_private_key_file", c)
         args = c["ansible_ssh_common_args"]
-        self.assertIn("-o IdentityFile=" + os.path.expanduser("~/.ssh/internal.pub"), args)
+        self.assertEqual(args.count(self.KEY), 2) 
         self.assertIn('ProxyCommand="ssh -W %h:%p -q -p 505', args)
         self.assertIn("citybikes@34.1.2.3", args)
-        self.assertNotIn("ForwardAgent", args)
+        self.assertNotIn("ForwardAgent", args) 
 
 
 class PluginTests(unittest.TestCase):

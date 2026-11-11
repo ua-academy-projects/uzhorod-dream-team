@@ -1,0 +1,43 @@
+---
+
+- name: A key pair for this run
+  check_mode: false
+  block:
+    - name: A temporary folder for it
+      ansible.builtin.tempfile:
+        state: directory
+        suffix: .citybikes-ssh
+      register: ssh_access_dir
+
+    - name: The key pair (ed25519, no passphrase; the file lives only a moment)
+      ansible.builtin.command:
+        argv: [ssh-keygen, -q, -t, ed25519, -N, "", -C, citybikes-ansible, -f, "{{ ssh_access_dir.path }}/key"]
+      changed_when: true
+
+    - name: Its private half into YOUR ssh-agent, for as long as it is valid on the VMs
+      ansible.builtin.command:
+        argv: [ssh-add, -q, -t, "{{ ssh_access_ttl_minutes | int * 60 }}", "{{ ssh_access_dir.path }}/key"]
+      changed_when: true
+
+    - name: Its public half where ssh looks for it (IdentityFile)
+      ansible.builtin.copy:
+        src: "{{ ssh_access_dir.path }}/key.pub"
+        dest: "{{ ssh_access_public_key_file }}"
+        mode: "0644"
+
+  always:
+    - name: No private key file is left behind, whatever happened (the agent has the key)
+      ansible.builtin.file:
+        path: "{{ ssh_access_dir.path }}"
+        state: absent
+      when: ssh_access_dir.path is defined
+
+- name: The public key on every VM, until it expires (the guest agent on the VM takes it out then)
+  citybikes.infra.gcp_ssh_key:
+    instance: "{{ item }}"
+    zone: "{{ config_json.location.zone }}"
+    user: "{{ config_json.ssh.user }}"
+    public_key: "{{ lookup('ansible.builtin.file', ssh_access_public_key_file) }}"
+    ttl_minutes: "{{ ssh_access_ttl_minutes | int }}"
+  loop: "{{ ssh_access_vms }}"
+  check_mode: false
