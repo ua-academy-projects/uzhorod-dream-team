@@ -84,16 +84,6 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(gcp.groups_of(CONFIG, "ui", settings["ui"]), ["app", "frontend"])
 
 
-class DatabaseTests(unittest.TestCase):
-    def test_the_private_ip_of_the_instance(self):
-        instance = {"ipAddresses": [{"type": "OUTGOING", "ipAddress": "34.5.6.7"}, {"type": "PRIVATE", "ipAddress": "10.21.0.3"}]}
-        self.assertEqual(gcp.private_address(instance), "10.21.0.3")
-
-    def test_no_instance_or_no_private_ip_gives_empty(self):
-        self.assertEqual(gcp.private_address({}), "")
-        self.assertEqual(gcp.private_address({"ipAddresses": [{"type": "PRIMARY", "ipAddress": "34.5.6.7"}]}), "")
-
-
 class ConnectionTests(unittest.TestCase):
     KEY = "-o IdentityFile=" + os.path.expanduser("~/.ssh/access.pub")
 

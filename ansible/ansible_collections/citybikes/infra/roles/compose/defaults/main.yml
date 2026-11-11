@@ -86,6 +86,15 @@ compose_catalog:
         TUNNEL_TOKEN: "${TUNNEL_TOKEN}"
         TUNNEL_TRANSPORT_PROTOCOL: "{{ config_json.app.cloudflare_tunnel_protocol }}"
 
+  postgres:
+    ports: ["5432:5432"]
+    volumes: ["citybikes-pgdata:/var/lib/postgresql/data"]
+    environment:
+      POSTGRES_DB: "{{ config_json.app.db_name }}"
+      POSTGRES_USER: "{{ config_json.app.db_user }}"
+      POSTGRES_PASSWORD: "${DB_PASSWORD}"
+      ALLOWED_CIDR: "{{ config_json.network.subnet_cidr }}" 
+
 compose_service_defaults:
   restart: unless-stopped                     
   security_opt: ["no-new-privileges:true"]

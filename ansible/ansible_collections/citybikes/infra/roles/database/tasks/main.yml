@@ -1,0 +1,24 @@
+---
+
+- name: The Cloud SQL instance and its private address (asked once, the answer goes to every host)
+  citybikes.infra.gcp_sql_instance:
+    name: "{{ database_cloudsql_instance }}"
+  delegate_to: localhost
+  run_once: true
+  check_mode: false
+  register: database_cloudsql
+  when: database_type == 'cloudsql'
+
+- name: The database the application uses, for every host (the role compose reads these two)
+  ansible.builtin.set_fact:
+    citybikes_db_host: "{{ database_host }}"
+    citybikes_db_sslmode: "{{ database_sslmode }}"
+
+- name: The database is there
+  ansible.builtin.assert:
+    that: citybikes_db_host | length > 0
+    fail_msg: >-
+      {{ 'The Cloud SQL instance ' ~ database_cloudsql_instance ~ ' does not exist (yet) or has no private IP'
+         if database_type == 'cloudsql' else 'No VM runs the service postgres' }}
+    quiet: true
+  run_once: true

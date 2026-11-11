@@ -14,6 +14,7 @@ dependencies:
   ansible.utils: ">=4.0.0"   
   ansible.posix: ">=1.5.0"   
   community.docker: ">=3.10.0" 
+  community.postgresql: ">=3.4.0"
 build_ignore:
   - tests
   - "*.tar.gz"

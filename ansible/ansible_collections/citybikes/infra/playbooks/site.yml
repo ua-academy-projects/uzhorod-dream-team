@@ -9,11 +9,12 @@
     - citybikes.infra.config_validate
     - citybikes.infra.ssh_access
 
-- name: Load the configuration on every VM (config_json, for the roles below)
+- name: The configuration and the database on every VM (config_json, citybikes_db_host)
   hosts: all
   gather_facts: false
   roles:
     - citybikes.infra.config
+    - citybikes.infra.database
 
 - name: VMs of the application
   hosts: app
@@ -22,6 +23,8 @@
   roles:
     - citybikes.infra.docker
     - citybikes.infra.compose
+    - role: citybikes.infra.database_check
+      when: "'history' in citybikes_vm.services"
 
 - name: The site's certificate (HTTPS)
   hosts: frontend

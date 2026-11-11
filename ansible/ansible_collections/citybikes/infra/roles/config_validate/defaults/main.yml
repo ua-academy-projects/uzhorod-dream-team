@@ -23,5 +23,5 @@ config_validate_checks:
     ok: "{{ config_json.app.cache_backend != 'redis' or 'redis' in config_validate_services }}"
   - msg: 'tls.vm must run "ui" and have "cloudflare-api-token" in its "secrets"'
     ok: "{{ config_json.tls.domain == '' or ('ui' in config_validate_tls_vm.services and 'cloudflare-api-token' in config_validate_tls_vm.secrets) }}"
-  - msg: 'the database has no address: the Cloud SQL instance {{ config_json.prefix }}-pg does not exist yet or has no private IP'
-    ok: "{{ citybikes_db_host | length > 0 }}"
+  - msg: 'database.type "vm" needs a VM with the service postgres'
+    ok: "{{ config_json.database.type != 'vm' or 'postgres' in config_validate_services }}"

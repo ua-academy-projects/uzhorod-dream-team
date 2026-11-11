@@ -13,8 +13,6 @@ description:
     on ssh.bastion_port, every other VM through the bastion (ssh -W, the bastion holds no key).
   - For every host and for localhost it sets C(citybikes_config_file), the path of config.json. The role
     config_validate loads it with include_vars.
-  - And C(citybikes_db_host), the address of the database. The private IP of the Cloud SQL instance
-    C(<prefix>-pg), from the Cloud SQL Admin API. Empty while the instance does not exist.
   - The name of the inventory file must end with C(citybikes.yml).
 options:
   plugin:
@@ -117,28 +115,6 @@ def connection(ssh, vm, private_ip, bastion_ip):
         args.append('-o ProxyCommand="{}"'.format(jump))
     settings["ansible_ssh_common_args"] = " ".join(args)
     return settings
-
-# CloudSQL
-SQLADMIN_URL = "https://sqladmin.googleapis.com/v1/projects/{project}/instances/{instance}"
-
-def cloudsql_instance(project, name, credentials_file):
-    """The Cloud SQL instance as the Cloud SQL Admin API describes it, or {} while it does not exist."""
-    from google.auth.transport.requests import AuthorizedSession
-    from google.oauth2 import service_account
-
-    credentials = service_account.Credentials.from_service_account_file(
-        credentials_file, scopes=["https://www.googleapis.com/auth/cloud-platform"]
-    )
-    response = AuthorizedSession(credentials).get(SQLADMIN_URL.format(project=project, instance=name))
-    if response.status_code == 404:
-        return {}
-    response.raise_for_status()
-    return response.json()
-
-def private_address(instance):
-    """The private IP of a Cloud SQL instance (its "ipAddresses" of type PRIVATE), or "" if it has none."""
-    return next((a["ipAddress"] for a in instance.get("ipAddresses", []) if a.get("type") == "PRIVATE"), "")
-
 # VMs
 def read_json(path):
     with open(path, encoding="utf-8") as f:
@@ -165,8 +141,6 @@ class InventoryModule(BaseInventoryPlugin):
         self._list_vms(project, credentials_file)
         self.inventory.set_variable("all", "citybikes_config_file", config_file)
 
-        database = cloudsql_instance(project, config["prefix"] + "-pg", credentials_file)
-        self.inventory.set_variable("all", "citybikes_db_host", private_address(database))
 
         self._describe_vms(config)
 

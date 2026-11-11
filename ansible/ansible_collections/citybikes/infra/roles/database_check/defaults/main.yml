@@ -1,0 +1,4 @@
+---
+
+database_check_secret: "{{ config_json.prefix }}-db-password"
+database_check_pgpass: /run/citybikes/pgpass

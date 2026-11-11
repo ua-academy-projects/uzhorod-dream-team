@@ -1,0 +1,38 @@
+---
+
+- name: psycopg2, the PostgreSQL client library of the community.postgresql modules
+  ansible.builtin.apt:
+    name: python3-psycopg2
+    cache_valid_time: 3600
+
+- name: The check, with the password in memory only while it runs
+  check_mode: false
+  block:
+    - name: The password of the application, from Secret Manager into /run (the VM's own account reads it)
+      ansible.builtin.shell: |
+        set -eu
+        PATH="$PATH:/snap/bin"
+        install -d -m 0700 "$(dirname {{ database_check_pgpass }})"
+        raw="$(gcloud secrets versions access latest --secret={{ database_check_secret }} --quiet)"
+        password="$(printf '%s' "$raw" | sed 's/[\\:]/\\&/g')"
+        umask 077
+        printf '%s:5432:%s:%s:%s\n' '{{ citybikes_db_host }}' '{{ config_json.app.db_name }}' \
+          '{{ config_json.app.db_user }}' "$password" > {{ database_check_pgpass }}
+      changed_when: false
+
+    - name: The application's user logs in to the database it uses
+      community.postgresql.postgresql_ping:
+        login_host: "{{ citybikes_db_host }}"
+        login_user: "{{ config_json.app.db_user }}"
+        login_db: "{{ config_json.app.db_name }}"
+        ssl_mode: "{{ citybikes_db_sslmode }}"
+      environment:
+        PGPASSFILE: "{{ database_check_pgpass }}"
+      register: database_check_ping
+      failed_when: not database_check_ping.is_available
+
+  always:
+    - name: The password file is removed
+      ansible.builtin.file:
+        path: "{{ database_check_pgpass }}"
+        state: absent

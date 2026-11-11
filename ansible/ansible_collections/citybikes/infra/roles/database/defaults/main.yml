@@ -1,0 +1,11 @@
+---
+
+database_type: "{{ config_json.database.type }}"
+database_cloudsql_instance: "{{ config_json.prefix }}-pg"
+
+database_vms: "{{ groups['all'] | map('extract', hostvars) | selectattr('citybikes_vm.services', 'contains', 'postgres') | list }}"
+
+database_host: >-
+  {{ database_cloudsql.private_ip if database_type == 'cloudsql'
+     else database_vms | map(attribute='private_ip') | first | default('') }}
+database_sslmode: "{{ 'require' if database_type == 'cloudsql' else 'disable' }}"
