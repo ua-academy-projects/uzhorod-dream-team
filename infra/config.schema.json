@@ -91,9 +91,10 @@
       "description": "Which PostgreSQL the application uses (type), and Cloud SQL while it exists (cloudsql). PostgreSQL on a VM = the service postgres in that VM's services",
       "type": "object",
       "additionalProperties": false,
-      "required": ["type"],
+      "required": ["type", "vm"],
       "properties": {
-        "type": { "description": "cloudsql: the application uses Cloud SQL. vm: the container postgres on the VM that runs it", "enum": ["cloudsql", "vm"] },
+        "type": { "description": "The database switch: type cloudsql = Cloud SQL exists and the application uses it; type vm = PostgreSQL in Docker on database.vm, Cloud SQL is removed" },
+        "vm": { "description": "The VM that runs PostgreSQL (the service postgres is added to it) while type = vm; never the bastion", "type": "string", "pattern": "^[a-z][a-z0-9-]{0,14}$" },
         "cloudsql": {
           "description": "Cloud SQL exists while this block is here (private IP only)",
           "type": "object",

@@ -4,7 +4,7 @@ config_validate_schema_file: "{{ citybikes_config_file | dirname }}/config.schem
 
 config_validate_hosts: "{{ groups['all'] | map('extract', hostvars) | selectattr('citybikes_vm', 'defined') | list }}"
 config_validate_vms: "{{ dict(config_validate_hosts | map(attribute='vm') | zip(config_validate_hosts | map(attribute='citybikes_vm'))) }}"
-config_validate_missing: "{{ config_json.vms.instances | reject('in', config_validate_vms) | list }}"
+config_validate_missing: "{{ citybikes_vms_expected | reject('in', config_validate_vms) | list }}"
 
 config_validate_bastions: "{{ config_validate_vms | dict2items | selectattr('value.bastion') | map(attribute='key') | list }}"
 config_validate_services: "{{ config_validate_vms.values() | map(attribute='services') | flatten }}"
@@ -23,5 +23,5 @@ config_validate_checks:
     ok: "{{ config_json.app.cache_backend != 'redis' or 'redis' in config_validate_services }}"
   - msg: 'tls.vm must run "ui" and have "cloudflare-api-token" in its "secrets"'
     ok: "{{ config_json.tls.domain == '' or ('ui' in config_validate_tls_vm.services and 'cloudflare-api-token' in config_validate_tls_vm.secrets) }}"
-  - msg: 'database.type "vm" needs a VM with the service postgres'
-    ok: "{{ config_json.database.type != 'vm' or 'postgres' in config_validate_services }}"
+  - msg: 'database.vm must be a VM of vms.instances, and not the bastion'
+    ok: "{{ config_json.database.vm in config_json.vms.instances and not (config_json.vms.instances[config_json.database.vm].bastion | default(false)) }}"

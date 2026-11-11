@@ -36,3 +36,4 @@
       ansible.builtin.file:
         path: "{{ database_check_pgpass }}"
         state: absent
+      changed_when: false

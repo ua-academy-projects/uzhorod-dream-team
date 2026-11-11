@@ -4,8 +4,7 @@ locals {
   network     = var.config.network
   bastion_tag = "bastion"
 
-  postgres_on_vm = anytrue([for vm in var.config.vms.instances : contains(vm.services, "postgres")])
-  internal_ports = distinct(concat(local.network.internal_ports, local.postgres_on_vm ? ["5432"] : []))
+  internal_ports = distinct(concat(local.network.internal_ports, var.config.database.type == "vm" ? ["5432"] : []))
 }
 
 resource "google_compute_network" "vpc" {

@@ -2,7 +2,7 @@
 
 locals {
   labels  = { app = var.config.prefix, managed-by = "terraform" }
-  access  = { for vm, cfg in var.config.vms.instances : vm => [for s in cfg.secrets : "${var.config.prefix}-${s}"] }
+  access  = { for vm, cfg in var.vms : vm => [for s in cfg.secrets : "${var.config.prefix}-${s}"] }
   secrets = toset(flatten(values(local.access)))
 
   grants = merge([

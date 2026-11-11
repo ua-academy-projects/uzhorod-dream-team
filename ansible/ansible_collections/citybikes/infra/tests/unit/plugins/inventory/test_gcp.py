@@ -18,6 +18,8 @@ CONFIG = {
     "prefix": "citybikes",
      "ssh": {"user": "citybikes", "bastion_port": 505, "access_public_key_file": "~/.ssh/access.pub", "key_ttl_minutes": 15},
     "tls": {"vm": "ui", "domain": "example.org"},
+    "app": {"queue_backend": "rabbitmq", "cache_backend": "redis"},
+    "database": {"type": "cloudsql", "vm": "db"},
     "vms": {
         "defaults": {"machine_type": "e2-small", "disk_size_gb": 10, "cloud_logging": True, "roles": ["roles/logging.logWriter"]},
         "instances": {
@@ -83,6 +85,26 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(gcp.groups_of(CONFIG, "db", settings["db"]), ["app"])
         self.assertEqual(gcp.groups_of(CONFIG, "ui", settings["ui"]), ["app", "frontend"])
 
+class SwitchTests(unittest.TestCase):
+    def config(self, queue, cache, database):
+        config = dict(CONFIG, app={"queue_backend": queue, "cache_backend": cache}, database={"type": database, "vm": "db"})
+        config["vms"] = dict(CONFIG["vms"], instances=dict(CONFIG["vms"]["instances"], db={"host": 50, "services": ["redis", "rabbitmq"]}))
+        return config
+
+    def test_now_everything_runs(self):
+        config = self.config("rabbitmq", "redis", "cloudsql")
+        self.assertEqual(gcp.vm_settings(config, "db")["services"], ["redis", "rabbitmq"])
+        self.assertEqual(gcp.expected_vms(config), ["bastion", "db", "ui"])
+
+    def test_postgres_for_queue_and_cache_and_cloudsql_no_db_vm(self):
+        config = self.config("postgres", "postgres", "cloudsql")
+        self.assertEqual(gcp.vm_settings(config, "db")["services"], [])
+        self.assertEqual(gcp.expected_vms(config), ["bastion", "ui"])
+
+    def test_database_on_the_vm_gets_postgres_and_its_password(self):
+        db = gcp.vm_settings(self.config("postgres", "postgres", "vm"), "db")
+        self.assertEqual(db["services"], ["postgres"])
+        self.assertIn("db-password", db["secrets"])
 
 class ConnectionTests(unittest.TestCase):
     KEY = "-o IdentityFile=" + os.path.expanduser("~/.ssh/access.pub")

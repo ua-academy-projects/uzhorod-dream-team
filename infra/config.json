@@ -27,20 +27,21 @@
       "bastion": { "host": 54, "services": [], "bastion": true }
     }
   },
-    "database": {
+  "database": {
     "type": "cloudsql",
+    "vm": "db",
     "cloudsql": {
       "version": "POSTGRES_16",
       "tier": "db-f1-micro",
       "disk_size_gb": 10,
       "private_range": "10.21.0.0/24",
-      "deletion_protection": true
+      "deletion_protection": false
     }
   },
   "tls": { "vm": "ui", "domain": "citybikes-tracker.pp.ua", "email": "fikusivan777@gmail.com", "staging": false },
   "app": {
-    "queue_backend": "rabbitmq",
-    "cache_backend": "redis",
+    "queue_backend": "postgres",
+    "cache_backend": "postgres",
     "citybikes_network": "pittsburgh",
     "poll_interval": 60,
     "db_name": "citybikes",

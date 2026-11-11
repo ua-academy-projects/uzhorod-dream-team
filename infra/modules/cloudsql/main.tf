@@ -17,6 +17,7 @@ resource "google_service_networking_connection" "private" {
   network                 = var.network_id
   service                 = "servicenetworking.googleapis.com"
   reserved_peering_ranges = [google_compute_global_address.private_range.name]
+  deletion_policy         = "ABANDON"
 }
 
 resource "google_sql_database_instance" "pg" {
@@ -53,6 +54,7 @@ resource "google_sql_database_instance" "pg" {
 }
 
 resource "google_sql_database" "app" {
-  name                = var.config.app.db_name
-  instance            = google_sql_database_instance.pg.name
+  name            = var.config.app.db_name
+  instance        = google_sql_database_instance.pg.name
+  deletion_policy = "ABANDON"
 }

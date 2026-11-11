@@ -25,11 +25,6 @@ variable "config" {
       }))
     })
   })
-
-  validation {
-    condition     = alltrue([for vm in var.config.vms.instances : !contains(vm.services, "postgres") || contains(vm.secrets, "db-password")])
-    error_message = "config.json: a VM with the service postgres needs \"db-password\" in its \"secrets\"."
-  }
 }
 
 variable "name" {
@@ -49,4 +44,9 @@ variable "bastion_tag" {
 variable "service_account" {
   description = "E-mail of the account the VM runs as (modules/service_accounts)"
   type        = string
+}
+
+variable "services" {
+  description = "The services that run on it, the switches applied (modules/service_accounts)"
+  type        = list(string)
 }

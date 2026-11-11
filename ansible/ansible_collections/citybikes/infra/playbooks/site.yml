@@ -24,7 +24,7 @@
     - citybikes.infra.docker
     - citybikes.infra.compose
     - role: citybikes.infra.database_check
-      when: "'history' in citybikes_vm.services"
+      when: "'db-password' in citybikes_vm.secrets"
 
 - name: The site's certificate (HTTPS)
   hosts: frontend

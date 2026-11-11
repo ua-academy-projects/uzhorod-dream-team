@@ -6,7 +6,7 @@ module "network" {
 
 module "cloudsql" {
   source = "../../modules/cloudsql"
-  count  = can(jsondecode(file("${path.module}/../../config.json")).database.cloudsql) ? 1 : 0
+  count  = jsondecode(file("${path.module}/../../config.json")).database.type == "cloudsql" ? 1 : 0
 
   config     = jsondecode(file("${path.module}/../../config.json"))
   network_id = module.network.network_id
@@ -20,10 +20,11 @@ module "service_accounts" {
 
 module "vm" {
   source   = "../../modules/vm"
-  for_each = jsondecode(file("${path.module}/../../config.json")).vms.instances
+  for_each = module.service_accounts.vms
 
   config          = jsondecode(file("${path.module}/../../config.json"))
   name            = each.key
+  services        = each.value.services
   subnetwork_id   = module.network.subnetwork_id
   bastion_tag     = module.network.bastion_tag
   service_account = module.service_accounts.emails[each.key]
@@ -34,5 +35,6 @@ module "vm" {
 module "secrets" {
   source  = "../../modules/secrets"
   config  = jsondecode(file("${path.module}/../../config.json"))
+  vms     = module.service_accounts.vms
   members = module.service_accounts.members
 }

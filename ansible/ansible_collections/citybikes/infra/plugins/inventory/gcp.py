@@ -12,7 +12,10 @@ description:
     variables. The keys come from your ssh-agent (only the public key files are named), the bastion directly
     on ssh.bastion_port, every other VM through the bastion (ssh -W, the bastion holds no key).
   - For every host and for localhost it sets C(citybikes_config_file), the path of config.json. The role
-    config_validate loads it with include_vars.
+    config_validate loads it with include_vars. 
+  - C(citybikes_vm) has the switches applied (only the services that run, postgres on database.vm while
+    database.type is vm). And C(citybikes_vms_expected) lists the VMs that must exist (the bastion, and every
+    VM that runs something).
   - The name of the inventory file must end with C(citybikes.yml).
 options:
   plugin:
@@ -69,15 +72,40 @@ def gcp_compute_settings(project, credentials_file):
     }
 
 
+def running_services(config, name, services):
+    """The services that run on this VM: the switches turn rabbitmq (app.queue_backend) and redis
+    (app.cache_backend) off, and put postgres on database.vm while database.type is vm."""
+    app, database = config["app"], config["database"]
+    running = {"rabbitmq": app["queue_backend"] == "rabbitmq", "redis": app["cache_backend"] == "redis"}
+    kept = [service for service in services if running.get(service, True)]
+    if database["type"] == "vm" and name == database["vm"]:
+        kept.append("postgres")
+    return kept
+
+
 def vm_settings(config, name):
-    """A VM of config.json with vms.defaults filled in: its own values replace the defaults, its roles are added."""
+    """A VM of config.json with vms.defaults filled in (its own values replace the defaults, its roles are added)
+    and the switches applied (only the services that run; the VM with postgres reads db-password)."""
     defaults = config["vms"]["defaults"]
     vm = config["vms"]["instances"][name]
     settings = {"bastion": False, "services": [], "secrets": []}
     settings.update(defaults)
     settings.update(vm)
     settings["roles"] = list(dict.fromkeys(defaults.get("roles", []) + vm.get("roles", [])))
+    settings["services"] = running_services(config, name, settings["services"])
+    if "postgres" in settings["services"]:
+        settings["secrets"] = list(dict.fromkeys(settings["secrets"] + ["db-password"]))
     return settings
+
+
+def expected_vms(config):
+    """The VMs that must exist: the bastion, and every VM that runs something (the same rule as Terraform's)."""
+    expected = []
+    for name in config["vms"]["instances"]:
+        vm = vm_settings(config, name)
+        if vm["bastion"] or vm["services"]:
+            expected.append(name)
+    return sorted(expected)
 
 
 def groups_of(config, name, vm):
@@ -140,6 +168,7 @@ class InventoryModule(BaseInventoryPlugin):
 
         self._list_vms(project, credentials_file)
         self.inventory.set_variable("all", "citybikes_config_file", config_file)
+        self.inventory.set_variable("all", "citybikes_vms_expected", expected_vms(config))
 
 
         self._describe_vms(config)
