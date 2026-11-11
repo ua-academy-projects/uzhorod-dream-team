@@ -64,7 +64,9 @@ HTTPS check перевіряє довірений TLS-сертифікат і HT
    (`agent.googleapis.com/disk/percent_used`). Увімкни показ неактивних метрик,
    якщо щойно встановлений агент ще не передав дані.
 3. Додай **state = used**, відфільтруй потрібні VM; для розбору конкретного
-   диска також вибери `device`. Не підсумовуй частки різних дисків.
+   диска також вибери `device`. Додай виключення **device does not start with /dev/loop**:
+   Snap loop-образи read-only і нормально показують 100%. Terraform виключає їх
+   і з графіка, і з алерта. Не підсумовуй частки різних дисків.
 4. Для memory вибери **Memory percent used**
    (`agent.googleapis.com/memory/percent_used`) та **state = used**.
 5. Збережи графіки в дашборд.

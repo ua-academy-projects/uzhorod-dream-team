@@ -52,7 +52,7 @@ locals {
     }
     vm_disk = {
       title     = "VM disk used"
-      filter    = "${local.agent_scope} AND metric.type = \"agent.googleapis.com/disk/percent_used\" AND metric.labels.state = \"used\""
+      filter    = "${local.agent_scope} AND metric.type = \"agent.googleapis.com/disk/percent_used\" AND metric.labels.state = \"used\" AND metric.labels.device != starts_with(\"/dev/loop\")"
       threshold = var.config.disk_threshold
       scale     = 100
     }
