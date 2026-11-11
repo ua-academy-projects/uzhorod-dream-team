@@ -42,3 +42,11 @@ module "vm" {
   service_accounts = google_service_account.vm
   network          = module.network
 }
+
+module "monitoring" {
+  source = "./modules/monitoring"
+  count  = contains(keys(local.cfg), "monitoring") && try(local.cfg.monitoring.enabled, true) ? 1 : 0
+
+  cfg                      = local.cfg
+  notification_channel_ids = var.alert_channel_ids
+}

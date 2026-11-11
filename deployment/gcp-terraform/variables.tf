@@ -24,3 +24,9 @@ variable "secret_revisions" {
   description = "Map of secret variables to their version numbers"
   default     = {}
 }
+
+variable "alert_channel_ids" {
+  type        = list(string)
+  description = "IDs of existing Cloud Monitoring notification channels that receive alerts, created by hand in the console. Pass them as TF_VAR_alert_channel_ids; the address itself never enters Terraform."
+  default     = []
+}
