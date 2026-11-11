@@ -1,6 +1,15 @@
+locals {
+  rules = [for rule in var.config.rules : merge(rule, {
+    enabled = (
+      rule.name == "allow-app-postgres" ? var.database_provider == "container" :
+      contains(["allow-app-rabbitmq", "allow-ui-redis"], rule.name) ? var.app_backend == "hybrid" : true
+    )
+  })]
+}
+
 
 resource "google_compute_firewall" "rules" {
-  for_each  = { for rule in var.config.rules : rule.name => rule if rule.enabled }
+  for_each  = { for rule in local.rules : rule.name => rule if rule.enabled }
   name      = each.value.name
   network   = var.network_id
   direction = each.value.direction

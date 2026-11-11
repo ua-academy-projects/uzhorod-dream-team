@@ -1,5 +1,6 @@
 {
   "ansible_user": "phantom_s",
+  "ansible_ssh_private_key_file": "~/.ssh/google_compute_engine",
   "project_id": "project-a5588ddc-4a2e-4c04-879",
   "region": "europe-west4",
   "zone": "europe-west4-a",
@@ -289,7 +290,40 @@
     "tier": "db-perf-optimized-N-8",
     "public_ip": false,
     "deletion_protection": true,
-    "edition": "ENTERPRISE_PLUS"
+    "edition": "ENTERPRISE_PLUS",
+    "managed": true,
+    "disk_size_gb": 100,
+    "disk_type": "PD_SSD",
+    "disk_autoresize": false,
+    "availability_type": "ZONAL",
+    "data_cache_enabled": true,
+    "enable_dataplex_integration": true,
+    "database_flags": {
+      "cloudsql.iam_authentication": "on"
+    },
+    "backup": {
+      "enabled": false,
+      "point_in_time_recovery_enabled": false,
+      "start_time": "10:00",
+      "transaction_log_retention_days": 14,
+      "retained_backups": 15
+    },
+    "private_service_access": {
+      "ranges": {
+        "google-managed-services-analyzer": {
+          "address": "10.207.0.0",
+          "prefix_length": 16
+        },
+        "analyzer-vpc-ip-range-1793737991439": {
+          "address": "10.38.144.0",
+          "prefix_length": 20
+        }
+      },
+      "peering_ranges": [
+        "google-managed-services-analyzer"
+      ]
+    },
+    "adopt_existing": false
   },
   "database": {
     "provider": "cloud_sql",
@@ -300,5 +334,13 @@
   },
   "ssh": {
     "iap_enabled": true
+  },
+  "monitoring": {
+    "enabled": true,
+    "notification_email": "d.nazaruk2006@gmail.com",
+    "cpu_threshold": 0.8,
+    "disk_threshold": 0.8,
+    "memory_threshold": 0.9,
+    "duration": "300s"
   }
 }

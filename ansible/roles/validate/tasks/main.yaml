@@ -2,13 +2,17 @@
 - name: Validate shared settings on the controller before changing a VM
   delegate_to: localhost
   become: false
+  vars:
+    ansible_connection: local
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
   run_once: true
+  when: not (hostvars['localhost'].datamonitor_config_validated | default(false))
   tags: [always]
   block:
     - name: Validate config.json against its tracked schema
       ansible.utils.validate:
-        data: "{{ lookup('ansible.builtin.file', role_path ~ '/../../../config.json') | from_json }}"
-        criteria: "{{ lookup('ansible.builtin.file', role_path ~ '/../../../config.schema.json') | from_json }}"
+        data: "{{ lookup('ansible.builtin.file', (lookup('env', 'DATAMONITOR_CONFIG') | default(deployment_root ~ '/config.json', true))) | from_json }}"
+        criteria: "{{ lookup('ansible.builtin.file', role_path ~ '/files/config.schema.json') | from_json }}"
         engine: ansible.utils.jsonschema
 
     - name: Check address, zone and firewall consistency
@@ -68,3 +72,8 @@
           allow-app-postgres: ["{{ postgres_port | default(5432) }}"]
           allow-app-rabbitmq: ["{{ rabbitmq_port | default(5672) }}"]
           allow-ui-redis: ["{{ redis_port | default(6379) }}"]
+
+    - name: Remember successful validation for this Ansible execution
+      ansible.builtin.set_fact:
+        datamonitor_config_validated: true
+      delegate_facts: true

@@ -182,47 +182,24 @@ record. Updating the secret alone does not update existing containers: download
 the new environment and recreate the services. Previous PostgreSQL history is
 not being migrated. Its VM still runs RabbitMQ and Redis.
 
-## VM startup and deployment
+## GCP deployment
 
-Terraform stores a short bootstrap in `metadata["startup-script"]`. It keeps
-non-secret deployment settings in `/etc/datamonitor/deploy.env`, obtains the
-configured Git ref on first boot, and invokes `gcp-terra/scripts/deploy.sh` from
-that checkout. Compose, Nginx, HTTPS setup and application source all come from
-the same Git revision. Publish these files to the configured repository before
-using the new bootstrap.
+GCP deployment is managed by project Ansible playbooks using reusable roles
+from the `datamonitor.platform` collection.
+Application VM startup scripts are disabled; only initial bastion access uses
+bootstrap. Build and deployment settings come from the repository config.json.
 
-A regular reboot keeps the current checkout and existing images, refreshes the
-environment secret, and runs Compose without rebuilding. Docker packages are
-installed only when Docker/Compose is missing. A changed Git revision triggers
-an image build; the deployment marker is written only after a successful start.
-For an explicit update on the VM run:
+From the repository root, run `make deploy` for the full deployment or
+`make deploy-ui` for UI only. Images are built on the controller, published to
+Artifact Registry under immutable commit tags, and deployed by digest. The
+release manifest pins both image digests and the Git commit used for Compose,
+SQL and nginx assets. Commit and push application changes before a new release.
 
-```bash
-sudo bash /opt/datamonitor/gcp-terra/scripts/deploy.sh --update
-```
-
-`compute.application.repo_branch` accepts a branch, tag or commit supported by
-`git fetch origin REF`. Use a fixed tag or commit when a reproducible version is
-required. Updating startup metadata does not execute the script automatically;
-reboot the VM or run `sudo google_metadata_script_runner startup` after applying
-an intentional metadata change.
-
-In `hybrid` mode the `database` VM role starts RabbitMQ and Redis. In `postgres`
-mode it stops these containers (keeping their volumes); neither is required. The local PostgreSQL
-service remains in Compose for local development. Old PostgreSQL data is not
-needed. Explicitly disable its old restart policy and stop it on the existing
-VM; its data volumes are retained. The deployment scripts do not stop it for you.
-
-The initial migration from `metadata_startup_script` to `metadata["startup-script"]`
-requires special care: the checked Terraform plan currently proposes replacing
-all five VMs because the old attribute is removed. Do not apply that plan until
-VM data (especially RabbitMQ/Redis on the database VM) is backed up or a state
-migration preserving the VMs has been reviewed. No apply was performed.
-
-Startup receives only the service role, GCP project, environment secret ID,
-HTTPS toggle, repository URL and Git ref. Cloudflare Tunnel is not supported by
-the current deployment path. Cloud SQL connection settings come from Secret
-Manager. No old PostgreSQL history needs to be imported into Cloud SQL.
+Cloud SQL and private services access are managed by Terraform. PostgreSQL
+schema/runtime-role initialization remains in History, so History starts before
+Fetcher. Backend changes do not migrate data automatically or delete volumes
+through Ansible. See [Ansible](../ansible/README.md) and
+[Terraform](../gcp-terra/README.md) for ownership and mode-change details.
 
 ## PGMQ SQL-only on Cloud SQL
 

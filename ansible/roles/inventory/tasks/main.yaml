@@ -1,0 +1,12 @@
+---
+- name: Create the local deployment artifact directory
+  ansible.builtin.file:
+    path: "{{ deployment_inventory | dirname }}"
+    state: directory
+    mode: '0755'
+
+- name: Generate inventory settings from the validated configuration
+  ansible.builtin.template:
+    src: inventory.gcp.yaml.j2
+    dest: "{{ deployment_inventory }}"
+    mode: '0644'

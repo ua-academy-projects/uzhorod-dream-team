@@ -4,14 +4,16 @@ SHELL := /bin/bash
 .NOTPARALLEL:
 
 VENV := $(CURDIR)/.venv
-export ANSIBLE_COLLECTIONS_PATH := $(VENV)/collections
-export ANSIBLE_LOCAL_TEMP := $(VENV)/tmp
+export DATAMONITOR_ROOT := $(CURDIR)
+export DATAMONITOR_CONFIG := $(CURDIR)/config.json
+export ANSIBLE_CONFIG := $(CURDIR)/ansible.cfg
 PLAYBOOK := $(VENV)/bin/ansible-playbook
 LOCAL_PLAYBOOK := $(PLAYBOOK) -i localhost, -e ansible_python_interpreter=$(VENV)/bin/python
-INVENTORY ?= ansible/inventory.gcp.yaml
-RELEASE ?= $(CURDIR)/.deploy/releases/$(shell git log -1 --format=%H -- DataFetcher).json
+INVENTORY ?= $(CURDIR)/.deploy/inventory.gcp.yaml
+# Documentation-only commits don't create a new application release.
+RELEASE ?= $(CURDIR)/.deploy/releases/$(shell git log -1 --format=%H -- DataFetcher ':(exclude)DataFetcher/**/*.md' ':(exclude)DataFetcher/*.md').json
 
-.PHONY: help setup validate start build deploy deploy-ui inventory
+.PHONY: help setup validate configure start build deploy deploy-ui inventory
 
 help:
 	@echo 'make setup      — install local Ansible dependencies once'
@@ -32,24 +34,20 @@ validate:
 start:
 	$(LOCAL_PLAYBOOK) ansible/playbooks/start.yaml
 
+configure:
+	$(LOCAL_PLAYBOOK) ansible/playbooks/configure.yaml
+
 build:
-	@mkdir -p "$(dir $(RELEASE))"
-	@if test -s "$(RELEASE)"; then \
-	  echo 'Using existing release: $(RELEASE)'; \
-	else \
-	  $(LOCAL_PLAYBOOK) ansible/playbooks/build.yaml -e 'build_release_file=$(RELEASE)'; \
-	fi
+	$(LOCAL_PLAYBOOK) ansible/playbooks/build.yaml -e 'build_release_file=$(RELEASE)'
 
 deploy:
-	$(MAKE) start
-	$(MAKE) build
+	$(LOCAL_PLAYBOOK) ansible/playbooks/release.yaml -e 'build_release_file=$(RELEASE)'
 	$(PLAYBOOK) -i "$(INVENTORY)" ansible/playbooks/site.yaml -e '@$(RELEASE)'
 
 deploy-ui:
-	$(MAKE) start
-	$(MAKE) build
+	$(LOCAL_PLAYBOOK) ansible/playbooks/release.yaml -e 'build_release_file=$(RELEASE)'
 	$(PLAYBOOK) -i "$(INVENTORY)" ansible/playbooks/wait.yaml --limit ui
 	$(PLAYBOOK) -i "$(INVENTORY)" ansible/playbooks/ui.yaml -e '@$(RELEASE)'
 
-inventory:
+inventory: configure
 	"$(VENV)/bin/ansible-inventory" -i "$(INVENTORY)" --graph

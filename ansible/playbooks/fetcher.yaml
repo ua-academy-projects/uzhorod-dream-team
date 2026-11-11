@@ -2,15 +2,17 @@
 - name: Deploy Fetcher
   hosts: fetcher
   become: true
+  gather_facts: false
 
   vars_files:
-    - ../../config.json
+    - "{{ lookup('env', 'DATAMONITOR_CONFIG') | default(playbook_dir ~ '/../../config.json', true) }}"
 
   pre_tasks:
     - name: Validate shared deployment settings
       ansible.builtin.import_role:
-        name: ../roles/validate
+        name: validate
       tags: [always]
 
   roles:
-    - role: ../roles/fetcher
+    - role: datamonitor.platform.connection
+    - role: fetcher

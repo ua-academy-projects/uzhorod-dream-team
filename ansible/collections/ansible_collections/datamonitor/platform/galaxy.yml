@@ -1,0 +1,13 @@
+namespace: datamonitor
+name: platform
+version: 1.0.0
+readme: README.md
+authors:
+  - Dmytro Nazaruk
+description: GCP provisioning and immutable application deployment
+license: []
+tags: [gcp, docker, infrastructure]
+dependencies:
+  community.docker: ">=3.8.0,<6.0.0"
+  google.cloud: ">=1.15.0"
+repository: https://github.com/ua-academy-projects/uzhorod-dream-team

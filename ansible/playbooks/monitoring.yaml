@@ -1,0 +1,16 @@
+---
+- name: Configure host metrics on application VMs
+  hosts: internal
+  become: true
+  gather_facts: false
+  vars_files:
+    - "{{ lookup('env', 'DATAMONITOR_CONFIG') | default(playbook_dir ~ '/../../config.json', true) }}"
+  pre_tasks:
+    - name: Validate configuration
+      ansible.builtin.import_role:
+        name: validate
+      tags: [always]
+  roles:
+    - role: datamonitor.platform.connection
+    - role: datamonitor.platform.ops_agent
+      when: (monitoring | default({})).enabled | default(false) | bool

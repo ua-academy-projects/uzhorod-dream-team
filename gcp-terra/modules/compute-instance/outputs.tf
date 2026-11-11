@@ -10,3 +10,7 @@ output "public_ips" {
 output "instance_ids" {
   value = { for key, vm in google_compute_instance.instances : key => vm.id }
 }
+
+output "numeric_instance_ids" {
+  value = { for key, vm in google_compute_instance.instances : key => vm.instance_id }
+}

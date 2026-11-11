@@ -1,5 +1,5 @@
 ---
-- ansible.builtin.import_playbook: wait.yaml
+- ansible.builtin.import_playbook: validate.yaml
 - ansible.builtin.import_playbook: bastion.yaml
 - ansible.builtin.import_playbook: prepare.yaml
 - ansible.builtin.import_playbook: postgres.yaml

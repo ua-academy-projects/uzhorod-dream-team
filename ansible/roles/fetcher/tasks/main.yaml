@@ -11,28 +11,31 @@
 
 - name: Validate release and authenticate to Artifact Registry
   ansible.builtin.include_role:
-    name: "{{ role_path }}/../registry_access"
+    name: registry_access
 
 - name: Get application code
   ansible.builtin.include_role:
-    name: "{{ role_path }}/../app_source"
+    name: datamonitor.platform.app_source
   vars:
     app_source_dir: "{{ fetcher_app_dir }}"
+    app_source_repo: "{{ compute.application.repo_url }}"
+    app_source_ref: "{{ app_release_commit | default(compute.application.repo_branch) }}"
 
 - name: Fetch the Fetcher environment using the VM service account
   ansible.builtin.include_role:
-    name: "{{ role_path }}/../secret_access"
+    name: datamonitor.platform.secret_access
   vars:
-    secret_access_service: fetcher
+    secret_access_project: "{{ project_id }}"
+    secret_access_secret_id: "{{ secret_manager.services.fetcher.secret_id }}"
     secret_access_dest: "{{ fetcher_compose_dir }}/fetcher/.env"
   when: not ansible_check_mode
 
 - name: Deploy Fetcher containers
   ansible.builtin.include_role:
-    name: "{{ role_path }}/../compose_app"
+    name: datamonitor.platform.compose_app
   vars:
     compose_app_dir: "{{ fetcher_compose_dir }}"
-    compose_app_template: "{{ role_path }}/../fetcher/templates/compose.fetcher.yaml.j2"
+    compose_app_template: "{{ deployment_root }}/ansible/roles/fetcher/templates/compose.fetcher.yaml.j2"
     compose_app_files: [compose.fetcher.yaml]
     compose_app_services: [fetcher]
     compose_app_build: never
@@ -53,7 +56,7 @@
 
 - name: Remove the legacy shared environment
   ansible.builtin.include_role:
-    name: "{{ role_path }}/../compose_app"
+    name: datamonitor.platform.compose_app
     tasks_from: cleanup.yaml
   vars:
     compose_app_dir: "{{ fetcher_compose_dir }}"

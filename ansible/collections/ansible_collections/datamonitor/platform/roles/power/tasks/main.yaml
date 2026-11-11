@@ -1,0 +1,43 @@
+---
+- name: Require explicit VM power inputs
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - power_project | default('') | length > 0
+      - power_zone | default('') | length > 0
+      - power_instance_names | default([]) | length > 0
+
+- name: Read the existing VM power states
+  google.cloud.gcp_compute_instance_info:
+    project: "{{ power_project }}"
+    zone: "{{ power_zone }}"
+    auth_kind: application
+  register: power_inventory
+  no_log: true
+
+- name: Select only the required deployment VMs
+  ansible.builtin.set_fact:
+    power_instances: "{{ power_inventory.resources | selectattr('name', 'in', power_instance_names) | list }}"
+  no_log: true
+
+- name: Require existing VMs in a stable power state
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - power_instances | length == power_instance_names | length
+      - power_instances | map(attribute='status') | difference(['RUNNING', 'TERMINATED']) | length == 0
+    fail_msg: Apply the reviewed Terraform configuration first; wait if a VM is transitioning.
+
+- name: Start only existing stopped VMs using their power API
+  google.cloud.gcp_compute_instance:
+    name: "{{ item.name }}"
+    project: "{{ power_project }}"
+    zone: "{{ power_zone }}"
+    auth_kind: application
+    state: present
+    status: RUNNING
+  loop: "{{ power_instances | selectattr('status', 'equalto', 'TERMINATED') | list }}"
+  loop_control:
+    label: "{{ item.name }}"
+  changed_when: true
+  no_log: true

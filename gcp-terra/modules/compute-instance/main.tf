@@ -9,7 +9,7 @@ locals {
         size_gb = coalesce(vm.boot_disk.size_gb, var.config.defaults.boot_disk.size_gb)
         type    = coalesce(vm.boot_disk.type, var.config.defaults.boot_disk.type)
       }
-    })
+    }) if key != "postgres" || var.database_provider != "cloud_sql" || var.config.application.app_backend != "postgres"
   }
 }
 
@@ -62,25 +62,9 @@ resource "google_compute_instance" "instances" {
     }
   }
 
-  metadata = each.value.startup.type == "none" ? {} : {
-    startup-script = each.value.startup.type == "bastion" ? templatefile(
-      "${path.module}/scripts/bastion.sh.tftpl", { ssh_port = each.value.startup.ssh_port }
-      ) : templatefile("${path.module}/scripts/vm-startup.sh.tftpl", {
-        startup_exports = join("\n", [for name, value in {
-          APP_BACKEND              = var.config.application.app_backend
-          DATABASE_PROVIDER        = var.database.provider
-          DATABASE_HOST            = var.database.host
-          DATABASE_NAME            = var.database.name
-          INSTANCE_CONNECTION_NAME = var.database.connection_name
-          SERVICE_ROLE             = each.value.startup.service_role
-          PROJECT_ID               = var.project_id
-          ENV_SECRET_ID            = var.env_secret_ids[each.key]
-          IP_HTTPS                 = tostring(each.value.startup.ip_https)
-          REPO_URL                 = var.config.application.repo_url
-          REPO_REF                 = var.config.application.repo_branch
-        } : "export ${name}='${replace(value, "'", "'\"'\"'")}'"])
-    })
-  }
+  metadata = each.value.startup.type == "bastion" ? {
+    startup-script = templatefile("${path.module}/scripts/bastion.sh.tftpl", { ssh_port = each.value.startup.ssh_port })
+  } : {}
 
   lifecycle {
     ignore_changes = [metadata["ssh-keys"]]

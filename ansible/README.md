@@ -1,145 +1,130 @@
-# Ansible для GCP
+# Ansible для Data Monitor
+
+Сценарії й налаштування конкретного застосунку відокремлені від бібліотеки
+перевикористовуваних ролей:
+
+```text
+ansible.cfg                    # шляхи roles/collections та default inventory
+config.json                    # параметри проєкту й SSH/IAP
+ansible/
+  playbooks/                   # site, release, build, start, configure, окремі VM
+  roles/                       # логіка саме Data Monitor
+    config/, validate/, inventory/, images/, registry_access/
+    bastion/, postgres/, history/, fetcher/, ui/
+  collections/ansible_collections/datamonitor/platform/
+    galaxy.yml
+    meta/runtime.yml
+    roles/                     # загальні операції з явними параметрами
+      common/, docker/, connection/, app_source/, compose_app/
+      secret_access/, power/
+  requirements.yaml
+  requirements-controller.txt
+```
+
+Project playbook-и викликають локальні ролі за коротким ім'ям, а бібліотечні —
+через FQCN `datamonitor.platform.<role>`. У collection немає знань про BTC/ETH,
+назв наших VM чи структури project config. Наприклад, secret_access отримує
+project/secret ID/destination, power — project/zone/список VM, app_source — repo/ref/path.
+Schema належить проєкту й лежить у `ansible/roles/validate/files/config.schema.json`.
+Group_vars та статичного inventory немає.
 
 ## Звичайний запуск
 
 Із кореня репозиторію:
 
 ```bash
-make setup       # один раз на цій машині
-make deploy      # повний деплой
-make deploy-ui   # лише UI, без prepare
-make inventory   # поточні запущені VM
+make setup       # один раз на controller
+make validate    # локальна перевірка конфіга
+make start       # створити inventory і запустити наявні зупинені VM
+make inventory   # показати запущені VM
+make deploy      # підготувати реліз і виконати повний деплой
+make deploy-ui   # підготувати реліз і оновити лише UI
 ```
 
-`make deploy` запускає зупинені VM цього застосунку, збирає/публікує реліз
-або повторно використовує його manifest, чекає SSH через IAP і виконує site.yaml.
-Команда не створює VM і не запускає Terraform. `make deploy-ui` також запускає
-наявні VM, але застосовує тільки роль UI; для початкового налаштування потрібен
-повний deploy. Усі VM мають існувати після погодженого Terraform apply.
+Кореневий ansible.cfg задає project roles та source/third-party collections; активувати
+venv вручну не потрібно. Потрібні Git, Docker daemon, gcloud, чинні ADC та IAP
+credentials, дозволений SSH-ключ і довірені host keys. Оператору потрібні Compute
+read/start permissions та IAP-доступ; publisher — Writer на своєму repository.
+Make не запускає Terraform і не створює відсутні VM.
 
-Перед новим релізом зробіть commit і push змін у DataFetcher. Manifest
-зберігається в `.deploy/releases/<application-commit>.json` (локально, поза Git).
-Зміни лише Ansible/Terraform не спричиняють повторної збірки застосунку.
-Щоб застосувати попередній реліз: `make deploy RELEASE=/absolute/path/release.json`.
-Make використовує окремий `.venv` та локальні collections; активувати venv вручну
-не потрібно. Активна gcloud-сесія потрібна для IAP/start, ADC — для inventory/push.
+## Inventory та конфіг
 
-`config.json` — спільні несекретні налаштування; `config.schema.json` — їхня схема.
-Кожен playbook перевіряє конфіг на controller перед змінами VM, включно з
-точковим запуском `--limit ui`. Cloud SQL залишається зовнішньою передумовою:
-наявний Terraform не створює інстанс.
+`make configure` спочатку виконує JSON schema validation, потім генерує
+`.deploy/inventory.gcp.yaml` із project, zone та потрібних VM у config.json.
+Стандартний `google.cloud.gcp_compute` отримує актуальні IP з GCP API, вибираючи
+лише RUNNING VM. Вручну список адрес не підтримується. Кастомного Python-плагіна,
+статичного inventory та group_vars немає.
 
-## Підготовка controller
+Групи: bastion, internal та група кожного сервісу. Додаткові `os_ubuntu`/`os_debian`
+формуються за оголошеним у конфігу boot image, а не за віддаленими SSH facts.
+У режимі cloud_sql + postgres postgres VM виключається з inventory і power.
+У hybrid ця VM потрібна для RabbitMQ/Redis навіть із Cloud SQL.
 
-Потрібні Ansible, Python із залежностями нижче, gcloud, Git, а для збірки —
-Docker із доступом до daemon та можливістю збирати `linux/amd64`.
+До bastion з'єднання йде через IAP, до application VM — через SSH forwarding
+на bastion. Host-key checking збережено. `ansible.cfg` задає timeout 60 секунд,
+pipelining та автоматичне визначення Python на VM. Шаблон inventory задає SSH-порти
+та IAP/ProxyCommand; цих виразів у `config.json` немає. Для локальних play-ів
+Make явно використовує Python контролера із `.venv`.
+
+Для прямого виклику запускайте project playbook-и з кореня репозиторію:
 
 ```bash
-python3 -m pip install -r ansible/requirements-controller.txt
-ansible-galaxy collection install -r ansible/requirements.yaml
-ansible-playbook -i localhost, ansible/playbooks/validate.yaml
-ansible-playbook -i ansible/inventory.yaml ansible/playbooks/site.yaml --syntax-check
+.venv/bin/ansible-playbook -i localhost, ansible/playbooks/configure.yaml
+.venv/bin/ansible-playbook -i .deploy/inventory.gcp.yaml ansible/playbooks/site.yaml \
+  -e @.deploy/releases/RELEASE.json --limit ui
 ```
 
-Використовуйте venv, якщо системний Python забороняє pip install. Python, яким
-виконується локальний validate, також має містити jsonschema; за потреби задайте
-`-e ansible_python_interpreter=/absolute/path/to/venv/bin/python` для localhost.
+Project playbook-и підтримують DATAMONITOR_ROOT/DATAMONITOR_CONFIG для іншого
+шляху конфіга. Бібліотечна collection сама project config не читає. Прямі ad-hoc
+ansible-команди потребують `-e @config.json`.
+Синтаксис без GCP API можна перевірити через `-i localhost, ... --syntax-check`;
+попередження про відсутні remote-групи тоді очікувані.
 
-## Перший перехід на Artifact Registry та IAP
+## Валідація та порядок
 
-Для нового середовища або першого переходу підготуйте й перегляньте Terraform
-plan з `iap_members` та, за потреби, `image_publishers` (див. `gcp-terra/README.md`).
-Без явного `iap_members` plan зупиниться до видалення публічного IP bastion.
-Для нових API/IAM може знадобитися активний адміністратор; не розширюйте постійні
-права terraform-deployer лише для цього переходу.
+Validate — перша роль. Схема перевіряє структуру/типи, assert перевіряє зв'язки
+між полями (унікальні IP, zone/region, відповідність firewall тегам і портам).
+Результат запам'ятовується тільки в пам'яті localhost на час одного Ansible
+execution: наступні play-и не повторюють schema validation. Окремий точковий
+playbook також перевіряє конфіг, у тому числі з --limit ui, до SSH/змін VM.
 
-Після погодженого apply перевірте IAP SSH, створіть реліз і виконайте Ansible.
-VM startup лишається вимкненим для застосунків; bootstrap SSH bastion збережено.
-SSH-ключі повинні вже бути дозволені на VM: IAP не замінює SSH-автентифікацію.
+Controller release: validate → inventory → power → images.
+Site: validate → bastion → prepare → postgres → history → fetcher → ui.
+Remote play-и використовують connection перед функціональними ролями.
+Prepare встановлює common/docker на internal та Ops Agent, якщо monitoring.enabled=true.
 
-## Збірка та immutable релізи
+## Образи, секрети та перевірки
 
-Збірка відокремлена від деплою. Commit і push змін у `DataFetcher/` обов'язкові:
-VM отримують із Git SQL/Compose/nginx assets саме цього commit. Dockerfile
-Fetcher/History тепер запускає процес під UID/GID 65532; UI вже використовує
-користувача app. Змін у бізнес-логіці немає.
+Перед новим релізом commit і push змін у DataFetcher обов'язкові. Images використовує
+`community.docker.docker_image` та `docker_image_push`, immutable commit tags і
+записує digest manifest у `.deploy/releases/<application-commit>.json`.
+Application commit визначається за змінами DataFetcher без Markdown-документації.
+Існуючий manifest повторно використовується; infrastructure-only commit не
+спричиняє перебудову. Відкат: `make deploy RELEASE=/absolute/path/release.json`.
+Це відкат образів/assets, а не даних чи схеми БД.
 
-Налаштуйте ADC publisher (`gcloud auth application-default login` або наявні
-ADC credentials). Йому потрібен Artifact Registry Writer на цьому repository.
+VM отримують Git assets того самого commit, власний env через metadata/Secret
+Manager URI та образи за sha256. Build на VM вимкнений. Env root:0600, no_log,
+diff вимкнений. Старий спільний env видаляється після перевірок сервісу.
 
-```bash
-ansible-playbook -i localhost, ansible/playbooks/build.yaml
-# Результат: /tmp/datamonitor-release-<40-char-commit>.json
-# Або власне місце збереження:
-ansible-playbook -i localhost, ansible/playbooks/build.yaml \
-  -e build_release_file=/tmp/datamonitor-release.json
-```
+Compose має окремі render/start/cleanup, непорожній список сервісів і bounded
+json-file logs (10m × 3). App-контейнери non-root/read-only, cap_drop ALL,
+no-new-privileges і /tmp tmpfs. Nginx зберігає потрібні штатні capabilities для TLS,
+але має read-only rootfs/tmpfs. DB/broker/cache зберігають writable volumes.
+HTTPS renewal залишається в block/always, nginx перевіряється через Docker exec module.
 
-Playbook збирає три образи, пушить теги commit SHA й записує manifest із
-`app_release_commit` та `app_images` (`repository/service@sha256:...`). Registry
-забороняє змінювати теги. Повторна збірка того самого commit не може підмінити
-вже опублікований тег; для іншого вмісту потрібен новий commit.
-Збережіть manifest як артефакт релізу поза `/tmp`. Він не містить секретів.
-Налаштовуваний `build_source_dir` має вказувати на корінь цього репозиторію.
+CLI залишений для Git introspection, отримання короткоживучого ADC token,
+Certbot та діагностичних sshd/fail2ban команд. Вони мають окреме призначення;
+паролі й токени не виводяться. SQL initialization належить History, а не
+дублюється Ansible-командами. Моніторинг цією реалізацією не змінюється.
 
-## Inventory та SSH
+## Моніторинг
 
-- `inventory.gcp.yaml` отримує RUNNING VM з GCP API. Потрібні ADC і
-  `compute.instances.list`, наприклад Compute Viewer. Project, zone та п'ять
-  імен VM у джерелі буквальні: оновлюйте їх разом із `config.json`.
-- `inventory.yaml` — статичний варіант і syntax-check без GCP API.
-- Обидва використовують `group_vars/all.yaml`: внутрішні адреси, SSH user і порт
-  bastion із config, ключ `~/.ssh/google_compute_engine`, Python `/usr/bin/python3.12`.
-- До bastion з'єднання йде через `gcloud compute start-iap-tunnel`, до application
-  VM — через SSH forwarding на bastion, який також доступний через IAP.
-  Локальний SSH config для ProxyJump не потрібний, host-key checking збережений.
-- Оператору потрібні IAP Tunnel Resource Accessor на bastion і Compute read
-  permissions. `gcloud auth login` для IAP та ADC для inventory — різні credentials.
-- Не поєднуйте обидва inventory: вони називають ті самі VM по-різному.
-  Група `ui` працює в обох; GCE hostname в динамічному inventory — `ui-instance`.
+`prepare.yaml` встановлює `datamonitor.platform.ops_agent`, якщо
+`monitoring.enabled=true`. Для окремого запуску: `ansible/playbooks/monitoring.yaml`.
+Agent збирає системні метрики на application VM; IAM, dashboard, policies та
+uptime check належать Terraform. [Інструкція Google Cloud Console](../gcp-terra/MONITORING.md).
 
-```bash
-ansible-inventory -i ansible/inventory.gcp.yaml --graph
-ansible-playbook -i ansible/inventory.gcp.yaml ansible/playbooks/site.yaml --list-hosts
-# Лише коли потрібен деплой:
-ansible-playbook -i ansible/inventory.gcp.yaml ansible/playbooks/site.yaml \
-  -e @/tmp/datamonitor-release.json
-ansible-playbook -i ansible/inventory.gcp.yaml ansible/playbooks/site.yaml \
-  --limit ui -e @/tmp/datamonitor-release.json
-# Лише оновлення UI без prepare:
-ansible-playbook -i ansible/inventory.gcp.yaml ansible/playbooks/ui.yaml \
-  -e @/tmp/datamonitor-release.json
-```
-
-Fetcher/History/UI вимагають повний manifest, перевіряють registry paths/digests,
-автентифікуються metadata token власної VM й використовують `build: never`,
-`pull: missing`. Кеш Docker повторно використовує той самий digest.
-Для відкату передайте попередній manifest; це не відкочує схему чи дані БД.
-Playbook збірки не імпортується в `site.yaml`.
-
-## Ролі та порядок
-
-`site.yaml`: wait → bastion → prepare → postgres → history → fetcher → ui.
-`prepare.yaml`: common і docker лише для internal. Окремі playbook-и збережено.
-`app_source` отримує Git-код без force; `compose_app` має окремі render/start/cleanup,
-щоб PostgreSQL зупиняв зайві сервіси між render і start без видалення volumes.
-Порожній список запуску Compose заборонений. PostgreSQL/RabbitMQ/Redis — готові
-образи; у режимі cloud_sql + postgres запуск контейнерів на postgres VM пропускається.
-
-Секрети читає `secret_access` через metadata/Secret Manager URI без gcloud на VM;
-env належать root із `0600`, `no_log` і вимкненим diff. VM accounts отримують
-лише свої секрети; Artifact Registry Reader потрібен тільки Fetcher/History/UI.
-Старий спільний env видаляється після успішних перевірок сервісу.
-
-Усі керовані Compose-сервіси мають json-file logs: 10 MiB × 3 файли.
-Fetcher/History/UI: read-only rootfs, cap_drop ALL, no-new-privileges і обмежений
-/tmp у tmpfs. Nginx: read-only rootfs, tmpfs для cache/run/tmp та no-new-privileges;
-штатні capabilities залишені для старту root master, worker user і читання TLS key.
-PostgreSQL/RabbitMQ/Redis зберігають writable volumes і штатних користувачів;
-для них додано no-new-privileges, без небезпечного примусового cap_drop ALL.
-
-HTTPS, Certbot і renewal timer залишаються в UI; prepare/deploy мають block/always
-для відновлення timer навіть після помилки. У check mode секрети, login, запуск
-контейнерів і cleanup пропускаються; на порожній VM checkout може бути відсутнім.
-Порти Ansible, bind-адреси й `config.json` firewall повинні відповідати одне одному.
-Локальний/Vagrant шлях `DataFetcher/docker-compose.yml` не змінено.
+SSH forwarding використовує ім’я Bastion як SSH identity: IAP сам визначає
+GCE endpoint. На новому controller потрібно перевірити й довірити також ключ
+`[BASTION_NAME]:SSH_PORT`, окрім ключів приватних IP; host-key checking не вимикається.

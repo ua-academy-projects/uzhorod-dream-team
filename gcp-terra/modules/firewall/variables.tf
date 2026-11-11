@@ -35,3 +35,6 @@ variable "source_ranges_by_key" {
   type        = map(list(string))
   default     = {}
 }
+
+variable "database_provider" { type = string }
+variable "app_backend" { type = string }

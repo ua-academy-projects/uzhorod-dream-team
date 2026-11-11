@@ -4,6 +4,6 @@
   connection: local
   gather_facts: false
   vars_files:
-    - ../../config.json
+    - "{{ lookup('env', 'DATAMONITOR_CONFIG') | default(playbook_dir ~ '/../../config.json', true) }}"
   roles:
-    - role: ../roles/validate
+    - role: validate

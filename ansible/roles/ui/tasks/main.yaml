@@ -16,13 +16,15 @@
     fail_msg: Use Ansible deployment, distinct valid ports and public ports 80/443 for IP HTTPS.
 - name: Validate release and authenticate to Artifact Registry
   ansible.builtin.include_role:
-    name: "{{ role_path }}/../registry_access"
+    name: registry_access
 
 - name: Get application code
   ansible.builtin.include_role:
-    name: '{{ role_path }}/../app_source'
+    name: datamonitor.platform.app_source
   vars:
     app_source_dir: '{{ ui_app_dir }}'
+    app_source_repo: "{{ compute.application.repo_url }}"
+    app_source_ref: "{{ app_release_commit | default(compute.application.repo_branch) }}"
 - name: Read the shared Compose definition
   ansible.builtin.slurp:
     src: '{{ ui_compose_dir }}/docker-compose.yml'
@@ -45,9 +47,10 @@
   - /etc/letsencrypt
 - name: Fetch the UI environment using the VM service account
   ansible.builtin.include_role:
-    name: '{{ role_path }}/../secret_access'
+    name: datamonitor.platform.secret_access
   vars:
-    secret_access_service: ui
+    secret_access_project: "{{ project_id }}"
+    secret_access_secret_id: "{{ secret_manager.services.ui.secret_id }}"
     secret_access_dest: '{{ ui_compose_dir }}/ui/.env'
   when: not ansible_check_mode
 - name: Deploy UI and nginx
@@ -66,10 +69,10 @@
     ansible.builtin.include_tasks: nginx.yaml
   - name: Deploy UI and nginx containers
     ansible.builtin.include_role:
-      name: '{{ role_path }}/../compose_app'
+      name: datamonitor.platform.compose_app
     vars:
       compose_app_dir: '{{ ui_compose_dir }}'
-      compose_app_template: '{{ role_path }}/../ui/templates/compose.ui.yaml.j2'
+      compose_app_template: '{{ deployment_root }}/ansible/roles/ui/templates/compose.ui.yaml.j2'
       compose_app_files:
       - compose.ui.yaml
       compose_app_env_files:
@@ -127,7 +130,7 @@
     - not ansible_check_mode
   - name: Remove the legacy shared environment
     ansible.builtin.include_role:
-      name: '{{ role_path }}/../compose_app'
+      name: datamonitor.platform.compose_app
       tasks_from: cleanup.yaml
     vars:
       compose_app_dir: '{{ ui_compose_dir }}'

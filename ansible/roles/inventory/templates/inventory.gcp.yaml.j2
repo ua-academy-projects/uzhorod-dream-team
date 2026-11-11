@@ -1,0 +1,38 @@
+# Generated from config.json; edit the configuration, not this file.
+plugin: google.cloud.gcp_compute
+auth_kind: application
+projects: {{ [project_id] | to_json }}
+zones: {{ [zone] | to_json }}
+filters:
+  - status = RUNNING
+  - {{ ('(' ~ (deployment_instances.values() | map(attribute='name') | map('regex_replace', '^(.*)$', 'name = \\1') | join(' OR ')) ~ ')') | to_json }}
+hostnames: [name]
+vars_prefix: gcp_
+retrieve_image_info: false
+cache: false
+{% set iap = 'gcloud compute start-iap-tunnel ' ~ (compute.instances.bastion.name | quote) ~ ' ' ~ compute.instances.bastion.startup.ssh_port ~ ' --listen-on-stdin --project=' ~ (project_id | quote) ~ ' --zone=' ~ (zone | quote) ~ ' --verbosity=warning' %}
+{# The jump destination is an SSH identity; IAP resolves the actual GCE endpoint. #}
+{% set jump = 'ssh -W %h:%p -p ' ~ compute.instances.bastion.startup.ssh_port ~ ' -l ' ~ (ansible_user | quote) ~ ' -i ' ~ (ansible_ssh_private_key_file | expanduser | quote) ~ ' -o IdentitiesOnly=yes -o ForwardAgent=no -o ProxyCommand=' ~ (iap | quote) ~ ' ' ~ (compute.instances.bastion.name | quote) %}
+{% set bastion_args = '-o IdentitiesOnly=yes -o ProxyCommand=' ~ (iap | quote) %}
+{% set internal_args = '-o IdentitiesOnly=yes -o ProxyCommand=' ~ (jump | quote) %}
+compose:
+  ansible_port: {{ (compute.instances.bastion.startup.ssh_port ~ ' if name == ' ~ (compute.instances.bastion.name | to_json) ~ ' else 22') | to_json }}
+  ansible_ssh_common_args: {{ ((bastion_args | to_json) ~ ' if name == ' ~ (compute.instances.bastion.name | to_json) ~ ' else ' ~ (internal_args | to_json)) | to_json }}
+  ansible_host: networkInterfaces[0].networkIP
+groups:
+  internal: {{ ("name in " ~ (deployment_instances | dict2items | rejectattr('key', 'equalto', 'bastion') | map(attribute='value.name') | list | to_json)) | to_json }}
+{% for role, vm in deployment_instances.items() %}
+  {{ role }}: {{ ("name == " ~ (vm.name | to_json)) | to_json }}
+{% endfor %}
+{% for os in ['ubuntu', 'debian'] %}
+{% set names = [] %}
+{% for role, vm in deployment_instances.items() %}
+{% set image = (vm.boot_disk | default({})).image | default(compute.defaults.boot_disk.image) %}
+{% if os in image | lower %}
+{% set _ = names.append(vm.name) %}
+{% endif %}
+{% endfor %}
+{% if names %}
+  os_{{ os }}: {{ ("name in " ~ (names | to_json)) | to_json }}
+{% endif %}
+{% endfor %}

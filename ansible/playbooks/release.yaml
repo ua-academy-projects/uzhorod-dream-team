@@ -1,0 +1,15 @@
+- name: Release deployment artifacts
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars_files:
+  - "{{ lookup('env', 'DATAMONITOR_CONFIG') | default(playbook_dir ~ '/../../config.json', true) }}"
+  roles:
+  - role: validate
+  - role: inventory
+  - role: datamonitor.platform.power
+    vars:
+      power_project: "{{ project_id }}"
+      power_zone: "{{ zone }}"
+      power_instance_names: "{{ deployment_instances.values() | map(attribute='name') | list }}"
+  - role: images

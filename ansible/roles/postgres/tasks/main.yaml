@@ -15,9 +15,11 @@
 
 - name: Get application code
   ansible.builtin.include_role:
-    name: "{{ role_path }}/../app_source"
+    name: datamonitor.platform.app_source
   vars:
     app_source_dir: "{{ postgres_app_dir }}"
+    app_source_repo: "{{ compute.application.repo_url }}"
+    app_source_ref: "{{ app_release_commit | default(compute.application.repo_branch) }}"
 
 - name: Read the shared Compose service definitions
   ansible.builtin.slurp:
@@ -30,19 +32,20 @@
 
 - name: Fetch the PostgreSQL and RabbitMQ environment using the VM service account
   ansible.builtin.include_role:
-    name: "{{ role_path }}/../secret_access"
+    name: datamonitor.platform.secret_access
   vars:
-    secret_access_service: postgres
+    secret_access_project: "{{ project_id }}"
+    secret_access_secret_id: "{{ secret_manager.services.postgres.secret_id }}"
     secret_access_dest: "{{ postgres_compose_dir }}/postgres/.env"
   when: not ansible_check_mode
 
 - name: Render the database VM Compose configuration
   ansible.builtin.include_role:
-    name: "{{ role_path }}/../compose_app"
+    name: datamonitor.platform.compose_app
     tasks_from: render.yaml
   vars:
     compose_app_dir: "{{ postgres_compose_dir }}"
-    compose_app_template: "{{ role_path }}/../postgres/templates/compose.postgres.yaml.j2"
+    compose_app_template: "{{ deployment_root }}/ansible/roles/postgres/templates/compose.postgres.yaml.j2"
     compose_app_files: [compose.postgres.yaml]
 
 - name: Stop services no longer required without deleting containers or volumes
@@ -61,7 +64,7 @@
 
 - name: Start the selected database VM containers
   ansible.builtin.include_role:
-    name: "{{ role_path }}/../compose_app"
+    name: datamonitor.platform.compose_app
     tasks_from: start.yaml
   vars:
     compose_app_dir: "{{ postgres_compose_dir }}"
@@ -76,7 +79,7 @@
 
 - name: Remove the legacy shared environment
   ansible.builtin.include_role:
-    name: "{{ role_path }}/../compose_app"
+    name: datamonitor.platform.compose_app
     tasks_from: cleanup.yaml
   vars:
     compose_app_dir: "{{ postgres_compose_dir }}"

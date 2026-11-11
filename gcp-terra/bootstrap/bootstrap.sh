@@ -230,75 +230,6 @@ write_terraform_settings() {
     "$BUCKET_NAME" "$STATE_PREFIX" > "${SCRIPT_DIR}/backend.hcl"
 }
 
-ensure_cloud_sql() {
-  [[ "$(jq -r '.database.provider' "$CONFIG_FILE")" == cloud_sql ]] || return 0
-  local instance network region zone version tier edition database instances details ranges peerings databases
-  instance="$(jq -er '.cloud_sql.instance_name' "$CONFIG_FILE")"
-  network="$(jq -er '.network.name' "$CONFIG_FILE")"
-  region="$(jq -er '.cloud_sql.region' "$CONFIG_FILE")"
-  zone="$(jq -er '.cloud_sql.zone' "$CONFIG_FILE")"
-  version="$(jq -er '.cloud_sql.database_version' "$CONFIG_FILE")"
-  tier="$(jq -er '.cloud_sql.tier' "$CONFIG_FILE")"
-  edition="$(jq -er '.cloud_sql.edition' "$CONFIG_FILE")"
-  database="$(jq -er '.database.name' "$CONFIG_FILE")"
-
-  # The VPC is owned by Terraform, including on a brand-new project.
-  # Target only networking: the placeholder SSH CIDR never reaches a firewall.
-  local networks
-  networks="$(gcloud compute networks list --project="$PROJECT_ID" --format=json)"
-  if ! jq -e --arg name "$network" 'any(.[]; .name == $name)' <<< "$networks" >/dev/null; then
-    (
-      source "${SCRIPT_DIR}/terraform.env.sh"
-      terraform -chdir="${SCRIPT_DIR}/.." init -input=false \
-        -backend-config="${SCRIPT_DIR}/backend.hcl"
-      terraform -chdir="${SCRIPT_DIR}/.." apply -input=false -auto-approve \
-        -target=module.network -var=admin_ip_cidr=127.0.0.1/32
-    )
-  fi
-
-  peerings="$(gcloud services vpc-peerings list --project="$PROJECT_ID" \
-    --network="$network" --service=servicenetworking.googleapis.com --format=json)"
-  if [[ "$(jq 'length' <<< "$peerings")" == 0 ]]; then
-    local range_name="${network}-cloud-sql"
-    ranges="$(gcloud compute addresses list --global --project="$PROJECT_ID" --format=json)"
-    if ! jq -e --arg name "$range_name" 'any(.[]; .name == $name)' <<< "$ranges" >/dev/null; then
-      gcloud compute addresses create "$range_name" --global --purpose=VPC_PEERING \
-        --prefix-length=16 --network="$network" --project="$PROJECT_ID" --quiet
-    fi
-    gcloud services vpc-peerings connect --network="$network" \
-      --service=servicenetworking.googleapis.com --ranges="$range_name" \
-      --project="$PROJECT_ID" --quiet
-  fi
-
-  instances="$(gcloud sql instances list --project="$PROJECT_ID" --format=json)"
-  if ! jq -e --arg name "$instance" 'any(.[]; .name == $name)' <<< "$instances" >/dev/null; then
-    local flags=(--no-assign-ip --no-deletion-protection)
-    if [[ "$(jq -r '.cloud_sql.public_ip' "$CONFIG_FILE")" == true ]]; then
-      flags[0]=--assign-ip
-    fi
-    if [[ "$(jq -r '.cloud_sql.deletion_protection' "$CONFIG_FILE")" == true ]]; then
-      flags[1]=--deletion-protection
-    fi
-    gcloud sql instances create "$instance" --project="$PROJECT_ID" \
-      --database-version="$version" --edition="$edition" --tier="$tier" \
-      --region="$region" --zone="$zone" \
-      --network="projects/${PROJECT_ID}/global/networks/${network}" \
-      "${flags[@]}" --quiet
-  fi
-  details="$(gcloud sql instances describe "$instance" --project="$PROJECT_ID" --format=json)"
-  jq -e --arg region "$region" --arg version "$version" --arg network "/networks/$network" '
-    .state == "RUNNABLE" and .region == $region and .databaseVersion == $version and
-    (.settings.ipConfiguration.privateNetwork | endswith($network)) and
-    any(.ipAddresses[]; .type == "PRIVATE")
-  ' <<< "$details" >/dev/null || fail 'Cloud SQL state, version, region or private network differs; existing instance was not modified.'
-  databases="$(gcloud sql databases list --instance="$instance" --project="$PROJECT_ID" --format=json)"
-  if ! jq -e --arg name "$database" 'any(.[]; .name == $name)' <<< "$databases" >/dev/null; then
-    gcloud sql databases create "$database" --instance="$instance" --project="$PROJECT_ID" --quiet
-  fi
-  echo "Cloud SQL ready: ${PROJECT_ID}:${region}:${instance}, database ${database}"
-  echo 'For a new instance, configure the application DB user/password from Secret Manager; postgres backend also requires SQL-only PGMQ (see DataFetcher/README.md).'
-}
-
 validate_config() {
   jq -e '
     (.database.provider == "cloud_sql" or .database.provider == "container") and
@@ -316,7 +247,6 @@ main() {
   ensure_state_bucket
   ensure_service_account_key
   write_terraform_settings
-  ensure_cloud_sql
 
   echo 'Done. Run: source gcp-terra/bootstrap/terraform.env.sh'
 }

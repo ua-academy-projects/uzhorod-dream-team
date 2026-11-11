@@ -11,28 +11,31 @@
 
 - name: Validate release and authenticate to Artifact Registry
   ansible.builtin.include_role:
-    name: "{{ role_path }}/../registry_access"
+    name: registry_access
 
 - name: Get application code
   ansible.builtin.include_role:
-    name: "{{ role_path }}/../app_source"
+    name: datamonitor.platform.app_source
   vars:
     app_source_dir: "{{ history_app_dir }}"
+    app_source_repo: "{{ compute.application.repo_url }}"
+    app_source_ref: "{{ app_release_commit | default(compute.application.repo_branch) }}"
 
 - name: Fetch the History environment using the VM service account
   ansible.builtin.include_role:
-    name: "{{ role_path }}/../secret_access"
+    name: datamonitor.platform.secret_access
   vars:
-    secret_access_service: history
+    secret_access_project: "{{ project_id }}"
+    secret_access_secret_id: "{{ secret_manager.services.history.secret_id }}"
     secret_access_dest: "{{ history_compose_dir }}/history/.env"
   when: not ansible_check_mode
 
 - name: Deploy History containers
   ansible.builtin.include_role:
-    name: "{{ role_path }}/../compose_app"
+    name: datamonitor.platform.compose_app
   vars:
     compose_app_dir: "{{ history_compose_dir }}"
-    compose_app_template: "{{ role_path }}/../history/templates/compose.history.yaml.j2"
+    compose_app_template: "{{ deployment_root }}/ansible/roles/history/templates/compose.history.yaml.j2"
     compose_app_files: [compose.history.yaml]
     compose_app_services: [history]
     compose_app_build: never
@@ -53,7 +56,7 @@
 
 - name: Remove the legacy shared environment
   ansible.builtin.include_role:
-    name: "{{ role_path }}/../compose_app"
+    name: datamonitor.platform.compose_app
     tasks_from: cleanup.yaml
   vars:
     compose_app_dir: "{{ history_compose_dir }}"

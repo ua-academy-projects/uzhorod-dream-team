@@ -1,0 +1,7 @@
+---
+deployment_root: "{{ (lookup('env', 'DATAMONITOR_ROOT') | default(playbook_dir ~ '/../..', true)) | realpath }}"
+deployment_inventory: "{{ deployment_root }}/.deploy/inventory.gcp.yaml"
+deployment_instances: >-
+  {{ compute.instances | dict2items | rejectattr('key', 'equalto', 'postgres') | items2dict
+     if database.provider == 'cloud_sql' and compute.application.app_backend == 'postgres'
+     else compute.instances }}

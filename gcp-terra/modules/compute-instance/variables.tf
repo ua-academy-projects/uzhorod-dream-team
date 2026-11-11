@@ -42,6 +42,11 @@ variable "config" {
     condition     = contains(["hybrid", "postgres"], var.config.application.app_backend)
     error_message = "compute.application.app_backend must be hybrid or postgres."
   }
+  validation {
+    condition     = alltrue([for vm in values(var.config.instances) : contains(["none", "bastion"], vm.startup.type)])
+    error_message = "Only initial bastion SSH bootstrap is supported; application deployment belongs to Ansible."
+  }
+
 }
 
 variable "project_id" {
@@ -62,20 +67,10 @@ variable "region" {
   type        = string
 }
 
-variable "env_secret_ids" {
-  description = "Per-VM Secret Manager environment secret IDs"
-  type        = map(string)
-}
-
-variable "database" {
-  type = object({
-    provider        = string
-    host            = string
-    name            = string
-    connection_name = string
-  })
+variable "database_provider" {
+  type = string
   validation {
-    condition     = contains(["cloud_sql", "container"], var.database.provider)
-    error_message = "database.provider must be cloud_sql or container."
+    condition     = contains(["cloud_sql", "container"], var.database_provider)
+    error_message = "database_provider must be cloud_sql or container."
   }
 }

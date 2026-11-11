@@ -1,0 +1,10 @@
+---
+- name: Validate configuration and generate the GCP inventory
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars_files:
+    - "{{ lookup('env', 'DATAMONITOR_CONFIG') | default(playbook_dir ~ '/../../config.json', true) }}"
+  roles:
+    - role: validate
+    - role: inventory
