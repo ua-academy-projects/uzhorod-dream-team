@@ -1,6 +1,7 @@
 package locations
 
 import (
+	"errors"
 	"log"
 	"net/http"
 	"strconv"
@@ -44,7 +45,13 @@ func (h *Handler) GetLocationParameters(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	params, err := h.service.GetLocationParameters(r.Context(), id)
+	from, to, err := parseTimeRange(r)
+	if err != nil {
+		httpjson.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	params, err := h.service.GetLocationParameters(r.Context(), id, from, to)
 	if err != nil {
 		log.Printf("DB error in GetLocationParameters: %v", err)
 		httpjson.Error(w, http.StatusInternalServerError, "Internal Server Error")
@@ -70,29 +77,10 @@ func (h *Handler) GetLocationHistory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fromStr := r.URL.Query().Get("from")
-	toStr := r.URL.Query().Get("to")
-
-	var from, to time.Time
-
-	if toStr != "" {
-		to, err = time.Parse(time.RFC3339, toStr)
-		if err != nil {
-			httpjson.Error(w, http.StatusBadRequest, "invalid 'to' date format, expected RFC3339")
-			return
-		}
-	} else {
-		to = time.Now()
-	}
-
-	if fromStr != "" {
-		from, err = time.Parse(time.RFC3339, fromStr)
-		if err != nil {
-			httpjson.Error(w, http.StatusBadRequest, "invalid 'from' date format, expected RFC3339")
-			return
-		}
-	} else {
-		from = to.Add(-24 * time.Hour)
+	from, to, err := parseTimeRange(r)
+	if err != nil {
+		httpjson.Error(w, http.StatusBadRequest, err.Error())
+		return
 	}
 
 	historyData, err := h.service.GetLocationHistory(r.Context(), id, param, from, to)
@@ -107,4 +95,26 @@ func (h *Handler) GetLocationHistory(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httpjson.Write(w, http.StatusOK, historyData)
+}
+
+func parseTimeRange(r *http.Request) (time.Time, time.Time, error) {
+	to := time.Now()
+	if toStr := r.URL.Query().Get("to"); toStr != "" {
+		parsed, err := time.Parse(time.RFC3339, toStr)
+		if err != nil {
+			return time.Time{}, time.Time{}, errors.New("invalid 'to' date format, expected RFC3339")
+		}
+		to = parsed
+	}
+
+	from := to.Add(-24 * time.Hour)
+	if fromStr := r.URL.Query().Get("from"); fromStr != "" {
+		parsed, err := time.Parse(time.RFC3339, fromStr)
+		if err != nil {
+			return time.Time{}, time.Time{}, errors.New("invalid 'from' date format, expected RFC3339")
+		}
+		from = parsed
+	}
+
+	return from, to, nil
 }

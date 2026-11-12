@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useSyncExternalStore } from 'react';
 import { useLocationParameters, useLocationHistory } from '../hooks/useApi';
 import { Button } from './ui/button';
 import { Calendar } from './ui/calendar';
@@ -62,6 +62,20 @@ function getParameterColor(param: string): string {
   return '#' + '00000'.substring(0, 6 - c.length) + c;
 }
 
+const WIDE_QUERY = '(min-width: 640px)';
+
+function useIsWide() {
+  return useSyncExternalStore(
+    notify => {
+      const mq = window.matchMedia(WIDE_QUERY);
+      mq.addEventListener('change', notify);
+      return () => mq.removeEventListener('change', notify);
+    },
+    () => window.matchMedia(WIDE_QUERY).matches,
+    () => true
+  );
+}
+
 interface ChartPaneProps {
   locationId: number;
   selectedParameter: string | null;
@@ -71,20 +85,20 @@ interface ChartPaneProps {
 }
 
 export function ChartPane({ locationId, selectedParameter, period, onParameterChange, onPeriodChange }: ChartPaneProps) {
-  const { data: parameters, isLoading: isParamsLoading } = useLocationParameters(locationId);
+  const isWide = useIsWide();
   const [isParamOpen, setIsParamOpen] = useState(false);
   const [periodAnchor, setPeriodAnchor] = useState(() => new Date());
 
   const selectedPeriod = period.kind === 'preset' ? period.days : null;
   const dateRange = useMemo(() => observationRange(period, periodAnchor), [period, periodAnchor]);
-  const validParameter = parameters?.some(parameter => parameter.name === selectedParameter) ? selectedParameter : null;
+  const from = dateRange.from.toISOString();
+  const to = dateRange.to.toISOString();
 
-  const { data: history, isLoading: isHistoryLoading } = useLocationHistory(
-    locationId,
-    validParameter,
-    dateRange.from.toISOString(),
-    dateRange.to.toISOString()
-  );
+  const { data: parameters, isLoading: isParamsLoading } = useLocationParameters(locationId, from, to);
+  const activeParameter = parameters?.find(parameter => parameter.name === selectedParameter);
+  const validParameter = activeParameter?.has_data ? activeParameter.name : null;
+
+  const { data: history, isLoading: isHistoryLoading } = useLocationHistory(locationId, validParameter, from, to);
 
   const chartData = useMemo(() => {
     if (!history) return null;
@@ -106,7 +120,7 @@ export function ChartPane({ locationId, selectedParameter, period, onParameterCh
     };
   }, [history, selectedParameter]);
 
-  const activeUnit = parameters?.find(p => p.name === selectedParameter)?.unit || '';
+  const activeUnit = activeParameter?.unit || '';
 
   if (isParamsLoading) {
     return <div className="flex h-full items-center justify-center">Loading parameters...</div>;
@@ -117,10 +131,10 @@ export function ChartPane({ locationId, selectedParameter, period, onParameterCh
   }
 
   return (
-    <div className="flex flex-col h-full w-full">
-      <div className="mb-6 flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
+    <div className="flex w-full flex-col lg:h-full">
+      <div className="mb-4 flex flex-col items-start justify-between gap-3 sm:mb-6 sm:flex-row sm:items-center sm:gap-4 lg:flex-col lg:items-start xl:flex-row xl:items-center">
         {/* Parameters Dropdown (Custom Popover) */}
-        <div className="w-full xl:w-56">
+        <div className="w-full sm:w-56">
           <Popover open={isParamOpen} onOpenChange={setIsParamOpen}>
             <PopoverTrigger render={<Button variant="outline" className="w-full justify-between bg-card hover:bg-accent/50 transition-colors" />}>
               <span className="truncate">{selectedParameter || "Select parameter..."}</span>
@@ -132,13 +146,15 @@ export function ChartPane({ locationId, selectedParameter, period, onParameterCh
                   <Button
                     key={p.name}
                     variant={p.name === selectedParameter ? "secondary" : "ghost"}
-                    className="justify-start font-normal px-2 py-1.5 h-auto text-sm"
+                    className="justify-between font-normal px-2 py-1.5 h-auto text-sm"
+                    disabled={!p.has_data}
                     onClick={() => {
                       onParameterChange(p.name);
                       setIsParamOpen(false);
                     }}
                   >
                     {p.name}
+                    {!p.has_data && <span className="text-xs text-muted-foreground">no data</span>}
                   </Button>
                 ))}
               </div>
@@ -147,12 +163,13 @@ export function ChartPane({ locationId, selectedParameter, period, onParameterCh
         </div>
 
         {/* Date Controls */}
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 max-sm:w-full">
           {OBSERVATION_PERIODS.map(({ days, label }) => (
             <Button
               key={days}
               variant={selectedPeriod === days ? 'default' : 'outline'}
               size="sm"
+              className="max-sm:h-9 max-sm:flex-1"
               aria-pressed={selectedPeriod === days}
               onClick={() => {
                 setPeriodAnchor(new Date());
@@ -164,7 +181,7 @@ export function ChartPane({ locationId, selectedParameter, period, onParameterCh
           ))}
           
           <Popover>
-            <PopoverTrigger render={<Button variant={selectedPeriod === null ? 'default' : 'outline'} size="sm" className={cn("justify-start text-left font-normal", !dateRange && "text-muted-foreground")} />}>
+            <PopoverTrigger render={<Button variant={selectedPeriod === null ? 'default' : 'outline'} size="sm" className={cn("justify-start text-left font-normal max-sm:h-9 max-sm:w-full", !dateRange && "text-muted-foreground")} />}>
               <CalendarIcon className="mr-2 h-4 w-4" />
               {dateRange?.from ? (
                 dateRange.to ? (
@@ -179,7 +196,7 @@ export function ChartPane({ locationId, selectedParameter, period, onParameterCh
                 <span>Pick a date</span>
               )}
             </PopoverTrigger>
-            <PopoverContent className="w-auto p-0 bg-popover border border-border shadow-md" align="end">
+            <PopoverContent className="w-auto max-w-[calc(100vw-1rem)] p-0 bg-popover border border-border shadow-md" align="end">
               <Calendar
                 mode="range"
                 defaultMonth={dateRange?.from}
@@ -189,7 +206,7 @@ export function ChartPane({ locationId, selectedParameter, period, onParameterCh
                     onPeriodChange({ kind: 'custom', from: range.from.toISOString(), to: (range.to || range.from).toISOString() });
                   }
                 }}
-                numberOfMonths={2}
+                numberOfMonths={isWide ? 2 : 1}
               />
             </PopoverContent>
           </Popover>
@@ -197,8 +214,14 @@ export function ChartPane({ locationId, selectedParameter, period, onParameterCh
       </div>
 
       {/* Chart Area */}
-      <div className="flex-1 min-h-[400px] w-full bg-white dark:bg-zinc-950 p-4 rounded-lg border border-border flex items-center justify-center">
-        {isHistoryLoading ? (
+      <div className="h-80 w-full bg-white p-2 sm:h-96 sm:p-4 lg:h-auto lg:min-h-[400px] lg:flex-1 dark:bg-zinc-950 rounded-lg border border-border flex items-center justify-center">
+        {!selectedParameter ? (
+          <div className="text-muted-foreground">Select a parameter to see its history.</div>
+        ) : activeParameter && !activeParameter.has_data ? (
+          <div className="text-center text-muted-foreground">
+            No {selectedParameter} data for this period. Pick another period or parameter.
+          </div>
+        ) : isHistoryLoading ? (
           <div className="animate-pulse text-muted-foreground">Loading chart data...</div>
         ) : !chartData || chartData.datasets[0].data.length === 0 ? (
           <div className="text-muted-foreground">No data available for the selected range.</div>

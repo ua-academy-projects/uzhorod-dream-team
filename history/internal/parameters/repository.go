@@ -2,13 +2,14 @@ package parameters
 
 import (
 	"context"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type Repository interface {
 	GetOrCreate(ctx context.Context, name, unit string) (int, error)
-	GetForLocation(ctx context.Context, locationID int) ([]Parameter, error)
+	GetForLocation(ctx context.Context, locationID int, from, to time.Time) ([]Parameter, error)
 }
 
 type repoImpl struct {
@@ -30,14 +31,21 @@ func (r *repoImpl) GetOrCreate(ctx context.Context, name, unit string) (int, err
 	return id, err
 }
 
-func (r *repoImpl) GetForLocation(ctx context.Context, locationID int) ([]Parameter, error) {
+func (r *repoImpl) GetForLocation(ctx context.Context, locationID int, from, to time.Time) ([]Parameter, error) {
 	query := `
-		SELECT DISTINCT p.name, p.unit
-		FROM measurements m
-		JOIN parameters p ON m.parameter_id = p.id
-		WHERE m.location_id = $1
+		SELECT p.name, p.unit, EXISTS (
+			SELECT 1 FROM measurements m
+			WHERE m.location_id = $1 AND m.parameter_id = p.id
+				AND m.timestamp >= $2 AND m.timestamp <= $3
+		)
+		FROM parameters p
+		WHERE EXISTS (
+			SELECT 1 FROM measurements m
+			WHERE m.location_id = $1 AND m.parameter_id = p.id
+		)
+		ORDER BY p.name
 	`
-	rows, err := r.pool.Query(ctx, query, locationID)
+	rows, err := r.pool.Query(ctx, query, locationID, from, to)
 	if err != nil {
 		return nil, err
 	}
@@ -46,7 +54,7 @@ func (r *repoImpl) GetForLocation(ctx context.Context, locationID int) ([]Parame
 	var params []Parameter
 	for rows.Next() {
 		var p Parameter
-		if err := rows.Scan(&p.Name, &p.Unit); err != nil {
+		if err := rows.Scan(&p.Name, &p.Unit, &p.HasData); err != nil {
 			return nil, err
 		}
 		params = append(params, p)

@@ -9,6 +9,7 @@ export interface Location {
 export interface Parameter {
   name: string;
   unit: string;
+  has_data: boolean;
 }
 
 export interface MeasurementData {

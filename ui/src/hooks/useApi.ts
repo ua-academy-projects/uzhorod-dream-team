@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { api } from '../lib/api';
 
 export function useLocations() {
@@ -8,11 +8,12 @@ export function useLocations() {
   });
 }
 
-export function useLocationParameters(locationId: number | null) {
+export function useLocationParameters(locationId: number | null, from: string, to: string) {
   return useQuery({
-    queryKey: ['locations', locationId, 'parameters'],
-    queryFn: () => api.getLocationParameters(locationId!),
+    queryKey: ['locations', locationId, 'parameters', from, to],
+    queryFn: () => api.getLocationParameters(locationId!, from, to),
     enabled: locationId !== null,
+    placeholderData: (previous, previousQuery) => previousQuery?.queryKey[1] === locationId ? keepPreviousData(previous) : undefined,
   });
 }
 

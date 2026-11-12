@@ -27,8 +27,8 @@ export const api = {
   }),
   getLocations: () => fetchAPI<Location[]>('/locations'),
   
-  getLocationParameters: (id: number) => 
-    fetchAPI<Parameter[]>(`/locations/${id}/parameters`),
+  getLocationParameters: (id: number, from: string, to: string) =>
+    fetchAPI<Parameter[]>(`/locations/${id}/parameters?${new URLSearchParams({ from, to }).toString()}`),
     
   getLocationHistory: (id: number, parameter: string, from?: string, to?: string) => {
     const params = new URLSearchParams({ parameter });

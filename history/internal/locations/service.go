@@ -10,7 +10,7 @@ import (
 
 type Service interface {
 	GetLocations(ctx context.Context) ([]Location, error)
-	GetLocationParameters(ctx context.Context, locationID int) ([]parameters.Parameter, error)
+	GetLocationParameters(ctx context.Context, locationID int, from, to time.Time) ([]parameters.Parameter, error)
 	GetLocationHistory(ctx context.Context, locationID int, parameter string, from, to time.Time) ([]measurements.MeasurementData, error)
 }
 
@@ -32,8 +32,8 @@ func (s *serviceImpl) GetLocations(ctx context.Context) ([]Location, error) {
 	return s.locRepo.GetAll(ctx)
 }
 
-func (s *serviceImpl) GetLocationParameters(ctx context.Context, locationID int) ([]parameters.Parameter, error) {
-	return s.paramRepo.GetForLocation(ctx, locationID)
+func (s *serviceImpl) GetLocationParameters(ctx context.Context, locationID int, from, to time.Time) ([]parameters.Parameter, error) {
+	return s.paramRepo.GetForLocation(ctx, locationID, from, to)
 }
 
 func (s *serviceImpl) GetLocationHistory(ctx context.Context, locationID int, parameter string, from, to time.Time) ([]measurements.MeasurementData, error) {

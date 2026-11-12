@@ -5,7 +5,8 @@ export function reconcilePreferences(preferences: SessionPreferences, locations:
     return { ...preferences, locationId: null, parameter: null };
   }
   if (parameters && !parameters.some(parameter => parameter.name === preferences.parameter)) {
-    return { ...preferences, parameter: parameters[0]?.name ?? null };
+    const fallback = parameters.find(parameter => parameter.has_data) ?? parameters[0];
+    return { ...preferences, parameter: fallback?.name ?? null };
   }
   return preferences;
 }

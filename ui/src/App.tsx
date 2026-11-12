@@ -9,17 +9,17 @@ function App() {
   const selectedLocationId = session.preferences.locationId;
 
   if (isLoading || session.isLoading) {
-    return <div className="flex h-screen items-center justify-center font-semibold text-lg">Loading air quality data...</div>;
+    return <div className="flex h-dvh items-center justify-center font-semibold text-lg">Loading air quality data...</div>;
   }
 
   if (isError) {
-    return <div className="flex h-screen items-center justify-center font-semibold text-lg text-red-500">Failed to load locations. Please check the backend.</div>;
+    return <div className="flex h-dvh items-center justify-center font-semibold text-lg text-red-500">Failed to load locations. Please check the backend.</div>;
   }
 
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-background text-foreground">
+    <div className="flex min-h-dvh w-full flex-col bg-background text-foreground lg:h-dvh lg:flex-row lg:overflow-hidden">
       {/* Left Pane: Map */}
-      <div className="w-1/2 h-full border-r border-border shadow-md z-10 relative">
+      <div className="relative z-10 h-[40dvh] min-h-64 w-full border-b border-border shadow-md lg:h-full lg:w-1/2 lg:border-b-0 lg:border-r">
         <MapPane 
           locations={locations || []} 
           selectedLocationId={selectedLocationId}
@@ -28,10 +28,10 @@ function App() {
       </div>
 
       {/* Right Pane: Chart / Dashboard */}
-      <div className="w-1/2 h-full bg-muted/20 p-6 overflow-y-auto">
-        <div className="max-w-4xl mx-auto h-full flex flex-col">
-          <header className="mb-6">
-            <h1 className="text-3xl font-bold tracking-tight text-primary">Kyiv Air Quality</h1>
+      <div className="w-full bg-muted/20 p-4 sm:p-6 lg:h-full lg:w-1/2 lg:overflow-y-auto">
+        <div className="mx-auto flex max-w-4xl flex-col lg:h-full">
+          <header className="mb-4 sm:mb-6">
+            <h1 className="text-2xl font-bold sm:text-3xl tracking-tight text-primary">Kyiv Air Quality</h1>
             <p className="text-muted-foreground mt-1">Real-time and historical air quality dynamics</p>
             {session.unavailable && (
               <p role="status" className="mt-2 text-sm text-amber-700 dark:text-amber-400">
@@ -40,7 +40,7 @@ function App() {
             )}
           </header>
 
-          <main className="flex-1 bg-card rounded-xl border border-border shadow-sm p-6 flex flex-col items-center justify-center min-h-0">
+          <main className="bg-card rounded-xl border border-border shadow-sm p-3 sm:p-6 flex flex-col items-center justify-center min-h-0 lg:flex-1">
             {selectedLocationId ? (
               <ChartPane
                 locationId={selectedLocationId}

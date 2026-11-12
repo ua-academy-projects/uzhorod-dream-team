@@ -1,7 +1,8 @@
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { api } from '../lib/api';
 import { SessionStore } from '../lib/sessionStore';
 import { reconcilePreferences } from '../lib/sessionPreferences';
+import { observationRange } from '../lib/observationPeriod';
 import { useLocationParameters } from './useApi';
 import type { Location } from '../types/api';
 
@@ -10,7 +11,12 @@ export function useSession(locations: Location[] | undefined) {
   const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot);
   const { preferences, isLoading } = snapshot;
   const validLocation = locations?.some(location => location.id === preferences.locationId);
-  const { data: parameters } = useLocationParameters(!isLoading && validLocation ? preferences.locationId : null);
+  const [now] = useState(() => new Date());
+  const range = useMemo(() => {
+    const { from, to } = observationRange(preferences.period, now);
+    return { from: from.toISOString(), to: to.toISOString() };
+  }, [preferences.period, now]);
+  const { data: parameters } = useLocationParameters(!isLoading && validLocation ? preferences.locationId : null, range.from, range.to);
 
   useEffect(() => {
     store.start();
