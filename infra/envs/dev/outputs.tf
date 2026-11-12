@@ -21,7 +21,7 @@ output "ssh" {
       one([for b in module.vm : b.external_ip if b.bastion]),
       jsondecode(file("${path.module}/../../config.json")).ssh.bastion_port,
       jsondecode(file("${path.module}/../../config.json")).ssh.user,
-      vm.internal_ip)
+    vm.internal_ip)
     if !vm.bastion
   }
 }

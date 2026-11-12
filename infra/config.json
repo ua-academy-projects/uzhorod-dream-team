@@ -51,10 +51,12 @@
     "cloudflare_tunnel_protocol": "auto"
   },
   "monitoring": {
-  "email": "fikusivan777@gmail.com",
-  "disk_used_percent": 40,
-  "silence_minutes": 10,
-  "poll_failures": 3,
-  "uptime_path": "/api/status"
-}
+    "email": "fikusivan777@gmail.com",
+    "alerts": {
+      "disk_percent":        { "severity": "WARNING",  "threshold": 40, "minutes": 5 },
+      "error_rate_percent":  { "severity": "CRITICAL", "threshold": 5,  "minutes": 5 },
+      "latency_p95_seconds": { "severity": "ERROR",    "threshold": 1,  "minutes": 10 },
+      "no_snapshots":        { "severity": "ERROR",                     "minutes": 15 }
+    }
+  }
 }

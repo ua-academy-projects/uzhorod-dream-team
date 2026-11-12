@@ -1,10 +1,31 @@
-server {
+map $status $citybikes_status_class {
+        ~^(?<first>[1-5])  ${first}xx;
+    }
 
+    map $status $citybikes_error {
+        ~^5      1;
+        default  0;
+    }
+
+    map $uri $citybikes_route {
+        ~^(?<api>/api/[a-z/]+)$  $api;
+        default                  static;
+    }
+
+    map $http_user_agent $citybikes_log {
+        ~^Wget   0;
+        default  1;
+    }
+
+log_format citybikes 'status=$status class=$citybikes_status_class route=$citybikes_route '
+                     'err=$citybikes_error rt=$request_time urt=$upstream_response_time';
+
+server {
+    access_log /var/log/nginx/access.log citybikes if=$citybikes_log;
+    
     listen 8080;
     server_name _;
 
-    # HTTPS on 8443, only where a certificate is mounted (GCP: certbot writes /etc/nginx/tls/https.conf).
-    # No file there (e.g. Vagrant) = nothing is included, plain HTTP as before.
     include /etc/nginx/tls/*.conf;
 
     root /usr/share/nginx/html;
