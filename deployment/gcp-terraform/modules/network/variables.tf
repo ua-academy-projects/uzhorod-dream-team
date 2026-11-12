@@ -10,10 +10,11 @@ variable "cfg" {
       enable_nat  = optional(bool, true)
       public_tier = optional(string, "STANDARD")
       firewall_rules = map(object({
-        source_tags   = optional(set(string), [])
-        source_ranges = optional(set(string), [])
-        target_tags   = set(string)
-        ports         = set(number)
+        source_tags     = optional(set(string), [])
+        source_ranges   = optional(set(string), [])
+        cloudflare_only = optional(bool, false)
+        target_tags     = set(string)
+        ports           = set(number)
       }))
     })
     vm = object({

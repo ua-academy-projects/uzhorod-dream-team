@@ -36,6 +36,8 @@ resource "google_compute_firewall" "ssh_bastion" {
   }
 }
 
+data "cloudflare_ip_ranges" "proxy" {}
+
 resource "google_compute_firewall" "ingress" {
   for_each = var.cfg.network.firewall_rules
 
@@ -44,9 +46,13 @@ resource "google_compute_firewall" "ingress" {
   network   = google_compute_network.main.id
   direction = "INGRESS"
 
-  source_ranges = length(each.value.source_ranges) > 0 ? sort(tolist(each.value.source_ranges)) : null
-  source_tags   = length(each.value.source_tags) > 0 ? sort(tolist(each.value.source_tags)) : null
-  target_tags   = sort(tolist(each.value.target_tags))
+  source_ranges = (
+    each.value.cloudflare_only ? sort(data.cloudflare_ip_ranges.proxy.ipv4_cidrs)
+    : length(each.value.source_ranges) > 0 ? sort(tolist(each.value.source_ranges))
+    : null
+  )
+  source_tags = length(each.value.source_tags) > 0 ? sort(tolist(each.value.source_tags)) : null
+  target_tags = sort(tolist(each.value.target_tags))
 
   allow {
     protocol = "tcp"
