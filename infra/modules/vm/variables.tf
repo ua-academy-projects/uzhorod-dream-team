@@ -25,6 +25,11 @@ variable "config" {
       }))
     })
   })
+
+  validation {
+    condition     = alltrue([for vm in var.config.vms.instances : !vm.bastion || contains(vm.secrets, "ssh-host-key")])
+    error_message = "config.json: the bastion needs \"ssh-host-key\" in its \"secrets\" (it reads its SSH host key from there at boot)."
+  }
 }
 
 variable "name" {

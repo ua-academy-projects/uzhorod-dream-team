@@ -49,7 +49,7 @@ load_config() {
   ME=$(gcloud config get-value account 2>/dev/null)
   BUCKET="${PROJECT_ID}-tfstate"
   SA="terraform@${PROJECT_ID}.iam.gserviceaccount.com"
-  KEY_FILE="$PWD/terraform-kemonitoring.googleapis.comy.json"
+  KEY_FILE="$PWD/terraform-key.json"
   P=(--project "$PROJECT_ID" --quiet)
 }
 

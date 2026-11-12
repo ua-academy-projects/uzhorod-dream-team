@@ -5,12 +5,12 @@
   gather_facts: false
   any_errors_fatal: true
   roles:
-    - citybikes.infra.config 
+    - citybikes.infra.config
     - citybikes.infra.config_validate
     - citybikes.infra.ssh_access
 
-- name: The configuration and the database on every VM (config_json, citybikes_db_host)
-  hosts: all
+- name: The configuration and the database on every VM but the bastion (config_json, citybikes_db_host)
+  hosts: all:!bastion
   gather_facts: false
   roles:
     - citybikes.infra.config

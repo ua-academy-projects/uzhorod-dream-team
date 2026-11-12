@@ -24,7 +24,7 @@
       "fetcher": { "host": 51, "services": ["fetcher"], "secrets": ["rabbitmq-password", "db-password"] },
       "history": { "host": 52, "services": ["history"], "secrets": ["db-password", "rabbitmq-password", "redis-password"] },
       "ui": { "host": 53, "disk_size_gb": 15, "services": ["ui", "cloudflared"], "secrets": ["cloudflare-tunnel-token", "cloudflare-api-token"] },
-      "bastion": { "host": 54, "services": [], "bastion": true }
+      "bastion": { "host": 54, "services": [], "bastion": true, "secrets": ["ssh-host-key"] }
     }
   },
   "database": {
@@ -51,10 +51,10 @@
     "cloudflare_tunnel_protocol": "auto"
   },
   "monitoring": {
-    "email": "fikusivan777@gmail.com",
-    "disk_used_percent": 40,
-    "silence_minutes": 10,
-    "poll_failures": 3,
-    "uptime_path": "/api/status"
-  }
+  "email": "fikusivan777@gmail.com",
+  "disk_used_percent": 40,
+  "silence_minutes": 10,
+  "poll_failures": 3,
+  "uptime_path": "/api/status"
+}
 }

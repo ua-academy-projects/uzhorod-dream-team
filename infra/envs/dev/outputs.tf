@@ -14,8 +14,16 @@ output "placement" {
 }
 
 output "ssh" {
-  description = "Log in to the bastion; from it: ssh citybikes-db, ssh citybikes-ui, ..."
-  value       = one([for vm in module.vm : vm.ssh if vm.bastion])
+  description = "Log in to a VM through the bastion (the bastion itself has no shell). First: ansible-playbook citybikes.infra.access"
+  value = {
+    for name, vm in module.vm : name => format("ssh -J %s@%s:%d %s@%s",
+      jsondecode(file("${path.module}/../../config.json")).ssh.user,
+      one([for b in module.vm : b.external_ip if b.bastion]),
+      jsondecode(file("${path.module}/../../config.json")).ssh.bastion_port,
+      jsondecode(file("${path.module}/../../config.json")).ssh.user,
+      vm.internal_ip)
+    if !vm.bastion
+  }
 }
 
 output "database" {

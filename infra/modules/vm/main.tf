@@ -8,16 +8,13 @@ locals {
 
   internal_ip = cidrhost(var.config.network.subnet_cidr, local.vm.host)
 
-  bastion_user_data = <<-EOT
-    #cloud-config
-    write_files:
-      - path: /etc/ssh/sshd_config.d/10-port.conf
-        content: |
-          Port ${local.ssh.bastion_port}
-    runcmd:
-      - [systemctl, daemon-reload]
-      - [systemctl, restart, ssh.socket]
-  EOT
+  bastion_user_data = templatefile("${path.module}/bastion.cloud-init.yaml.tftpl", {
+    prefix          = var.config.prefix
+    name            = local.name
+    zone            = local.location.zone
+    ssh_port        = local.ssh.bastion_port
+    host_key_secret = "${var.config.prefix}-ssh-host-key"
+  })
 }
 
 resource "google_compute_address" "internal" {
@@ -32,6 +29,10 @@ resource "google_compute_address" "external" {
   count  = local.vm.bastion ? 1 : 0
   name   = "${local.name}-external"
   region = local.location.region
+}
+
+resource "terraform_data" "bastion_user_data" {
+  input = local.vm.bastion ? local.bastion_user_data : null
 }
 
 resource "google_compute_instance" "vm" {
@@ -81,6 +82,7 @@ resource "google_compute_instance" "vm" {
   allow_stopping_for_update = true
 
   lifecycle {
-    ignore_changes = [metadata["ssh-keys"]] # the keys belong to Ansible
+    ignore_changes       = [metadata["ssh-keys"]] # the keys belong to Ansible
+    replace_triggered_by = [terraform_data.bastion_user_data]
   }
 }

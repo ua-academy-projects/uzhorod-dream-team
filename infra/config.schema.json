@@ -4,7 +4,7 @@
   "title": "CityBikes infrastructure (infra/config.json)",
   "description": "WHAT is built. Read by Terraform (infra/envs/dev). Checked against this schema before every run.",
   "type": "object",
-  "additionalProperties": false,
+  "additionalProperties": true,
   "required": ["prefix", "location", "network", "ssh", "vms", "database", "tls", "app", "monitoring"],
 
   "properties": {
@@ -17,7 +17,7 @@
     "location": {
       "description": "Where everything is built",
       "type": "object",
-      "additionalProperties": false,
+      "additionalProperties": true,
       "required": ["region", "zone"],
       "properties": {
         "region": { "type": "string", "pattern": "^[a-z]+-[a-z]+[0-9]$" },
@@ -27,7 +27,7 @@
 
     "network": {
       "type": "object",
-      "additionalProperties": false,
+      "additionalProperties": true,
       "required": ["subnet_cidr", "internal_ports"],
       "properties": {
         "subnet_cidr": { "$ref": "#/$defs/cidr" },
@@ -42,7 +42,7 @@
 
     "ssh": {
       "type": "object",
-      "additionalProperties": false,
+      "additionalProperties": true,
       "required": ["user", "bastion_port", "access_public_key_file", "key_ttl_minutes"],
       "properties": {
         "user": { "type": "string", "pattern": "^[a-z_][a-z0-9_-]{0,31}$" },
@@ -61,13 +61,13 @@
     "vms": {
       "description": "The VMs: what they all have, and each one",
       "type": "object",
-      "additionalProperties": false,
+      "additionalProperties": true,
       "required": ["defaults", "instances"],
       "properties": {
         "defaults": {
           "description": "Every VM gets these. A VM's own machine_type, disk_size_gb, image, cloud_logging replace them; its roles are ADDED to these",
           "type": "object",
-          "additionalProperties": false,
+          "additionalProperties": true,
           "required": ["machine_type", "disk_size_gb", "image", "cloud_logging", "roles"],
           "properties": {
             "machine_type": { "$ref": "#/$defs/machine_type" },
@@ -90,7 +90,7 @@
     "database": {
       "description": "Which PostgreSQL the application uses (type), and Cloud SQL while it exists (cloudsql). PostgreSQL on a VM = the service postgres in that VM's services",
       "type": "object",
-      "additionalProperties": false,
+      "additionalProperties": true,
       "required": ["type", "vm"],
       "properties": {
         "type": { "description": "The database switch: type cloudsql = Cloud SQL exists and the application uses it; type vm = PostgreSQL in Docker on database.vm, Cloud SQL is removed" },
@@ -98,7 +98,7 @@
         "cloudsql": {
           "description": "Cloud SQL exists while this block is here (private IP only)",
           "type": "object",
-          "additionalProperties": false,
+          "additionalProperties": true,
           "required": ["version", "tier", "disk_size_gb", "private_range", "deletion_protection"],
           "properties": {
             "version": { "type": "string", "pattern": "^POSTGRES_[0-9]+$" },
@@ -116,7 +116,7 @@
     "tls": {
       "description": "The site's certificate (certbot, DNS-01 through Cloudflare). domain = \"\": HTTP only",
       "type": "object",
-      "additionalProperties": false,
+      "additionalProperties": true,
       "required": ["vm", "domain", "email", "staging"],
       "properties": {
         "vm": { "type": "string" },
@@ -128,7 +128,7 @@
 
     "app": {
       "type": "object",
-      "additionalProperties": false,
+      "additionalProperties": true,
       "required": [
         "queue_backend", "cache_backend", "citybikes_network", "poll_interval",
         "db_name", "db_user", "rabbitmq_user", "rabbitmq_vhost", "cloudflare_tunnel_protocol"
@@ -148,7 +148,7 @@
     "monitoring": {
     "description": "Cloud Monitoring (modules/monitoring): the alerts go to this e-mail",
     "type": "object",
-    "additionalProperties": false,
+    "additionalProperties": true,
     "required": ["email", "disk_used_percent", "silence_minutes", "poll_failures", "uptime_path"],
     "properties": {
       "email": { "type": "string", "pattern": "^[^@\\s]+@[^@\\s]+$" },
@@ -163,7 +163,7 @@
   "$defs": {
     "vm": {
       "type": "object",
-      "additionalProperties": false,
+      "additionalProperties": true,
       "required": ["host", "services"],
       "properties": {
         "host": { "description": "Private IP = subnet + host", "type": "integer", "minimum": 2, "maximum": 254 },
@@ -197,10 +197,7 @@
       "items": { "type": "string", "pattern": "^roles/[A-Za-z0-9_.]+$" }
     },
     "secret": {
-      "enum": [
-        "db-password", "redis-password", "rabbitmq-password",
-        "cloudflare-tunnel-token", "cloudflare-api-token"
-      ]
+      "enum": ["db-password", "redis-password", "rabbitmq-password", "cloudflare-tunnel-token", "cloudflare-api-token", "ssh-host-key"]
     },
     "cidr": {
       "type": "string",

@@ -1,0 +1,61 @@
+#cloud-config
+
+package_update: true
+package_upgrade: true
+
+ssh_deletekeys: true
+ssh_genkeytypes: []
+
+
+write_files:
+  - path: /etc/ssh/sshd_config.d/10-port.conf
+    content: |
+      Port ${ssh_port}
+
+  - path: /etc/ssh/sshd_config.d/20-jump-only.conf
+    content: |
+      # Jumps only (ssh -W, ProxyJump): no shell, no commands, no file copies.
+      HostKey /etc/ssh/ssh_host_ed25519_key
+      ForceCommand echo "${prefix} bastion: jump host only"
+      PermitTTY no
+      AllowTcpForwarding local
+      PermitOpen *:22
+      AllowAgentForwarding no
+      AllowStreamLocalForwarding no
+      X11Forwarding no
+      PermitTunnel no
+      GatewayPorts no
+      PermitUserRC no
+
+  - path: /etc/apt/apt.conf.d/52${prefix}-reboot
+    content: |
+      Unattended-Upgrade::Automatic-Reboot "true";
+      Unattended-Upgrade::Automatic-Reboot-Time "03:00";
+
+  - path: /usr/local/sbin/${prefix}-bastion-setup
+    permissions: "0755"
+    content: |
+      #!/bin/sh
+
+      set -eu
+      export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin
+
+      # 1. The host key, from Secret Manager (this VM's service account may read this one secret).
+      snap wait system seed.loaded   # gcloud comes as a snap: wait until snaps are ready
+      umask 077
+      gcloud secrets versions access latest --secret="${host_key_secret}" > /etc/ssh/ssh_host_ed25519_key
+      ssh-keygen -y -f /etc/ssh/ssh_host_ed25519_key > /etc/ssh/ssh_host_ed25519_key.pub
+      umask 022
+
+      # 2. sshd: the port and jump-only (files above), applied only if the configuration is valid.
+      install -d -m 0755 /run/sshd   # sshd -t needs it; sshd has not run yet at first boot
+      sshd -t
+      systemctl daemon-reload
+      systemctl restart ssh.socket
+
+      # 3. Ops Agent: disk, memory and CPU from inside, for Cloud Monitoring.
+      curl -sSfo /tmp/add-ops-agent-repo.sh https://dl.google.com/cloudagents/add-google-cloud-ops-agent-repo.sh
+      bash /tmp/add-ops-agent-repo.sh --also-install
+
+runcmd:
+  - /usr/local/sbin/${prefix}-bastion-setup
