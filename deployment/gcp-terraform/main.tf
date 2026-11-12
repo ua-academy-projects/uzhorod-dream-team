@@ -47,6 +47,6 @@ module "monitoring" {
   source = "./modules/monitoring"
   count  = contains(keys(local.cfg), "monitoring") && try(local.cfg.monitoring.enabled, true) ? 1 : 0
 
-  cfg                      = local.cfg
-  notification_channel_ids = var.alert_channel_ids
+  cfg         = local.cfg
+  alert_email = var.alert_email
 }

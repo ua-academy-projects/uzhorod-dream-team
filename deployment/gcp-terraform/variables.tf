@@ -25,8 +25,9 @@ variable "secret_revisions" {
   default     = {}
 }
 
-variable "alert_channel_ids" {
-  type        = list(string)
-  description = "IDs of existing Cloud Monitoring notification channels that receive alerts, created by hand in the console. Pass them as TF_VAR_alert_channel_ids; the address itself never enters Terraform."
-  default     = []
+variable "alert_email" {
+  type        = string
+  description = "Email address for monitoring alerts. Set by bootstrap.sh as TF_VAR_alert_email. Leave unset to create alerts without a notification channel."
+  sensitive   = true
+  default     = null
 }

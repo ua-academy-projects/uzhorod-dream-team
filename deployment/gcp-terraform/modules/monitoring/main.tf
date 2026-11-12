@@ -1,6 +1,9 @@
 locals {
   monitoring = var.cfg.monitoring
-  widgets    = { for w in local.monitoring.widgets : w.id => w }
+  grid_unit  = 4
+
+  widgets = { for w in local.monitoring.widgets : w.id => w if w.enabled }
+  alerts  = { for k, a in local.monitoring.alerts : k => a if contains(keys(local.widgets), a.widget) }
 
   filters = {
     for id, w in local.widgets : id => join(" ", concat(
@@ -21,12 +24,24 @@ locals {
   }
 
   queries = {
-    for id, w in local.widgets : id => {
-      timeSeriesFilter = {
-        filter      = local.filters[id]
-        aggregation = local.aggregations[id]
-      }
-    }
+    for id, w in local.widgets : id => merge(
+      {
+        timeSeriesFilter = merge(
+          {
+            filter      = local.filters[id]
+            aggregation = local.aggregations[id]
+          },
+          w.top_series == null ? {} : {
+            pickTimeSeriesFilter = {
+              rankingMethod = "METHOD_MEAN"
+              numTimeSeries = w.top_series
+              direction     = "TOP"
+            }
+          }
+        )
+      },
+      w.unit == null ? {} : { unitOverride = w.unit }
+    )
   }
 
   chart_widgets = {
@@ -51,31 +66,43 @@ locals {
   }
 
   scorecard_widgets = {
-    for id, w in local.widgets : id => {
-      title = w.title
-      scorecard = {
-        timeSeriesQuery = local.queries[id]
-        thresholds = [for t in w.thresholds : {
-          value = t.value, color = t.color, direction = t.direction
-        }]
+    for id, w in local.widgets : id => merge(
+      {
+        title = w.title
+        scorecard = merge(
+          {
+            timeSeriesQuery = local.queries[id]
+            thresholds = [for t in w.thresholds : {
+              value = t.value, color = t.color, direction = t.direction
+            }]
+          },
+          w.spark ? { sparkChartView = { sparkChartType = "SPARK_LINE" } } : {}
+        )
       }
-    } if w.type == "scorecard"
+    ) if w.type == "scorecard"
   }
 
-  dashboard_widgets = [
-    for w in local.monitoring.widgets :
-    w.type == "chart" ? local.chart_widgets[w.id] : local.scorecard_widgets[w.id]
+  dashboard_tiles = [
+    for id, w in local.widgets : {
+      xPos   = w.layout.x * local.grid_unit
+      yPos   = w.layout.y * local.grid_unit
+      width  = w.layout.width * local.grid_unit
+      height = w.layout.height * local.grid_unit
+      widget = w.type == "chart" ? local.chart_widgets[id] : local.scorecard_widgets[id]
+    }
   ]
 }
 
-resource "google_monitoring_dashboard" "this" {
+resource "google_monitoring_dashboard" "overview" {
   project = var.cfg.google.project_id
 
   dashboard_json = jsonencode({
     displayName = local.monitoring.dashboard_name
-    gridLayout = {
-      columns = "2"
-      widgets = local.dashboard_widgets
+    mosaicLayout = {
+      columns = 12 * local.grid_unit
+      tiles   = local.dashboard_tiles
     }
   })
+
+  depends_on = [google_logging_metric.counter]
 }

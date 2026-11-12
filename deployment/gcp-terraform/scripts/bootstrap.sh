@@ -28,6 +28,7 @@ BOOTSTRAP_STATE_PREFIX     Default: terraform/state
 DEPLOYMENT_CONFIG          Default: <config-dir>/deployment.json
 BOOTSTRAP_CONFIG_DIR       Default: ~/.config/kyiv-air
 BOOTSTRAP_SSH_KEY          Default: ~/.ssh/google_compute_engine (private key; <path>.pub is registered with OS Login)
+BOOTSTRAP_ALERT_EMAIL      Optional email address for monitoring alerts (exported as TF_VAR_alert_email)
 EOF
 }
 
@@ -109,11 +110,14 @@ BOOTSTRAP_ZONE=${BOOTSTRAP_ZONE:-$BOOTSTRAP_REGION-a}
 BOOTSTRAP_BUCKET=${BOOTSTRAP_BUCKET:-$BOOTSTRAP_PROJECT_ID-tfstate}
 BOOTSTRAP_STATE_PREFIX=${BOOTSTRAP_STATE_PREFIX:-$DEFAULT_STATE_PREFIX}
 BOOTSTRAP_SSH_KEY=${BOOTSTRAP_SSH_KEY:-$HOME/.ssh/google_compute_engine}
+BOOTSTRAP_ALERT_EMAIL=${BOOTSTRAP_ALERT_EMAIL:-}
 if "$interactive"; then
-  for name in BOOTSTRAP_ZONE BOOTSTRAP_BUCKET BOOTSTRAP_STATE_PREFIX BOOTSTRAP_SSH_KEY; do
+  for name in BOOTSTRAP_ZONE BOOTSTRAP_BUCKET BOOTSTRAP_STATE_PREFIX BOOTSTRAP_SSH_KEY BOOTSTRAP_ALERT_EMAIL; do
     prompt "$name"
   done
 fi
+[[ -z "$BOOTSTRAP_ALERT_EMAIL" || "$BOOTSTRAP_ALERT_EMAIL" =~ ^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$ ]] \
+  || die 'BOOTSTRAP_ALERT_EMAIL is not a valid email address.'
 
 install -d -m 0700 "$BOOTSTRAP_CONFIG_DIR"
 install -d -m 0700 "$BOOTSTRAP_OUTPUT_DIR"
@@ -195,7 +199,7 @@ retry_iam gcloud iam service-accounts describe "$ACCOUNT" --project="$BOOTSTRAP_
 for role in \
   roles/compute.admin roles/iam.serviceAccountAdmin roles/iam.serviceAccountUser \
   roles/cloudsql.admin roles/dns.admin roles/artifactregistry.admin roles/secretmanager.admin roles/secretmanager.secretAccessor roles/serviceusage.serviceUsageConsumer \
-  roles/resourcemanager.projectIamAdmin roles/servicedirectory.editor roles/monitoring.editor; do
+  roles/resourcemanager.projectIamAdmin roles/servicedirectory.editor roles/monitoring.editor roles/logging.configWriter; do
   retry_iam gcloud projects add-iam-policy-binding "$BOOTSTRAP_PROJECT_ID" \
     --member="serviceAccount:$ACCOUNT" --role="$role" --condition=None --quiet
 done
@@ -281,6 +285,7 @@ fi
   printf '#!/usr/bin/env bash\n\n'
   printf 'export GOOGLE_APPLICATION_CREDENTIALS=%q\n' "$KEY_FILE"
   printf 'export TF_VAR_config_path=%q\n' "$CONFIG_FILE"
+  if [[ -n "$BOOTSTRAP_ALERT_EMAIL" ]]; then printf 'export TF_VAR_alert_email=%q\n' "$BOOTSTRAP_ALERT_EMAIL"; fi
   printf 'export DEPLOYMENT_CONFIG=%q\n' "$CONFIG_FILE"
   printf 'export ANSIBLE_COLLECTIONS_PATH=%q\n' "$ANSIBLE_DIR"
   printf 'export ANSIBLE_INVENTORY=%q\n' "$ANSIBLE_DIR/inventory.gcp.yml"
