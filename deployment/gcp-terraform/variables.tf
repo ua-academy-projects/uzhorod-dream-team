@@ -31,3 +31,10 @@ variable "alert_email" {
   sensitive   = true
   default     = null
 }
+
+variable "admin_ip" {
+  type        = string
+  description = "Public IP address (or CIDR) allowed to reach the bastion over SSH. Set by bootstrap.sh as TF_VAR_admin_ip."
+  sensitive   = true
+  nullable    = false
+}

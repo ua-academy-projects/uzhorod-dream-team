@@ -12,7 +12,7 @@ resource "google_compute_firewall" "ssh_public" {
   network   = google_compute_network.main.id
   direction = "INGRESS"
 
-  source_ranges = ["0.0.0.0/0"]
+  source_ranges = [strcontains(var.admin_ip, "/") ? var.admin_ip : "${var.admin_ip}/32"]
   target_tags   = sort(tolist(local.bastion_tags))
 
   allow {

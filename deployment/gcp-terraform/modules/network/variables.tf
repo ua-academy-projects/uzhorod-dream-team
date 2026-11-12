@@ -27,3 +27,10 @@ variable "cfg" {
   })
 }
 
+
+variable "admin_ip" {
+  type        = string
+  description = "Public IP address or CIDR allowed to reach the bastion over SSH"
+  sensitive   = true
+  nullable    = false
+}

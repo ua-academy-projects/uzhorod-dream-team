@@ -5,7 +5,8 @@ locals {
 module "network" {
   source = "./modules/network/"
 
-  cfg = local.cfg
+  cfg      = local.cfg
+  admin_ip = var.admin_ip
 }
 
 module "registry" {
