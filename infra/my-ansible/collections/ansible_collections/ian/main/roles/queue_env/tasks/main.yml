@@ -1,0 +1,41 @@
+---
+# Secrets and the DB host depend on the selected backend (config.json backends.<N>), so argument_specs does not validate them; an assert does.
+# DATABASE_URL (and therefore the database password) is needed only on history.
+- name: Names of the secrets required by the backend
+  ansible.builtin.set_fact:
+    queue_env_secret_names: >-
+      {{ queue_env_cfg.secrets | dict2items
+         | rejectattr('key', 'equalto', 'database_password' if inventory_hostname != 'history' else '')
+         | map(attribute='value') | list }}
+
+- name: Check the secrets required by backend {{ queue_env_backend }}
+  ansible.builtin.assert:
+    that: lookup('vars', item, default=none) is not none
+    fail_msg: "backend {{ queue_env_backend }} ({{ queue_env_cfg.description }}) requires {{ item }} (pass it from vault.yml)"
+    quiet: true
+  loop: "{{ queue_env_secret_names }}"
+
+- name: Check the database host of backend {{ queue_env_backend }}
+  ansible.builtin.assert:
+    that: queue_env_cfg.database.instance is defined or (queue_env_database_host | default('') | length > 0)
+    fail_msg: >-
+      backend {{ queue_env_backend }} ({{ queue_env_cfg.description }}) keeps history in a database outside config.json instances:
+      pass -e queue_env_database_host=$(terraform -chdir=.. output -raw cloudsql_private_ip)
+    quiet: true
+  when: inventory_hostname == 'history'
+
+- name: Config directory
+  ansible.builtin.file:
+    path: "{{ queue_env_config_dir }}"
+    state: directory
+    mode: "0755"
+
+- name: queue.env
+  ansible.builtin.template:
+    src: queue.env.j2
+    dest: "{{ queue_env_file }}"
+    owner: root
+    group: root
+    mode: "0600"
+  diff: false # holds credentials
+  notify: restart osm service

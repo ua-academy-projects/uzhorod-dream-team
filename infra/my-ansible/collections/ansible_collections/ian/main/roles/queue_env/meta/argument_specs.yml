@@ -1,0 +1,21 @@
+---
+argument_specs:
+  main:
+    short_description: Writes /etc/osm/queue.env for fetcher and history according to the backend description in config.json
+    description:
+      - >-
+        The backend number is a key in C(config.json backends). Each backend describes its own QUEUE_URL, REDIS_URL (if cache is not null)
+        and DATABASE_URL (on history): scheme, VM, port, database, user and the vault secret names.
+        The QUEUE_URL scheme (C(amqp://) or C(postgres://)) determines which backend the application picks.
+    options:
+      queue_env_backend:
+        type: int
+        choices: [1, 2]
+        description: >-
+          Backend number (config.json backends.N). Defaults to config.json active_backend;
+          the playbook passes the value from -e backend=N.
+      queue_env_database_host:
+        type: str
+        description: >-
+          History database address, if backends.N.database has no instance (Cloud SQL, terraform output -raw cloudsql_private_ip).
+          Required only on history and only for such a backend, checked by an assert in tasks.

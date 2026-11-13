@@ -1,0 +1,82 @@
+---
+# Switches fetcher and history between the backends from config.json backends, rewriting QUEUE_URL, REDIS_URL and DATABASE_URL in /etc/osm/queue.env.
+#   ansible-playbook ian.main.switch_backend -e @secrets/vault.yml -e backend=1 \
+#       -e queue_env_database_host=$(terraform -chdir=.. output -raw cloudsql_private_ip)         1: Cloud SQL + RabbitMQ + Redis
+#   ansible-playbook ian.main.switch_backend -e @secrets/vault.yml -e backend=2                   2: Postgres on VM: pgmq + hstore + history
+# Without -e backend, config.json active_backend is used. The queue and cache contents of the old backend are not migrated.
+# Order as in apps/deploy/set-queue.sh: stop fetcher (publisher), then history (consumer);
+# start history first so the consumer exists when fetcher starts publishing.
+- ansible.builtin.import_playbook: ian.main.assert_project
+
+- name: Check the new backend is reachable from the services
+  hosts: fetcher:history
+  gather_facts: false
+  vars_files: [vars/connection.yml, vars/secrets.yml]
+  vars:
+    switch_backend_cfg: "{{ lookup('ian.main.osm_config', 'backends.' ~ selected_backend) }}"
+    # DATABASE_URL only on history; some backends have no cache (null)
+    switch_backend_parts: "{{ ['queue', 'cache'] + (['database'] if inventory_hostname == 'history' else []) }}"
+  tasks:
+    - name: "Port of {{ item }} in backend {{ selected_backend }} ({{ switch_backend_cfg.description }})"
+      ansible.builtin.wait_for:
+        host: >-
+          {{ lookup('ian.main.osm_config', 'instances.' ~ switch_backend_cfg[item].instance ~ '.internal_ip')
+             if switch_backend_cfg[item].instance is defined else queue_env_database_host }}
+        port: "{{ switch_backend_cfg[item].port }}"
+        timeout: 10
+      loop: "{{ switch_backend_parts }}"
+      when: switch_backend_cfg[item]
+
+- name: Stop fetcher
+  hosts: fetcher
+  gather_facts: false
+  vars_files: [vars/connection.yml]
+  tasks:
+    - ansible.builtin.systemd:
+        name: fetcher
+        state: stopped
+
+- name: Stop history
+  hosts: history
+  gather_facts: false
+  vars_files: [vars/connection.yml]
+  tasks:
+    - ansible.builtin.systemd:
+        name: history
+        state: stopped
+
+- name: Write queue.env
+  hosts: fetcher:history
+  gather_facts: false
+  vars_files: [vars/connection.yml, vars/secrets.yml]
+  vars:
+    # services are started below in the right order, not by the restart handler
+    service_handlers_skip_restart: true
+  roles: [ian.main.queue_env]
+
+- name: Start history
+  hosts: history
+  gather_facts: false
+  vars_files: [vars/connection.yml]
+  tasks:
+    - ansible.builtin.systemd:
+        name: history
+        state: started
+
+- name: Start fetcher
+  hosts: fetcher
+  gather_facts: false
+  vars_files: [vars/connection.yml]
+  vars:
+    switch_backend_cfg: "{{ lookup('ian.main.osm_config', 'backends.' ~ selected_backend) }}"
+  tasks:
+    - ansible.builtin.systemd:
+        name: fetcher
+        state: started
+
+    - name: Reminder
+      ansible.builtin.debug:
+        msg: >-
+          Running with backend {{ selected_backend }} ({{ switch_backend_cfg.description }}). This choice applies to this run only:
+          so that site does not change it, set "active_backend": {{ selected_backend }} in config.json.
+      run_once: true

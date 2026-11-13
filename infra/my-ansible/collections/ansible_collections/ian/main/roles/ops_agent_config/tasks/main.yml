@@ -1,0 +1,36 @@
+---
+# The agent config lives in /etc/google-cloud-ops-agent/config.yaml. Having the file before the package is installed breaks dpkg (conffile conflict),
+# so the role requires that the agent has already been installed by the OS policy from Terraform.
+- name: Is the Ops Agent installed
+  ansible.builtin.command: dpkg-query -W google-cloud-ops-agent
+  register: ops_agent_config_installed
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: The Ops Agent must be installed by the Terraform OS policy first
+  ansible.builtin.assert:
+    that: ops_agent_config_installed.rc == 0
+    fail_msg: >-
+      google-cloud-ops-agent is not installed on {{ inventory_hostname }} yet. The OS policy (terraform apply, modules/ops_agent)
+      installs it within about 10 minutes of the VM starting; run this again afterwards.
+    quiet: true
+
+- name: Database host of backend {{ ops_agent_config_backend }}
+  ansible.builtin.assert:
+    that: ops_agent_config_cfg.database.instance is defined or ops_agent_config_database_host | length > 0
+    fail_msg: >-
+      backend {{ ops_agent_config_backend }} keeps history outside config.json instances:
+      pass -e queue_env_database_host=$(terraform -chdir=.. output -raw cloudsql_private_ip)
+    quiet: true
+  when: ops_agent_config_profile == 'history'
+
+- name: Ops Agent configuration ({{ ops_agent_config_profile }})
+  ansible.builtin.template:
+    src: "{{ ops_agent_config_profile }}.yaml.j2"
+    dest: /etc/google-cloud-ops-agent/config.yaml
+    owner: root
+    group: root
+    mode: "0600"
+  diff: false # holds credentials
+  notify: restart ops agent

@@ -1,0 +1,7 @@
+---
+# Name of the systemd unit the handler restarts. VMs are named after the services (fetcher, history),
+# so by default this is the inventory host name.
+service_handlers_name: "{{ inventory_hostname }}"
+
+# switch_backend stops and starts the services itself, in the right order, so it disables restarts for that time.
+service_handlers_skip_restart: false

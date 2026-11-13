@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>POI finder</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <aside>
+    <form id="form">
+      <label>Тип
+        <select name="type">
+          <option value="cafe">Кафе</option>
+          <option value="restaurant">Ресторан</option>
+          <option value="pharmacy">Аптека</option>
+          <option value="atm">Банкомат</option>
+          <option value="fuel">АЗС</option>
+          <option value="bakery">Пекарня</option>
+          <option value="supermarket">Супермаркет</option>
+        </select>
+      </label>
+      <label>Радіус, м
+        <input name="radius" type="number" min="1" max="5000" value="500" required>
+      </label>
+      <label>Широта
+        <input name="lat" type="number" step="any" min="-90" max="90" required>
+      </label>
+      <label>Довгота
+        <input name="lon" type="number" step="any" min="-180" max="180" required>
+      </label>
+      <div class="buttons">
+        <button type="submit">Шукати</button>
+        <button type="button" id="cancel" hidden>Скасувати</button>
+      </div>
+      <p class="hint">Точку можна вибрати кліком по мапі.</p>
+    </form>
+    <p id="status" role="status"></p>
+    <ul id="results"></ul>
+  </aside>
+  <div id="map"></div>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script src="app.js"></script>
+</body>
+</html>

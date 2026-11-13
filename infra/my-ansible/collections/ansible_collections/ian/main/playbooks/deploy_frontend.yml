@@ -1,0 +1,13 @@
+---
+# New static files: ./upload-artifacts.sh frontend, then this playbook. Nothing needs restarting, nginx reads the files from disk.
+#   ansible-playbook ian.main.deploy_frontend
+- ansible.builtin.import_playbook: ian.main.assert_project
+
+- name: Deploy frontend static files
+  hosts: frontend
+  vars_files: [vars/connection.yml]
+  tasks:
+    - name: Static files
+      ansible.builtin.include_role:
+        name: ian.main.frontend
+        tasks_from: static

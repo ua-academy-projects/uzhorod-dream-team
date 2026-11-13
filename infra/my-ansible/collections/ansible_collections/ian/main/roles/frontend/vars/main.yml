@@ -1,0 +1,3 @@
+---
+frontend_certbot_cert_path: "/etc/letsencrypt/live/{{ frontend_domain }}/fullchain.pem"
+frontend_certbot_key_path: "/etc/letsencrypt/live/{{ frontend_domain }}/privkey.pem"

@@ -1,0 +1,73 @@
+---
+# The role has several entry points: tasks_from: static / certs / nginx call their own tasks,
+# and each entry point validates only its own variables (static does not require the Cloudflare token).
+argument_specs:
+  main:
+    short_description: The whole Frontend VM (static files, certificate, nginx)
+    options: &all
+      frontend_domain: &domain
+        type: str
+        description: Domain (config.json services.frontend.domain).
+      frontend_email: &email
+        type: str
+        description: Email for Let's Encrypt (config.json services.frontend.email).
+      frontend_bucket: &bucket
+        type: str
+        description: Bucket with the static files (config.json services.frontend.bucket).
+      frontend_root: &root
+        type: path
+        default: /var/www/frontend
+        description: Site root on the VM.
+      frontend_gcloud_bin: &gcloud
+        type: path
+        default: /snap/bin/gcloud
+        description: Path to gcloud on the VM.
+      frontend_fetcher_host: &fhost
+        type: str
+        description: Fetcher address (config.json instances.fetcher.internal_ip).
+      frontend_fetcher_port: &fport
+        type: int
+        description: Fetcher port (config.json services.fetcher.ports.0).
+      frontend_certbot_staging: &staging
+        type: bool
+        default: false
+        description: Let's Encrypt staging (untrusted certificate, no rate limits).
+      frontend_certbot_renew_before_days: &renewdays
+        type: int
+        default: 30
+        description: The certificate is (re)issued if fewer than this many days remain until it expires.
+      frontend_cert_warn_days: &warndays
+        type: int
+        default: 14
+        description: The daily check writes WARN to syslog (cert_expiry alert) if fewer than this many days remain until the certificate expires.
+      frontend_cloudflare_credentials: &cfcreds
+        type: path
+        default: /root/.secrets/cloudflare.ini
+        description: File with the Cloudflare token on the VM.
+      frontend_cloudflare_api_token: &cftoken
+        type: str
+        required: true
+        no_log: true
+        description: Cloudflare API token (DNS-01).
+  static:
+    short_description: Syncs the static files from the bucket
+    options:
+      frontend_bucket: *bucket
+      frontend_root: *root
+      frontend_gcloud_bin: *gcloud
+  certs:
+    short_description: Issues a Let's Encrypt certificate via DNS-01 on Cloudflare, only if there is none, it is about to expire, or the type (staging/production) or domain changed
+    options:
+      frontend_domain: *domain
+      frontend_email: *email
+      frontend_certbot_staging: *staging
+      frontend_certbot_renew_before_days: *renewdays
+      frontend_cloudflare_credentials: *cfcreds
+      frontend_cloudflare_api_token: *cftoken
+  nginx:
+    short_description: nginx with TLS and a proxy of /api to fetcher
+    options:
+      frontend_domain: *domain
+      frontend_root: *root
+      frontend_fetcher_host: *fhost
+      frontend_fetcher_port: *fport

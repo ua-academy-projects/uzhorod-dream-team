@@ -1,0 +1,25 @@
+---
+# Dynamic inventory: the VMs that exist in the GCP project right now.
+#   gcloud auth application-default login     (needs compute.instances.list, e.g. roles/compute.viewer)
+#
+# Wrapper over google.cloud.gcp_compute (plugins/inventory/gcp_osm.py): every option below is a gcp_compute option.
+# `projects` is deliberately absent: gcp_compute neither templates it nor reads the gcloud default project, so the wrapper
+# fills it in from project_id in ../config.json (lookup ian.main.osm_config).
+#
+# Host names = VM names (bastion, frontend, ...) = keys of config.json "instances".
+# No groups: playbooks address hosts by name (`hosts: fetcher:history`), names being the keys of config.json "instances".
+# Everything else (ports, internal IPs, env) is read from ../config.json by the ian.main.osm_config lookup.
+# ansible_host of the private VMs is set in the playbooks (ProxyJump through the bastion), not here.
+plugin: ian.main.gcp_osm
+auth_kind: application
+filters:
+  - status = RUNNING
+hostnames:
+  - name
+compose:
+  # The only thing the API knows and config.json does not: public addresses.
+  #   bastion  - ephemeral, where SSH connects (ansible_host below)
+  #   frontend - static address, the value of its DNS A record (role ian.main.frontend, tasks_from dns)
+  # Internal addresses are NOT taken from the API: playbooks set ansible_host from config.json (instances.<name>.internal_ip).
+  external_ip: "networkInterfaces[0].accessConfigs[0].natIP if name in ['bastion', 'frontend'] else ''"
+  ansible_host: "networkInterfaces[0].accessConfigs[0].natIP if name == 'bastion' else name"

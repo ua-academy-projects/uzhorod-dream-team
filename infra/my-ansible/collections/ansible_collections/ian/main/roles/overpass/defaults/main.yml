@@ -1,0 +1,11 @@
+---
+# Overpass API in the wiktorn/overpass-api container on the overpassapi VM. Everything is taken from config.json services.overpassapi.
+overpass_image: "{{ lookup('ian.main.osm_config', 'services.overpassapi.image') }}"
+overpass_port: "{{ lookup('ian.main.osm_config', 'services.overpassapi.ports.0') }}"
+overpass_planet_url: "{{ lookup('ian.main.osm_config', 'services.overpassapi.planet_url') }}"
+overpass_planet_preprocess: "{{ lookup('ian.main.osm_config', 'services.overpassapi.planet_preprocess') }}"
+overpass_diff_url: "{{ lookup('ian.main.osm_config', 'services.overpassapi.diff_url') }}"
+overpass_update_sleep: "{{ lookup('ian.main.osm_config', 'services.overpassapi.update_sleep') }}"
+overpass_rules_load: "{{ lookup('ian.main.osm_config', 'services.overpassapi.rules_load') }}"
+overpass_meta: "{{ lookup('ian.main.osm_config', 'services.overpassapi.meta') }}"
+overpass_data_dir: "{{ lookup('ian.main.osm_config', 'services.overpassapi.data_dir') }}"

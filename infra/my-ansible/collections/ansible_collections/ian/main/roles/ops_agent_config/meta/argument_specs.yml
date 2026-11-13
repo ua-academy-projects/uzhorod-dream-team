@@ -1,0 +1,40 @@
+---
+argument_specs:
+  main:
+    short_description: Ops Agent config that collects application metrics (PostgreSQL, RabbitMQ, Redis)
+    options:
+      ops_agent_config_profile:
+        type: str
+        choices: [history, querycache]
+        description: history - postgresql receiver for the history database; querycache - rabbitmq and redis receivers.
+      ops_agent_config_backend:
+        type: int
+        description: Backend whose database is polled (history profile). Defaults to selected_backend.
+      ops_agent_config_interval:
+        type: str
+        default: 60s
+        description: Metrics collection interval.
+      ops_agent_config_qc_host:
+        type: str
+        description: Address of the querycache VM.
+      ops_agent_config_rabbit_port:
+        type: int
+        default: 15672
+        description: RabbitMQ management API port on localhost.
+      ops_agent_config_redis_port:
+        type: int
+        description: Redis port (config.json services.querycache.ports.1).
+      ops_agent_config_database_host:
+        type: str
+        description: Database address, if backends.N.database has no instance (Cloud SQL). Required for the history profile.
+      ops_agent_config_rabbit_user:
+        type: str
+        description: RabbitMQ user (querycache profile). Needs the monitoring tag.
+      ops_agent_config_rabbit_password:
+        type: str
+        no_log: true
+        description: RabbitMQ user password (querycache profile).
+      ops_agent_config_redis_password:
+        type: str
+        no_log: true
+        description: Redis password (querycache profile).

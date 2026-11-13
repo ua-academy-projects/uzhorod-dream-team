@@ -1,0 +1,17 @@
+---
+# Guard: the inventory is not empty. The gcp_compute plugin silently returns an empty inventory if the VMs have not been created yet
+# (terraform apply) or the project from config.json (project_id) is wrong. The inventory takes the project from project_id in config.json (plugin ian.main.gcp_osm),
+# so a mismatch between them is impossible.
+- name: Check the inventory has the VMs
+  hosts: localhost
+  gather_facts: false
+  vars:
+    assert_project_expected: "{{ lookup('ian.main.osm_config', 'project_id') }}"
+  tasks:
+    - name: Inventory is not empty
+      ansible.builtin.assert:
+        that: groups['all'] | length > 0
+        fail_msg: >-
+          The inventory is empty: no RUNNING VMs in project {{ assert_project_expected }}
+          (terraform apply not done, or no access: gcloud auth application-default login).
+        quiet: true

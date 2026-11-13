@@ -1,0 +1,10 @@
+---
+# New fetcher/history binaries: ./upload-artifacts.sh fetcher history, then this playbook.
+# Restarts a service only if its binary changed.
+#   ansible-playbook ian.main.deploy_binaries -e @secrets/vault.yml
+- ansible.builtin.import_playbook: ian.main.assert_project
+
+- name: Deploy binaries
+  hosts: fetcher:history
+  vars_files: [vars/connection.yml, vars/secrets.yml]
+  roles: [ian.main.artifact_service]

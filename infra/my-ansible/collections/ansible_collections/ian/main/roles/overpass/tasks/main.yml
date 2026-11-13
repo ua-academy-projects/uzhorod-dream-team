@@ -1,0 +1,149 @@
+---
+# Equivalent of docker run -e OVERPASS_META=yes -e OVERPASS_MODE=init -e OVERPASS_PLANET_URL=... -e OVERPASS_DIFF_URL=...
+#   -e OVERPASS_RULES_LOAD=10 -v <data_dir>:/db -p 80:80 wiktorn/overpass-api
+# The image downloads the map and builds the database only on first start (marker /db/init_done), after that it just starts and updates itself with diffs,
+# so re-running the role changes nothing. The first import takes hours; the role does not wait for it.
+- name: Docker
+  ansible.builtin.apt:
+    name: docker.io
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Enable and start Docker
+  ansible.builtin.systemd:
+    name: docker
+    enabled: true
+    state: started
+
+- name: Database directory
+  ansible.builtin.file:
+    path: "{{ overpass_data_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Environment of the container
+  ansible.builtin.copy:
+    dest: /etc/overpass.env
+    owner: root
+    group: root
+    mode: "0644"
+    # --env-file format: KEY=value lines without quotes
+    content: |
+      OVERPASS_META={{ overpass_meta }}
+      OVERPASS_MODE=init
+      OVERPASS_PLANET_URL={{ overpass_planet_url }}
+      OVERPASS_PLANET_PREPROCESS={{ overpass_planet_preprocess }}
+      OVERPASS_DIFF_URL={{ overpass_diff_url }}
+      OVERPASS_UPDATE_SLEEP={{ overpass_update_sleep }}
+      OVERPASS_RULES_LOAD={{ overpass_rules_load }}
+      OVERPASS_COMPRESSION=gz
+      OVERPASS_STOP_AFTER_INIT=false
+  notify: restart overpass
+
+- name: Is the image present
+  ansible.builtin.command: docker image inspect {{ overpass_image }}
+  register: overpass_image_present
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Pull the image
+  ansible.builtin.command: docker pull {{ overpass_image }}
+  when: overpass_image_present.rc != 0
+  notify: restart overpass
+
+- name: overpass.service
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/overpass.service
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=Overpass API
+      After=docker.service network-online.target
+      Requires=docker.service
+      Wants=network-online.target
+
+      [Service]
+      # the first import (download, osmium, indexing) takes hours
+      TimeoutStartSec=0
+      Restart=always
+      RestartSec=10
+      ExecStartPre=-/usr/bin/docker rm -f overpass
+      ExecStart=/usr/bin/docker run --rm --name overpass --env-file /etc/overpass.env -v {{ overpass_data_dir }}:/db -p {{ overpass_port }}:80 {{ overpass_image }}
+      ExecStop=/usr/bin/docker stop -t 60 overpass
+
+      [Install]
+      WantedBy=multi-user.target
+  notify:
+    - reload systemd
+    - restart overpass
+
+# Health check: every minute a timer queries /api/status and writes "overpass_health OK|FAIL|INIT" to syslog.
+# Ops Agent ships syslog to Cloud Logging, the log-based metric alert_overpass_health (config.json monitoring.log_alerts) counts FAIL.
+# While the database is being imported (no /db/init_done), INIT is written instead of FAIL so the alert stays quiet.
+- name: Health check script
+  ansible.builtin.copy:
+    dest: /usr/local/bin/overpass-health-check
+    owner: root
+    group: root
+    mode: "0755"
+    content: |
+      #!/bin/sh
+      if [ ! -f "{{ overpass_data_dir }}/init_done" ]; then
+        logger -t overpass_health "overpass_health INIT import is not finished"
+        exit 0
+      fi
+      if curl -fsS --max-time 10 -o /dev/null http://127.0.0.1:{{ overpass_port }}/api/status; then
+        logger -t overpass_health "overpass_health OK"
+      else
+        logger -t overpass_health "overpass_health FAIL /api/status does not answer"
+        exit 1
+      fi
+
+- name: Health check service
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/overpass-health.service
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=Overpass API health check
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/bin/overpass-health-check
+  notify: reload systemd
+
+- name: Health check timer
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/overpass-health.timer
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=Overpass API health check every minute
+
+      [Timer]
+      OnBootSec=2min
+      OnUnitActiveSec=1min
+
+      [Install]
+      WantedBy=timers.target
+  notify: reload systemd
+
+- name: Apply the unit files and the configuration
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable and start Overpass and its health check
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    enabled: true
+    state: started
+  loop: [overpass.service, overpass-health.timer]

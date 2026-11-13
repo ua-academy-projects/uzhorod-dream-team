@@ -1,0 +1,4 @@
+---
+# Minimum ansible-core version on which the collection is guaranteed to work.
+# Ansible will refuse to load it on an older core, with a clear message.
+requires_ansible: ">=2.18.0"

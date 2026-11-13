@@ -1,0 +1,30 @@
+---
+# Postgres on the database VM for two databases: pgmq (queue + hstore cache) and history.
+# Everything present in config.json is taken from there. Secrets are passed by the playbook (see below).
+
+postgres_listen_host: "{{ lookup('ian.main.osm_config', 'instances.database.internal_ip') }}"
+postgres_port: "{{ lookup('ian.main.osm_config', 'services.database.ports.0') }}"
+
+postgres_pgmq_db: "{{ lookup('ian.main.osm_config', 'services.database.databases.pgmq.name') }}"
+postgres_pgmq_user: "{{ lookup('ian.main.osm_config', 'services.database.databases.pgmq.user') }}"
+postgres_history_db: "{{ lookup('ian.main.osm_config', 'services.database.databases.history.name') }}"
+postgres_history_user: "{{ lookup('ian.main.osm_config', 'services.database.databases.history.user') }}"
+
+# pgmq is not packaged: it is plain SQL, pinned by version and checksum
+postgres_pgmq_version: "{{ lookup('ian.main.osm_config', 'services.database.pgmq_version') }}"
+postgres_pgmq_sha256: "{{ lookup('ian.main.osm_config', 'services.database.pgmq_sha256') }}"
+
+# Client addresses come from config.instances, not from hostvars: the role does not depend on whether the VMs are currently running.
+postgres_fetcher_ip: "{{ lookup('ian.main.osm_config', 'instances.fetcher.internal_ip') }}"
+postgres_history_ip: "{{ lookup('ian.main.osm_config', 'instances.history.internal_ip') }}"
+
+# Least privilege: each address sees only the database it needs
+# (fetcher and history work with pgmq, only history with history).
+postgres_hba_rules:
+  - { db: "{{ postgres_pgmq_db }}", user: "{{ postgres_pgmq_user }}", source: "{{ postgres_fetcher_ip }}" }
+  - { db: "{{ postgres_pgmq_db }}", user: "{{ postgres_pgmq_user }}", source: "{{ postgres_history_ip }}" }
+  - { db: "{{ postgres_history_db }}", user: "{{ postgres_history_user }}", source: "{{ postgres_history_ip }}" }
+
+# Secrets with no default values (required in argument_specs):
+# postgres_pgmq_password:
+# postgres_history_password:

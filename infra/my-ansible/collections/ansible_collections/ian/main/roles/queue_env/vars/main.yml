@@ -1,0 +1,3 @@
+---
+queue_env_config_dir: /etc/osm
+queue_env_file: "{{ queue_env_config_dir }}/queue.env"

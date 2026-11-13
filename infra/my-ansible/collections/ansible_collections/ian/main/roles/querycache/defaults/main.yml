@@ -1,0 +1,13 @@
+---
+# RabbitMQ (queue) and Redis (cache): backend 1 for fetcher and history (config.json backends.1).
+querycache_host: "{{ lookup('ian.main.osm_config', 'instances.querycache.internal_ip') }}"
+querycache_amqp_port: "{{ lookup('ian.main.osm_config', 'services.querycache.ports.0') }}"
+querycache_redis_port: "{{ lookup('ian.main.osm_config', 'services.querycache.ports.1') }}"
+querycache_rabbit_management_port: 15672 # only on 127.0.0.1
+querycache_rabbit_memory: "{{ lookup('ian.main.osm_config', 'services.querycache.rabbit_memory') }}"
+querycache_redis_maxmemory: "{{ lookup('ian.main.osm_config', 'services.querycache.redis_maxmemory') }}"
+
+# Secrets with no default values (required in argument_specs):
+# querycache_rabbit_user:
+# querycache_rabbit_password:
+# querycache_redis_password:

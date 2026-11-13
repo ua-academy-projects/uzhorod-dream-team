@@ -1,0 +1,14 @@
+---
+argument_specs:
+  main:
+    short_description: Base packages on all VMs
+    options:
+      common_packages:
+        type: list
+        elements: str
+        default: [ca-certificates, curl]
+        description: apt packages that must be installed.
+      common_apt_cache_valid_time:
+        type: int
+        default: 3600
+        description: How many seconds the apt index is considered fresh.

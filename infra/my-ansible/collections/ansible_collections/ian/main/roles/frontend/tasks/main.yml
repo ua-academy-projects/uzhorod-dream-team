@@ -1,0 +1,19 @@
+---
+# The domain's A record is created by Terraform. The certificate is issued (DNS-01, nginx not needed) before
+# nginx gets its TLS config, so there is no circular dependency.
+# Each part can be run separately: tasks_from static / certs (playbooks deploy_frontend, issue_certificate).
+- name: Static files
+  ansible.builtin.import_tasks: static.yml
+  tags: [static]
+
+- name: Certificate
+  ansible.builtin.import_tasks: certs.yml
+  tags: [certs]
+
+- name: nginx
+  ansible.builtin.import_tasks: nginx.yml
+  tags: [nginx]
+
+- name: Certificate expiry check (monitoring)
+  ansible.builtin.import_tasks: cert_expiry.yml
+  tags: [certs, monitoring]

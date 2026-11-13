@@ -1,0 +1,23 @@
+---
+# The role's public interface. Values from config.json are read here so they can be overridden.
+frontend_domain: "{{ lookup('ian.main.osm_config', 'services.frontend.domain') }}"
+frontend_email: "{{ lookup('ian.main.osm_config', 'services.frontend.email') }}"
+frontend_bucket: "{{ lookup('ian.main.osm_config', 'services.frontend.bucket') }}"
+frontend_root: /var/www/frontend
+frontend_gcloud_bin: /snap/bin/gcloud
+
+# nginx proxies /api to fetcher. The address comes from config.instances, not from hostvars.
+frontend_fetcher_host: "{{ lookup('ian.main.osm_config', 'instances.fetcher.internal_ip') }}"
+frontend_fetcher_port: "{{ lookup('ian.main.osm_config', 'services.fetcher.ports.0') }}"
+
+# Let's Encrypt staging: untrusted certificate, no rate limits. For the first run.
+# Switching staging <-> production needs no manual steps: the role notices the mismatch and reissues.
+frontend_certbot_staging: false
+# The certificate is (re)issued if fewer than this many days remain until it expires
+frontend_certbot_renew_before_days: 30
+# the daily certificate check writes WARN to syslog if fewer than this many days remain (cert_expiry alert)
+frontend_cert_warn_days: 14
+frontend_cloudflare_credentials: /root/.secrets/cloudflare.ini
+
+# Secret with no default value (required for the main and certs entry points):
+# frontend_cloudflare_api_token:

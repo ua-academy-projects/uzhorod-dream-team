@@ -1,0 +1,23 @@
+---
+# How to connect to the VMs. Included in every play via vars_files.
+#
+# bastion (config.json: instances.<name>.bastion = true):
+#   ansible_host = external_ip from the inventory (an ephemeral address, known only to the API).
+# the rest:
+#   ansible_host = internal_ip from config.json, SSH goes through the bastion (ProxyJump).
+#   frontend has an external_ip, but SSH does not use it.
+connection_is_bastion: "{{ lookup('ian.main.osm_config', 'instances.' ~ inventory_hostname ~ '.bastion', default=false) }}"
+
+ansible_host: "{{ external_ip if connection_is_bastion else lookup('ian.main.osm_config', 'instances.' ~ inventory_hostname ~ '.internal_ip') }}"
+
+# User = ansible_user if set, otherwise remote_user from ansible.cfg.
+ansible_ssh_common_args: >-
+  {{ '' if connection_is_bastion else
+     '-o StrictHostKeyChecking=accept-new -o ProxyJump='
+     ~ (ansible_user | default(lookup('ansible.builtin.config', 'DEFAULT_REMOTE_USER')))
+     ~ '@' ~ hostvars['bastion'].external_ip }}
+
+# Queue/cache/DB backend: a key in config.json backends. -e backend=N overrides config.json active_backend for a single run.
+# queue_env_backend takes its value from here, so site and switch_backend always see the same choice.
+selected_backend: "{{ (backend | default(lookup('ian.main.osm_config', 'active_backend'))) | int }}"
+queue_env_backend: "{{ selected_backend }}"

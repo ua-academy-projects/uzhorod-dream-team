@@ -1,0 +1,43 @@
+# managed by ansible (ian.main.frontend)
+limit_req_zone $binary_remote_addr zone=api:10m rate=30r/m;
+limit_req_status 429;
+
+server {
+  listen 80 default_server;
+  server_name {{ frontend_domain }};
+  return 301 https://$host$request_uri;
+}
+
+server {
+  listen 443 ssl;
+  http2 on;
+  server_name {{ frontend_domain }};
+  root {{ frontend_root }};
+
+  ssl_certificate {{ frontend_certbot_cert_path }};
+  ssl_certificate_key {{ frontend_certbot_key_path }};
+
+  access_log /var/log/nginx/access.log;
+  access_log syslog:server=unix:/dev/log,tag=nginx_access,nohostname;
+  error_log syslog:server=unix:/dev/log,tag=nginx_error,nohostname;
+
+  location / {
+    limit_except GET HEAD { deny all; }
+    try_files $uri $uri/ =404;
+  }
+
+  # the page calls /api/pois; the fetcher serves /pois (the client gives up after 100 s)
+  location = /api/pois {
+    limit_except GET { deny all; }
+    limit_req zone=api burst=10 nodelay;
+    proxy_read_timeout 100s;
+    proxy_pass http://{{ frontend_fetcher_host }}:{{ frontend_fetcher_port }}/pois;
+  }
+
+  location = /api/healthz {
+    limit_except GET { deny all; }
+    proxy_pass http://{{ frontend_fetcher_host }}:{{ frontend_fetcher_port }}/healthz;
+  }
+
+  location /api/ { return 404; }
+}

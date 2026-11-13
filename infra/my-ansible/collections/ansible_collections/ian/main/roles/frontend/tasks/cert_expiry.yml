@@ -1,0 +1,65 @@
+---
+# The origin certificate is monitored by the VM itself: the Terraform uptime check goes through Cloudflare and sees only its certificate.
+# Daily a timer writes a line "cert_expiry OK|WARN|FAIL ..." to syslog, Ops Agent ships syslog to Cloud Logging,
+# and the log-based metric alert_cert_expiry (config.json monitoring.log_alerts) counts WARN and FAIL lines.
+- name: Certificate expiry check script
+  ansible.builtin.copy:
+    dest: /usr/local/bin/cert-expiry-check
+    owner: root
+    group: root
+    mode: "0755"
+    content: |
+      #!/bin/sh
+      cert="$1"; domain="$2"; warn_days="$3"
+      if ! end=$(openssl x509 -noout -enddate -in "$cert" 2>/dev/null | cut -d= -f2) || [ -z "$end" ]; then
+        logger -t cert_expiry "cert_expiry FAIL cannot read $cert domain=$domain"
+        exit 1
+      fi
+      left=$(( ($(date -d "$end" +%s) - $(date +%s)) / 86400 ))
+      if [ "$left" -lt "$warn_days" ]; then
+        logger -t cert_expiry "cert_expiry WARN days_left=$left domain=$domain"
+      else
+        logger -t cert_expiry "cert_expiry OK days_left=$left domain=$domain"
+      fi
+
+- name: Certificate expiry check service
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/cert-expiry-check.service
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=Log the days left of the frontend certificate
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/bin/cert-expiry-check {{ frontend_certbot_cert_path }} {{ frontend_domain }} {{ frontend_cert_warn_days }}
+  notify: reload systemd
+
+- name: Certificate expiry check timer
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/cert-expiry-check.timer
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=Daily certificate expiry check
+
+      [Timer]
+      OnCalendar=daily
+      Persistent=true
+
+      [Install]
+      WantedBy=timers.target
+  notify: reload systemd
+
+- name: Apply the unit files
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable the timer
+  ansible.builtin.systemd:
+    name: cert-expiry-check.timer
+    enabled: true
+    state: started

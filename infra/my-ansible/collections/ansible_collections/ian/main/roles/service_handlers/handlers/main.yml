@@ -1,0 +1,10 @@
+---
+- name: reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: true
+
+- name: restart osm service
+  ansible.builtin.systemd:
+    name: "{{ service_handlers_name }}"
+    state: restarted
+  when: not service_handlers_skip_restart

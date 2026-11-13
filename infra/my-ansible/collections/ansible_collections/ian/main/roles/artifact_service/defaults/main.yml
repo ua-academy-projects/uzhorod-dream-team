@@ -1,0 +1,19 @@
+---
+# The role's public interface: everything here can be overridden via play vars or -e.
+# Values from config.json are read here, not in tasks, so they can be overridden.
+
+# Service name = host name (fetcher, history) = key in config.json "services".
+# Note: service_handlers_name also defaults to inventory_hostname. If you override this name,
+# override service_handlers_name too, otherwise the handler will restart the wrong unit.
+artifact_service_name: "{{ inventory_hostname }}"
+
+# Artifacts bucket: gs://<project>-artifacts
+artifact_service_bucket: "{{ lookup('ian.main.osm_config', 'services.' ~ artifact_service_name ~ '.binary') }}"
+
+# Environment variables from config.json (PORT, RUST_LOG, ...)
+artifact_service_env: "{{ lookup('ian.main.osm_config', 'services.' ~ artifact_service_name ~ '.env') }}"
+
+# Extra variables not present in config.json (for example DATABASE_URL with a password). Merged with artifact_service_env.
+artifact_service_env_extra: {}
+
+artifact_service_gcloud_bin: /snap/bin/gcloud

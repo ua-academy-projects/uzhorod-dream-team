@@ -1,0 +1,16 @@
+---
+# Issues a certificate via DNS-01 on Cloudflare. Idempotent: certbot runs only when there is no certificate,
+# it is about to expire (frontend_certbot_renew_before_days), or the type (staging/production) or the domain changed. nginx is reloaded by the
+# certbot deploy hook, so there is no separate reload here.
+#   ansible-playbook ian.main.issue_certificate -e @secrets/vault.yml
+#   ansible-playbook ian.main.issue_certificate -e @secrets/vault.yml -e frontend_certbot_staging=true
+- ansible.builtin.import_playbook: ian.main.assert_project
+
+- name: Issue the certificate
+  hosts: frontend
+  vars_files: [vars/connection.yml, vars/secrets.yml]
+  tasks:
+    - name: Issue the certificate
+      ansible.builtin.include_role:
+        name: ian.main.frontend
+        tasks_from: certs

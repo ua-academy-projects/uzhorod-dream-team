@@ -1,0 +1,18 @@
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; font: 14px/1.4 system-ui, sans-serif; }
+body { display: grid; grid-template-columns: 320px 1fr; }
+aside { padding: 12px; overflow-y: auto; border-right: 1px solid #ccc; }
+#map { height: 100%; }
+label { display: block; margin-bottom: 8px; }
+input, select { display: block; width: 100%; padding: 4px; }
+.buttons { display: flex; gap: 8px; }
+button { padding: 6px 12px; }
+.hint { color: #666; font-size: 12px; }
+#status.error { color: #b00020; }
+#results { padding: 0; list-style: none; }
+#results li { padding: 6px 0; border-bottom: 1px solid #eee; cursor: pointer; }
+#results li:hover { background: #f4f4f4; }
+@media (max-width: 700px) {
+  body { grid-template-columns: 1fr; grid-template-rows: auto 60vh; height: auto; }
+  aside { border-right: 0; }
+}

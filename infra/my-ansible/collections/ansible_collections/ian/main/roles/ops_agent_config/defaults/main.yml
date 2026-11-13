@@ -1,0 +1,20 @@
+---
+# Application metrics for Ops Agent (postgresql, rabbitmq, redis receivers). The agent itself is installed by the OS policy from Terraform
+# (modules/ops_agent); this role only puts its config on the VMs that need such receivers.
+# Profile: history (postgresql receiver for the history database) or querycache (rabbitmq and redis receivers).
+ops_agent_config_profile: "{{ 'history' if inventory_hostname == 'history' else 'querycache' }}"
+
+# history: the database comes from the active backend (config.json backends.<N>.database), as in queue_env
+ops_agent_config_backend: "{{ selected_backend | default(lookup('ian.main.osm_config', 'active_backend')) }}"
+ops_agent_config_cfg: "{{ lookup('ian.main.osm_config', 'backends.' ~ ops_agent_config_backend) }}"
+ops_agent_config_interval: 60s
+
+# querycache
+ops_agent_config_qc_host: "{{ lookup('ian.main.osm_config', 'instances.querycache.internal_ip') }}"
+ops_agent_config_rabbit_port: 15672
+ops_agent_config_redis_port: "{{ lookup('ian.main.osm_config', 'services.querycache.ports.1') }}"
+
+# No default values (playbooks/vars/secrets.yml):
+# ops_agent_config_rabbit_user, ops_agent_config_rabbit_password, ops_agent_config_redis_password  (querycache)
+# ops_agent_config_database_host:  (empty = none) only for a backend whose DB is not in config.json instances (Cloud SQL)
+# The history DB password is taken from the vault by the name from backends.<N>.secrets.database_password.

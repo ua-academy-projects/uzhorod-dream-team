@@ -1,0 +1,75 @@
+---
+- name: Install RabbitMQ and Redis
+  ansible.builtin.apt:
+    name: [rabbitmq-server, redis-server]
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: RabbitMQ listeners and memory limit
+  ansible.builtin.copy:
+    dest: /etc/rabbitmq/rabbitmq.conf
+    owner: root
+    group: rabbitmq
+    mode: "0640"
+    content: |
+      listeners.tcp.1 = 127.0.0.1:{{ querycache_amqp_port }}
+      listeners.tcp.2 = {{ querycache_host }}:{{ querycache_amqp_port }}
+      vm_memory_high_watermark.absolute = {{ querycache_rabbit_memory }}
+      management.tcp.ip = 127.0.0.1
+      management.tcp.port = {{ querycache_rabbit_management_port }}
+  notify: restart rabbitmq
+
+# '\' and '"' are escaped, the value sits inside double quotes in redis.conf
+- name: Redis binding, password and memory policy
+  ansible.builtin.blockinfile:
+    path: /etc/redis/redis.conf
+    marker: "# {mark} OSM"
+    block: |
+      bind 127.0.0.1 -::1 {{ querycache_host }}
+      port {{ querycache_redis_port }}
+      requirepass "{{ querycache_redis_password | replace('\\', '\\\\') | replace('"', '\\"') }}"
+      maxmemory {{ querycache_redis_maxmemory }}
+      maxmemory-policy allkeys-lru
+      save ""
+      appendonly no
+  diff: false # holds the password
+  notify: restart redis
+
+- name: Enable and start
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    enabled: true
+    state: started
+  loop: [rabbitmq-server, redis-server]
+
+- name: Apply the configuration before creating users
+  ansible.builtin.meta: flush_handlers
+
+- name: Wait for RabbitMQ
+  ansible.builtin.command: rabbitmqctl await_startup
+  changed_when: false
+  check_mode: false
+
+# Management API only on localhost: the Ops Agent rabbitmq receiver reads queue depth from it
+- name: Management plugin
+  community.rabbitmq.rabbitmq_plugin:
+    names: rabbitmq_management
+    state: enabled
+
+- name: Application user with full rights on the default vhost
+  community.rabbitmq.rabbitmq_user:
+    user: "{{ querycache_rabbit_user }}"
+    password: "{{ querycache_rabbit_password }}"
+    tags: monitoring # lets the same user read the management API for metrics
+    vhost: /
+    configure_priv: ".*"
+    read_priv: ".*"
+    write_priv: ".*"
+    state: present
+  no_log: true
+
+- name: Remove the default guest user
+  community.rabbitmq.rabbitmq_user:
+    user: guest
+    state: absent

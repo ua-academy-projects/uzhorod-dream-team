@@ -1,0 +1,11 @@
+---
+# Internal constants of the role. They have high precedence and are not meant to be overridden.
+artifact_service_config_dir: /etc/osm
+artifact_service_bin_dir: /usr/local/bin
+artifact_service_unit_dir: /etc/systemd/system
+# Written by the queue_env role, and the unit only reads it as an EnvironmentFile
+artifact_service_queue_env_file: "{{ artifact_service_config_dir }}/queue.env"
+
+# Derived values
+artifact_service_object: "{{ artifact_service_bucket }}/{{ artifact_service_name }}/{{ artifact_service_name }}"
+artifact_service_download: "/var/tmp/{{ artifact_service_name }}.new"

@@ -1,0 +1,38 @@
+---
+argument_specs:
+  main:
+    short_description: RabbitMQ and Redis on the querycache VM
+    options:
+      querycache_host:
+        type: str
+        description: VM address (config.json instances.querycache.internal_ip).
+      querycache_amqp_port:
+        type: int
+        description: RabbitMQ port (config.json services.querycache.ports.0).
+      querycache_redis_port:
+        type: int
+        description: Redis port (config.json services.querycache.ports.1).
+      querycache_rabbit_management_port:
+        type: int
+        default: 15672
+        description: RabbitMQ management API port (listens only on 127.0.0.1, read by Ops Agent).
+      querycache_rabbit_memory:
+        type: str
+        description: Absolute RabbitMQ memory limit (config.json services.querycache.rabbit_memory).
+      querycache_redis_maxmemory:
+        type: str
+        description: maxmemory Redis (config.json services.querycache.redis_maxmemory).
+      querycache_rabbit_user:
+        type: str
+        required: true
+        description: Application user in RabbitMQ.
+      querycache_rabbit_password:
+        type: str
+        required: true
+        no_log: true
+        description: RabbitMQ user password.
+      querycache_redis_password:
+        type: str
+        required: true
+        no_log: true
+        description: Redis password (requirepass).

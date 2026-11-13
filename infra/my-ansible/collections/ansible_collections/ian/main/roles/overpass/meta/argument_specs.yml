@@ -1,0 +1,33 @@
+---
+argument_specs:
+  main:
+    short_description: Overpass API container (wiktorn/overpass-api) with a map of Ukraine, systemd, health check
+    options:
+      overpass_image:
+        type: str
+        description: Image with tag (config.json services.overpassapi.image).
+      overpass_port:
+        type: int
+        description: Host port Overpass listens on (config.json services.overpassapi.ports.0). 80 inside the container.
+      overpass_planet_url:
+        type: str
+        description: OSM file for the initial import (OVERPASS_PLANET_URL), Geofabrik .osm.pbf.
+      overpass_planet_preprocess:
+        type: str
+        description: Command converting pbf to osm.bz2 (OVERPASS_PLANET_PREPROCESS), because the image accepts only osm.bz2.
+      overpass_diff_url:
+        type: str
+        description: Directory of diffs for updates (OVERPASS_DIFF_URL).
+      overpass_update_sleep:
+        type: int
+        description: Pause between updates, in seconds (OVERPASS_UPDATE_SLEEP).
+      overpass_rules_load:
+        type: int
+        description: Load from areas generation (OVERPASS_RULES_LOAD).
+      overpass_meta:
+        type: str
+        choices: ["yes", "no", "attic"]
+        description: OVERPASS_META.
+      overpass_data_dir:
+        type: path
+        description: Database directory on the host, mounted as /db.

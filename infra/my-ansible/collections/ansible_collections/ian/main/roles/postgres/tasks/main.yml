@@ -1,0 +1,110 @@
+---
+- name: Install PostgreSQL
+  ansible.builtin.apt:
+    name: [postgresql, python3-psycopg2]
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Detect the installed major version
+  ansible.builtin.shell: ls /etc/postgresql | sort -n | tail -1
+  register: postgres_ver
+  changed_when: false
+  check_mode: false
+
+- name: Config directory of that cluster
+  ansible.builtin.set_fact:
+    postgres_conf_dir: "/etc/postgresql/{{ postgres_ver.stdout }}/main"
+
+- name: Listen on the private address
+  ansible.builtin.copy:
+    dest: "{{ postgres_conf_dir }}/conf.d/10-osm.conf"
+    owner: postgres
+    group: postgres
+    mode: "0644"
+    content: |
+      listen_addresses = 'localhost,{{ postgres_listen_host }}'
+      port = {{ postgres_port }}
+  notify: restart postgresql
+
+- name: Client access rules
+  community.postgresql.postgresql_pg_hba:
+    dest: "{{ postgres_conf_dir }}/pg_hba.conf"
+    contype: host
+    databases: "{{ item.db }}"
+    users: "{{ item.user }}"
+    source: "{{ item.source }}/32"
+    method: scram-sha-256
+  loop: "{{ postgres_hba_rules }}"
+  notify: reload postgresql
+
+- name: Enable and start PostgreSQL
+  ansible.builtin.systemd:
+    name: postgresql
+    enabled: true
+    state: started
+
+- name: Apply listen_addresses and pg_hba before using the databases
+  ansible.builtin.meta: flush_handlers
+
+- name: Roles
+  community.postgresql.postgresql_user:
+    name: "{{ item.name }}"
+    password: "{{ item.password }}"
+    login_port: "{{ postgres_port }}"
+    state: present
+  loop:
+    - { name: "{{ postgres_pgmq_user }}", password: "{{ postgres_pgmq_password }}" }
+    - { name: "{{ postgres_history_user }}", password: "{{ postgres_history_password }}" }
+  loop_control:
+    label: "{{ item.name }}"
+  become_user: postgres
+  no_log: true
+
+- name: Databases
+  community.postgresql.postgresql_db:
+    name: "{{ item.db }}"
+    owner: "{{ item.owner }}"
+    login_port: "{{ postgres_port }}"
+    state: present
+  loop:
+    - { db: "{{ postgres_pgmq_db }}", owner: "{{ postgres_pgmq_user }}" }
+    - { db: "{{ postgres_history_db }}", owner: "{{ postgres_history_user }}" }
+  loop_control:
+    label: "{{ item.db }}"
+  become_user: postgres
+
+- name: hstore (the fetcher cache table uses it)
+  community.postgresql.postgresql_ext:
+    name: hstore
+    login_db: "{{ postgres_pgmq_db }}"
+    login_port: "{{ postgres_port }}"
+    state: present
+  become_user: postgres
+
+- name: pgmq SQL
+  ansible.builtin.get_url:
+    url: "https://raw.githubusercontent.com/pgmq/pgmq/{{ postgres_pgmq_version }}/pgmq-extension/sql/pgmq.sql"
+    dest: "/usr/local/share/pgmq-{{ postgres_pgmq_version }}.sql"
+    checksum: "sha256:{{ postgres_pgmq_sha256 }}"
+    mode: "0644"
+
+- name: Is pgmq installed
+  community.postgresql.postgresql_query:
+    login_db: "{{ postgres_pgmq_db }}"
+    login_port: "{{ postgres_port }}"
+    query: "select to_regnamespace('pgmq') is not null as present"
+  register: postgres_pgmq_installed
+  become_user: postgres
+  changed_when: false
+  check_mode: false
+
+# applied by the database owner, so the application owns the pgmq schema
+- name: Install pgmq
+  ansible.builtin.command: >-
+    psql -qX -v ON_ERROR_STOP=1 -h 127.0.0.1 -p {{ postgres_port }} -U {{ postgres_pgmq_user }} -d {{ postgres_pgmq_db }}
+    -f /usr/local/share/pgmq-{{ postgres_pgmq_version }}.sql
+  environment:
+    PGPASSWORD: "{{ postgres_pgmq_password }}"
+  no_log: true
+  when: not postgres_pgmq_installed.query_result[0].present

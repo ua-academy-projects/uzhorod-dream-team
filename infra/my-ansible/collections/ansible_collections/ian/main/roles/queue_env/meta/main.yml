@@ -1,0 +1,3 @@
+---
+dependencies:
+  - role: ian.main.service_handlers

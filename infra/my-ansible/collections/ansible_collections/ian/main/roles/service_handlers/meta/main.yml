@@ -1,0 +1,4 @@
+---
+# Only handlers shared by artifact_service and queue_env.
+# The dependency is loaded once per play, so handlers are not duplicated.
+dependencies: []

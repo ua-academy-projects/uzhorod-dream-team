@@ -1,0 +1,28 @@
+---
+# index.html, style.css, app.js: no build step, uploaded with infra/upload-artifacts.sh frontend
+- name: Web root
+  ansible.builtin.file:
+    path: "{{ frontend_root }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Sync static files from the bucket
+  ansible.builtin.command: >-
+    {{ frontend_gcloud_bin }} storage rsync --recursive --delete-unmatched-destination-objects
+    {{ frontend_bucket }}/frontend {{ frontend_root }}
+  register: frontend_rsync
+  # rsync writes to stderr what it copies or deletes; empty = nothing changed
+  changed_when: "'Copying' in frontend_rsync.stderr or 'Removing' in frontend_rsync.stderr"
+  check_mode: false
+
+- name: Check that index.html arrived
+  ansible.builtin.stat:
+    path: "{{ frontend_root }}/index.html"
+  register: frontend_index
+
+- name: Stop if the bucket had no frontend
+  ansible.builtin.fail:
+    msg: "{{ frontend_bucket }}/frontend is empty: run infra/upload-artifacts.sh frontend"
+  when: not frontend_index.stat.exists

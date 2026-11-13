@@ -1,0 +1,24 @@
+{#- History table metrics: workload.googleapis.com/postgresql.operations{database,table,operation}. -#}
+{% set d = ops_agent_config_cfg.database %}
+{% set dhost = lookup('ian.main.osm_config', 'instances.' ~ d.instance ~ '.internal_ip') if d.instance is defined else ops_agent_config_database_host %}
+{% set tls = d.query is defined and 'sslmode=require' in d.query %}
+metrics:
+  receivers:
+    postgresql:
+      type: postgresql
+      endpoint: {{ dhost }}:{{ d.port }}
+      username: {{ d.user }}
+      password: {{ lookup('vars', ops_agent_config_cfg.secrets.database_password) | to_json }}
+      databases: [{{ d.path }}]
+      collection_interval: {{ ops_agent_config_interval }}
+{% if tls %}
+      # the Cloud SQL certificate is signed by its own CA, which the agent does not know; the connection on the private network is still encrypted
+      insecure: false
+      insecure_skip_verify: true
+{% else %}
+      insecure: true
+{% endif %}
+  service:
+    pipelines:
+      postgresql:
+        receivers: [postgresql]

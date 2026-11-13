@@ -1,0 +1,15 @@
+---
+argument_specs:
+  main:
+    short_description: Shared handlers for restarting the osm services
+    description:
+      - Has no tasks. Included as a dependency (C(meta/main.yml)) of the artifact_service and queue_env roles.
+    options:
+      service_handlers_name:
+        type: str
+        default: "{{ inventory_hostname }}"
+        description: Name of the systemd unit for the handler C(restart osm service).
+      service_handlers_skip_restart:
+        type: bool
+        default: false
+        description: If true, the handler C(restart osm service) does nothing.

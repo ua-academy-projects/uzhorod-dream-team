@@ -1,0 +1,75 @@
+---
+# Full deployment. Requires: terraform apply, infra/upload-artifacts.sh.
+# Order = dependencies: databases and broker first, then the services that use them, then the edge.
+#   ansible-playbook ian.main.site -e @secrets/vault.yml -e queue_env_database_host=<IP Cloud SQL>   (first time: -e frontend_certbot_staging=true)
+#   Active backend = config.json active_backend; -e backend=N overrides it for a single run (see config.json backends).
+#   Roles needed only by a particular backend run only for it: Postgres on the `database` VM (role postgres) only
+#   for backend 2, RabbitMQ and Redis (role querycache) only for backend 1. For the other backend they are not run at all.
+- ansible.builtin.import_playbook: ian.main.assert_project
+
+- name: Base packages
+  hosts: all
+  vars_files: [vars/connection.yml, vars/secrets.yml]
+  roles: [ian.main.common]
+
+# include_role (dynamic) rather than roles:, so that for the other backend not even the role's argument validation runs (it has the always tag)
+- name: Postgres (pgmq, hstore and the history database), backend 2 only
+  hosts: database
+  vars_files: [vars/connection.yml, vars/secrets.yml]
+  tasks:
+    - name: Postgres role
+      ansible.builtin.include_role:
+        name: ian.main.postgres
+        apply:
+          tags: [database]
+      when: selected_backend | int == 2
+      tags: [database]
+
+- name: RabbitMQ and Redis, backend 1 only
+  hosts: querycache
+  vars_files: [vars/connection.yml, vars/secrets.yml]
+  tasks:
+    - name: RabbitMQ and Redis role
+      ansible.builtin.include_role:
+        name: ian.main.querycache
+        apply:
+          tags: [querycache]
+      when: selected_backend | int == 1
+      tags: [querycache]
+
+- name: fetcher and history
+  hosts: fetcher:history
+  vars_files: [vars/connection.yml, vars/secrets.yml]
+  roles: [ian.main.queue_env, ian.main.artifact_service]
+  tags: [services]
+
+# Application metrics for Cloud Monitoring (the Ops Agent must already have been installed by the OS policy from Terraform)
+- name: Ops Agent metrics of RabbitMQ and Redis, backend 1 only
+  hosts: querycache
+  vars_files: [vars/connection.yml, vars/secrets.yml]
+  tasks:
+    - name: Ops Agent configuration
+      ansible.builtin.include_role:
+        name: ian.main.ops_agent_config
+        apply:
+          tags: [monitoring]
+      when: selected_backend | int == 1
+      tags: [monitoring]
+
+- name: Ops Agent metrics of the history database (rows written per table)
+  hosts: history
+  vars_files: [vars/connection.yml, vars/secrets.yml]
+  roles: [ian.main.ops_agent_config]
+  tags: [monitoring]
+
+- name: Overpass API (the map of Ukraine; the first import takes hours and does not block the run)
+  hosts: overpassapi
+  vars_files: [vars/connection.yml, vars/secrets.yml]
+  roles: [ian.main.overpass]
+  tags: [overpass]
+
+- name: frontend (static files, DNS-01 certificate, nginx)
+  hosts: frontend
+  vars_files: [vars/connection.yml, vars/secrets.yml]
+  roles: [ian.main.frontend]
+  tags: [frontend]

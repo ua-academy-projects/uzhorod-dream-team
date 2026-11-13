@@ -1,0 +1,13 @@
+---
+# The role's public interface. The backend number (a key in config.json backends) is set by the playbook via vars/connection.yml:
+# -e backend=N overrides config.json active_backend for a single run. Calling the role directly without a playbook uses active_backend.
+queue_env_backend: "{{ lookup('ian.main.osm_config', 'active_backend') }}"
+
+# Everything needed for the selected backend's connections (schemes, VMs, ports, databases, secret names) lives in config.json backends.<N>.
+queue_env_cfg: "{{ lookup('ian.main.osm_config', 'backends.' ~ queue_env_backend) }}"
+
+# No default value. Needed only if backends.<N>.database has no instance (Cloud SQL),
+# because the Cloud SQL IP is not in config.json: -e queue_env_database_host=$(terraform output -raw cloudsql_private_ip)
+# queue_env_database_host:
+#
+# Secrets are taken from the vault by the names in backends.<N>.secrets (the vault is passed via -e @secrets/vault.yml).

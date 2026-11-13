@@ -1,0 +1,28 @@
+---
+argument_specs:
+  main:
+    short_description: Installs the service binary from the artifacts bucket and runs it under systemd
+    description:
+      - Requires gcloud on the VM (present in the Ubuntu GCE image, path C(artifact_service_gcloud_bin)) and uploaded artifacts (C(infra/upload-artifacts.sh)).
+    options:
+      artifact_service_name:
+        type: str
+        default: "{{ inventory_hostname }}"
+        description: Name of the service, binary and systemd unit.
+      artifact_service_bucket:
+        type: str
+        default: "config.json services.<name>.binary"
+        description: Artifacts bucket (C(gs://...)).
+      artifact_service_env:
+        type: dict
+        default: "config.json services.<name>.env"
+        description: Service environment variables.
+      artifact_service_env_extra:
+        type: dict
+        default: {}
+        no_log: true
+        description: Extra variables (may contain passwords). Take precedence over artifact_service_env.
+      artifact_service_gcloud_bin:
+        type: path
+        default: /snap/bin/gcloud
+        description: Path to gcloud on the VM.

@@ -1,0 +1,105 @@
+---
+# Let's Encrypt via DNS-01 on Cloudflare: certbot creates a TXT record in the domain's zone.
+# The domain's A record is created by Terraform (modules/dns); this role does not touch it.
+#
+# Idempotency: certbot is called only when a certificate really needs to be (re)issued, that is when
+#   - the certificate file does not exist;
+#   - it expires in fewer than frontend_certbot_renew_before_days days;
+#   - the type does not match the requested one (staging <-> production);
+#   - frontend_domain is missing from the SAN.
+# Otherwise the role changes nothing, and the certificate is renewed by the certbot timer from the package.
+- name: certbot with the Cloudflare plugin
+  ansible.builtin.apt:
+    name: [certbot, python3-certbot-dns-cloudflare]
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Secrets directory
+  ansible.builtin.file:
+    path: "{{ frontend_cloudflare_credentials | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Cloudflare API token
+  ansible.builtin.copy:
+    dest: "{{ frontend_cloudflare_credentials }}"
+    owner: root
+    group: root
+    mode: "0600"
+    content: |
+      dns_cloudflare_api_token = {{ frontend_cloudflare_api_token }}
+  diff: false
+  no_log: true
+
+# The certbot hook fires after every issuance and renewal; nginx may not be installed yet.
+# The hook is placed before certbot is called, so that even the first issuance runs it.
+- name: Directory of the certbot deploy hooks
+  ansible.builtin.file:
+    path: /etc/letsencrypt/renewal-hooks/deploy
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Reload nginx after every issue and renewal
+  ansible.builtin.copy:
+    dest: /etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh
+    owner: root
+    group: root
+    mode: "0755"
+    content: |
+      #!/bin/sh
+      systemctl is-active --quiet nginx && systemctl reload nginx || true
+
+- name: Current certificate
+  ansible.builtin.stat:
+    path: "{{ frontend_certbot_cert_path }}"
+  register: frontend_certbot_cert
+
+# The checks only read, so they also run in --check
+- name: Certificate is valid for the renewal window
+  ansible.builtin.command: >-
+    openssl x509 -noout -checkend {{ frontend_certbot_renew_before_days * 86400 }}
+    -in {{ frontend_certbot_cert_path }}
+  register: frontend_certbot_checkend
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when: frontend_certbot_cert.stat.exists
+
+- name: Certificate issuer
+  ansible.builtin.command: openssl x509 -noout -issuer -in {{ frontend_certbot_cert_path }}
+  register: frontend_certbot_issuer
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when: frontend_certbot_cert.stat.exists
+
+- name: Certificate names
+  ansible.builtin.command: openssl x509 -noout -ext subjectAltName -in {{ frontend_certbot_cert_path }}
+  register: frontend_certbot_san
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when: frontend_certbot_cert.stat.exists
+
+- name: Decide whether the certificate must be issued
+  ansible.builtin.set_fact:
+    frontend_certbot_needs_issue: >-
+      {{ not frontend_certbot_cert.stat.exists
+         or frontend_certbot_checkend.rc != 0
+         or ('STAGING' in frontend_certbot_issuer.stdout) != frontend_certbot_staging
+         or ('DNS:' ~ frontend_domain) not in frontend_certbot_san.stdout }}
+
+- name: Issue the certificate
+  ansible.builtin.command: >-
+    certbot certonly --non-interactive --agree-tos
+    -m {{ frontend_email }} -d {{ frontend_domain }} --cert-name {{ frontend_domain }}
+    --dns-cloudflare --dns-cloudflare-credentials {{ frontend_cloudflare_credentials }}
+    --dns-cloudflare-propagation-seconds 30
+    {{ '--staging' if frontend_certbot_staging else '' }}
+    {{ '--force-renewal' if frontend_certbot_cert.stat.exists else '' }}
+  when: frontend_certbot_needs_issue | bool

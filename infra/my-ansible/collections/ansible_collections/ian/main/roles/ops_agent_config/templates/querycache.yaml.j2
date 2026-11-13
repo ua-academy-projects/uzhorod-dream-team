@@ -1,0 +1,20 @@
+{#- RabbitMQ queue depth (rabbitmq.message.current) and Redis memory (redis.memory.used). -#}
+metrics:
+  receivers:
+    rabbitmq:
+      type: rabbitmq
+      endpoint: http://127.0.0.1:{{ ops_agent_config_rabbit_port }}
+      username: {{ ops_agent_config_rabbit_user | to_json }}
+      password: {{ ops_agent_config_rabbit_password | to_json }}
+      collection_interval: {{ ops_agent_config_interval }}
+    redis:
+      type: redis
+      address: 127.0.0.1:{{ ops_agent_config_redis_port }}
+      password: {{ ops_agent_config_redis_password | to_json }}
+      collection_interval: {{ ops_agent_config_interval }}
+  service:
+    pipelines:
+      rabbitmq:
+        receivers: [rabbitmq]
+      redis:
+        receivers: [redis]

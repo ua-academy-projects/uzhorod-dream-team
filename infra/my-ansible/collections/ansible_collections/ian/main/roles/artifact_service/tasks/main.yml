@@ -1,0 +1,82 @@
+---
+- name: Config directory
+  ansible.builtin.file:
+    path: "{{ artifact_service_config_dir }}"
+    state: directory
+    mode: "0755"
+
+# gcloud is expected in the VM image. Without this check its absence would look like "the binary is not in the bucket".
+- name: Check gcloud is installed
+  ansible.builtin.stat:
+    path: "{{ artifact_service_gcloud_bin }}"
+  register: artifact_service_gcloud
+  check_mode: false
+
+- name: Stop if gcloud is missing
+  ansible.builtin.fail:
+    msg: "{{ artifact_service_gcloud_bin }} not found on {{ inventory_hostname }}: the VM image has no gcloud, or set artifact_service_gcloud_bin"
+  when: not artifact_service_gcloud.stat.exists
+
+- name: Check the binary is in the bucket
+  ansible.builtin.command: "{{ artifact_service_gcloud_bin }} storage ls {{ artifact_service_object }}"
+  register: artifact_service_ls
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Stop if it is not
+  ansible.builtin.fail:
+    msg: "{{ artifact_service_object }} not found: run infra/upload-artifacts.sh {{ artifact_service_name }}"
+  when: artifact_service_ls.rc != 0
+
+- name: Download the binary
+  ansible.builtin.command: "{{ artifact_service_gcloud_bin }} storage cp {{ artifact_service_object }} {{ artifact_service_download }}"
+  changed_when: false
+  check_mode: false
+
+# copy compares checksums: it only reports a change (and restarts the service) when the binary differs
+- name: Install the binary
+  ansible.builtin.copy:
+    src: "{{ artifact_service_download }}"
+    dest: "{{ artifact_service_bin_dir }}/{{ artifact_service_name }}"
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0755"
+  notify: restart osm service
+
+- name: Remove the download
+  ansible.builtin.file:
+    path: "{{ artifact_service_download }}"
+    state: absent
+  check_mode: false
+
+- name: Service environment
+  ansible.builtin.template:
+    src: service.env.j2
+    dest: "{{ artifact_service_config_dir }}/{{ artifact_service_name }}.env"
+    owner: root
+    group: root
+    mode: "0600"
+  diff: false # holds credentials
+  notify: restart osm service
+
+- name: systemd unit
+  ansible.builtin.template:
+    src: service.service.j2
+    dest: "{{ artifact_service_unit_dir }}/{{ artifact_service_name }}.service"
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - reload systemd
+    - restart osm service
+
+- name: Run the unit handlers now, so the service starts with its final unit and env
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable and start
+  ansible.builtin.systemd:
+    name: "{{ artifact_service_name }}"
+    enabled: true
+    state: started

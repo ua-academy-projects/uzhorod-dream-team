@@ -1,0 +1,55 @@
+---
+argument_specs:
+  main:
+    short_description: Self-hosted PostgreSQL for the pgmq and history databases
+    description:
+      - Installs PostgreSQL, exposes it on the private address, creates roles and databases, installs hstore and pgmq.
+    options:
+      postgres_listen_host:
+        type: str
+        description: Address Postgres listens on (config.json instances.database.internal_ip).
+      postgres_port:
+        type: int
+        description: Postgres port (config.json services.database.ports.0).
+      postgres_pgmq_db:
+        type: str
+        description: Name of the pgmq database (config.json services.database.databases.pgmq.name).
+      postgres_pgmq_user:
+        type: str
+        description: Owner of the pgmq database (config.json services.database.databases.pgmq.user).
+      postgres_history_db:
+        type: str
+        description: Name of the history database (config.json services.database.databases.history.name).
+      postgres_history_user:
+        type: str
+        description: Owner of the history database (config.json services.database.databases.history.user).
+      postgres_pgmq_version:
+        type: str
+        description: pgmq version (config.json services.database.pgmq_version).
+      postgres_pgmq_sha256:
+        type: str
+        description: Checksum of pgmq.sql (config.json services.database.pgmq_sha256).
+      postgres_fetcher_ip:
+        type: str
+        description: Fetcher address (config.json instances.fetcher.internal_ip).
+      postgres_history_ip:
+        type: str
+        description: History address (config.json instances.history.internal_ip).
+      postgres_hba_rules:
+        type: list
+        elements: dict
+        description: pg_hba rules (host, scram-sha-256), one /32 per source.
+        options:
+          db: {type: str, required: true, description: Database.}
+          user: {type: str, required: true, description: User.}
+          source: {type: str, required: true, description: Client IPv4 address.}
+      postgres_pgmq_password:
+        type: str
+        required: true
+        no_log: true
+        description: Password of the pgmq role.
+      postgres_history_password:
+        type: str
+        required: true
+        no_log: true
+        description: Password of the history role.

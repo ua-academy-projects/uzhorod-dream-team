@@ -1,0 +1,39 @@
+---
+- name: nginx
+  ansible.builtin.apt:
+    name: nginx
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Certificate exists (run the certs tasks first)
+  ansible.builtin.stat:
+    path: "{{ frontend_certbot_cert_path }}"
+  register: frontend_nginx_cert
+  failed_when: not frontend_nginx_cert.stat.exists and not ansible_check_mode
+
+- name: Remove the default site
+  ansible.builtin.file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+  notify: reload nginx
+
+- name: Edge configuration (static files, /api proxy to the fetcher, TLS)
+  ansible.builtin.template:
+    src: edge.conf.j2
+    dest: /etc/nginx/conf.d/edge.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: reload nginx
+
+- name: Test the configuration
+  ansible.builtin.command: nginx -t
+  changed_when: false
+  check_mode: false
+
+- name: Enable and start nginx
+  ansible.builtin.systemd:
+    name: nginx
+    enabled: true
+    state: started

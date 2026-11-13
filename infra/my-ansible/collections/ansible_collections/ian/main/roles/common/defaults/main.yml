@@ -1,0 +1,8 @@
+---
+# Base packages for all VMs
+common_packages:
+  - ca-certificates
+  - curl
+
+# Do not refresh the apt index more often than once per this many seconds (speeds up repeated runs)
+common_apt_cache_valid_time: 3600

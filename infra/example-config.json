@@ -1,0 +1,412 @@
+{
+    "project_id": "my-gcp-project",
+    "region": "europe-west4",
+    "zone": "europe-west4-a",
+    "network": {
+        "name": "main-network",
+        "subnets": {
+            "public": {
+                "cidr": "10.0.0.0/24"
+            },
+            "private": {
+                "cidr": "10.0.1.0/24",
+                "private_ip_google_access": true
+            }
+        },
+        "nat": {
+            "enabled": true
+        }
+    },
+    "defaults": {
+        "image": "ubuntu-os-cloud/ubuntu-2604-lts-amd64",
+        "machine_type": "e2-small",
+        "disk_size_gb": 20,
+        "zone": "europe-west4-b",
+        "external_ip": false,
+        "subnet": "private",
+        "deletion_protection": false
+    },
+    "instances": {
+        "bastion": {
+            "subnet": "public",
+            "internal_ip": "10.0.0.10",
+            "machine_type": "e2-micro",
+            "external_ip": true,
+            "bastion": true,
+            "zone": "europe-west4-a"
+        },
+        "frontend": {
+            "subnet": "public",
+            "internal_ip": "10.0.0.11",
+            "external_ip": true,
+            "static_ip": true,
+            "zone": "europe-west4-a",
+            "labels": {
+                "ops_agent": "nginx"
+            },
+            "access": [
+                "artifacts"
+            ]
+        },
+        "fetcher": {
+            "internal_ip": "10.0.1.10",
+            "access": [
+                "artifacts"
+            ]
+        },
+        "history": {
+            "internal_ip": "10.0.1.11",
+            "access": [
+                "artifacts"
+            ]
+        },
+        "database": {
+            "internal_ip": "10.0.1.12",
+            "machine_type": "e2-medium",
+            "disk_size_gb": 30
+        },
+        "querycache": {
+            "internal_ip": "10.0.1.13"
+        },
+        "overpassapi": {
+            "internal_ip": "10.0.1.14",
+            "deletion_protection": true,
+            "disk_size_gb": 50
+        }
+    },
+    "services": {
+        "frontend": {
+            "ports": [
+                80,
+                443
+            ],
+            "public_from": [
+                "MY_IP",
+                "CLOUDFLARE"
+            ],
+            "domain": "frontend.example.com",
+            "email": "admin@example.com",
+            "bucket": "gs://my-gcp-project-artifacts"
+        },
+        "fetcher": {
+            "ports": [
+                8080
+            ],
+            "allow_from": [
+                "frontend"
+            ],
+            "binary": "gs://my-gcp-project-artifacts",
+            "env": {
+                "PORT": "8080",
+                "OVERPASS_URLS": "http://10.0.1.14/api/interpreter,https://overpass-api.de/api/interpreter,https://overpass.private.coffee/api/interpreter,https://overpass.kumi.systems/api/interpreter"
+            }
+        },
+        "history": {
+            "ports": [
+                8081
+            ],
+            "allow_from": [
+                "fetcher"
+            ],
+            "binary": "gs://my-gcp-project-artifacts",
+            "env": {
+                "PORT": "8081",
+                "RUST_LOG": "info,sqlx=error"
+            }
+        },
+        "database": {
+            "ports": [
+                5432
+            ],
+            "allow_from": [
+                "history",
+                "fetcher"
+            ],
+            "databases": {
+                "pgmq": {
+                    "name": "pgmq",
+                    "user": "pgmq"
+                },
+                "history": {
+                    "name": "history",
+                    "user": "history"
+                }
+            },
+            "pgmq_version": "v1.13.0",
+            "pgmq_sha256": "bf7e66c75ed771df0c5f7cb2b9f0123ca77992daacd56e3911d1894a3efa99de"
+        },
+        "querycache": {
+            "ports": [
+                5672,
+                6379
+            ],
+            "allow_from": [
+                "fetcher",
+                "history"
+            ],
+            "rabbit_memory": "400MB",
+            "redis_maxmemory": "128mb"
+        },
+        "overpassapi": {
+            "ports": [
+                80
+            ],
+            "allow_from": [
+                "fetcher"
+            ],
+            "image": "wiktorn/overpass-api:v0.7.62.11",
+            "planet_url": "https://download.geofabrik.de/europe/ukraine-latest.osm.pbf",
+            "planet_preprocess": "mv /db/planet.osm.bz2 /db/planet.osm.pbf && osmium cat -o /db/planet.osm.bz2 /db/planet.osm.pbf && rm /db/planet.osm.pbf",
+            "diff_url": "https://download.geofabrik.de/europe/ukraine-updates/",
+            "update_sleep": 3600,
+            "rules_load": 10,
+            "meta": "yes",
+            "data_dir": "/var/lib/overpass"
+        }
+    },
+    "cloudsql": {
+        "name": "osm-pg",
+        "zone": "europe-west4-b",
+        "database_version": "POSTGRES_18",
+        "tier": "db-custom-1-3840",
+        "edition": "ENTERPRISE",
+        "availability_type": "ZONAL",
+        "disk_size_gb": 10,
+        "deletion_protection": false,
+        "backup": {
+            "enabled": true,
+            "point_in_time_recovery": true,
+            "start_time": "03:00"
+        },
+        "private_range": {
+            "name": "osm-sql-range",
+            "cidr": "10.10.0.0/24"
+        },
+        "databases": {
+            "history": {
+                "name": "history",
+                "user": "history"
+            }
+        }
+    },
+    "active_backend": 1,
+    "backends": {
+        "1": {
+            "description": "Cloud SQL + RabbitMQ + Redis",
+            "queue": {
+                "scheme": "amqp",
+                "instance": "querycache",
+                "port": 5672,
+                "path": "%2f"
+            },
+            "cache": {
+                "scheme": "redis",
+                "instance": "querycache",
+                "port": 6379
+            },
+            "database": {
+                "scheme": "postgres",
+                "port": 5432,
+                "path": "history",
+                "user": "history",
+                "query": "sslmode=require"
+            },
+            "secrets": {
+                "queue_user": "vault_rabbit_user",
+                "queue_password": "vault_rabbit_password",
+                "cache_password": "vault_redis_password",
+                "database_password": "vault_cloudsql_history_password"
+            }
+        },
+        "2": {
+            "description": "Postgres on the database VM: pgmq + hstore + history",
+            "queue": {
+                "scheme": "postgres",
+                "instance": "database",
+                "port": 5432,
+                "path": "pgmq",
+                "user": "pgmq"
+            },
+            "cache": null,
+            "database": {
+                "scheme": "postgres",
+                "instance": "database",
+                "port": 5432,
+                "path": "history",
+                "user": "history"
+            },
+            "secrets": {
+                "queue_password": "vault_pgmq_password",
+                "database_password": "vault_history_password"
+            }
+        }
+    },
+    "ssh": {
+        "bastion_from": [
+            "MY_IP"
+        ],
+        "iap": true
+    },
+    "monitoring": {
+        "email": "admin@example.com",
+        "nginx": {
+            "window_seconds": 300,
+            "rules": {
+                "5xx": {
+                    "threshold": 5,
+                    "severity": "CRITICAL"
+                },
+                "404": {
+                    "threshold": 100,
+                    "severity": "WARNING"
+                },
+                "429": {
+                    "threshold": 30,
+                    "severity": "WARNING"
+                }
+            }
+        },
+        "uptime": {
+            "path": "/api/healthz",
+            "period_seconds": 60,
+            "validate_ssl": true
+        },
+        "metric_alerts": {
+            "disk_used": {
+                "description": "disk more than 50% used",
+                "resource_type": "gce_instance",
+                "metric": "agent.googleapis.com/disk/percent_used",
+                "filter": "metric.labels.state=\"used\"",
+                "comparison": "COMPARISON_GT",
+                "threshold": 50,
+                "aligner": "ALIGN_MEAN",
+                "window_seconds": 300,
+                "duration_seconds": 300,
+                "severity": "WARNING"
+            },
+            "memory_used": {
+                "description": "memory more than 85% used",
+                "resource_type": "gce_instance",
+                "metric": "agent.googleapis.com/memory/percent_used",
+                "filter": "metric.labels.state=\"used\"",
+                "comparison": "COMPARISON_GT",
+                "threshold": 85,
+                "aligner": "ALIGN_MEAN",
+                "window_seconds": 300,
+                "duration_seconds": 600,
+                "severity": "WARNING"
+            },
+            "load_5m": {
+                "description": "5-minute load average above 2 (the VMs have 2 vCPU)",
+                "resource_type": "gce_instance",
+                "metric": "agent.googleapis.com/cpu/load_5m",
+                "comparison": "COMPARISON_GT",
+                "threshold": 2,
+                "aligner": "ALIGN_MEAN",
+                "window_seconds": 300,
+                "duration_seconds": 600,
+                "severity": "WARNING"
+            },
+            "cpu_utilization": {
+                "description": "CPU above 85% for 15 minutes",
+                "resource_type": "gce_instance",
+                "metric": "compute.googleapis.com/instance/cpu/utilization",
+                "comparison": "COMPARISON_GT",
+                "threshold": 0.85,
+                "aligner": "ALIGN_MEAN",
+                "window_seconds": 300,
+                "duration_seconds": 900,
+                "severity": "WARNING"
+            },
+            "cloudsql_disk": {
+                "description": "Cloud SQL disk more than 80% used",
+                "resource_type": "cloudsql_database",
+                "metric": "cloudsql.googleapis.com/database/disk/utilization",
+                "comparison": "COMPARISON_GT",
+                "threshold": 0.8,
+                "aligner": "ALIGN_MEAN",
+                "window_seconds": 300,
+                "duration_seconds": 300,
+                "severity": "ERROR"
+            },
+            "cloudsql_cpu": {
+                "description": "Cloud SQL CPU above 80% for 10 minutes",
+                "resource_type": "cloudsql_database",
+                "metric": "cloudsql.googleapis.com/database/cpu/utilization",
+                "comparison": "COMPARISON_GT",
+                "threshold": 0.8,
+                "aligner": "ALIGN_MEAN",
+                "window_seconds": 300,
+                "duration_seconds": 600,
+                "severity": "WARNING"
+            },
+            "cloudsql_connections": {
+                "description": "more than 80 Cloud SQL connections",
+                "resource_type": "cloudsql_database",
+                "metric": "cloudsql.googleapis.com/database/postgresql/num_backends",
+                "comparison": "COMPARISON_GT",
+                "threshold": 80,
+                "aligner": "ALIGN_MEAN",
+                "window_seconds": 300,
+                "duration_seconds": 300,
+                "severity": "WARNING"
+            },
+            "rabbitmq_backlog": {
+                "description": "more than 500 messages wait in RabbitMQ (history does not read them)",
+                "resource_type": "gce_instance",
+                "metric": "workload.googleapis.com/rabbitmq.message.current",
+                "comparison": "COMPARISON_GT",
+                "threshold": 500,
+                "aligner": "ALIGN_MEAN",
+                "window_seconds": 300,
+                "duration_seconds": 600,
+                "severity": "ERROR"
+            },
+            "redis_memory": {
+                "description": "Redis uses more than 100 MB (maxmemory is 128mb)",
+                "resource_type": "gce_instance",
+                "metric": "workload.googleapis.com/redis.memory.used",
+                "comparison": "COMPARISON_GT",
+                "threshold": 104857600,
+                "aligner": "ALIGN_MEAN",
+                "window_seconds": 300,
+                "duration_seconds": 600,
+                "severity": "WARNING"
+            },
+            "history_no_poi_writes": {
+                "description": "no rows written to the poi table in the last hour (night traffic is low, tune the window)",
+                "resource_type": "gce_instance",
+                "metric": "workload.googleapis.com/postgresql.operations",
+                "filter": "metric.labels.table=\"poi\" AND metric.labels.operation=\"ins\"",
+                "comparison": "COMPARISON_LT",
+                "threshold": 1,
+                "aligner": "ALIGN_DELTA",
+                "window_seconds": 3600,
+                "duration_seconds": 0,
+                "severity": "WARNING"
+            }
+        },
+        "log_alerts": {
+            "cert_expiry": {
+                "description": "the frontend certificate expires soon or its check failed (daily timer on the frontend, see the frontend role)",
+                "filter": "log_id(\"syslog\") AND jsonPayload.message=~\"cert_expiry (WARN|FAIL)\"",
+                "threshold": 0,
+                "window_seconds": 3600,
+                "severity": "ERROR"
+            },
+            "overpass_health": {
+                "description": "3 or more failed Overpass health checks in 5 minutes (timer on overpassapi, see the overpass role)",
+                "filter": "log_id(\"syslog\") AND jsonPayload.message=~\"overpass_health FAIL\"",
+                "threshold": 2,
+                "window_seconds": 300,
+                "severity": "CRITICAL"
+            }
+        }
+    },
+    "dns": {
+        "frontend_domain": "example.com",
+        "frontend_subdomain": "frontend",
+        "ttl": 1,
+        "proxied": true
+    }
+}

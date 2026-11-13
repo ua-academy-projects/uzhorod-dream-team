@@ -1,0 +1,5 @@
+---
+- name: restart ops agent
+  ansible.builtin.systemd:
+    name: google-cloud-ops-agent
+    state: restarted
