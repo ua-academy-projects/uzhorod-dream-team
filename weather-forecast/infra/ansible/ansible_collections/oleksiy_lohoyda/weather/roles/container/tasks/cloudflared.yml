@@ -1,0 +1,30 @@
+---
+- name: Find the Cloudflare account
+  ansible.builtin.uri:
+    url: "{{ container_cloudflare_api }}/zones?name={{ app.public.dns_zone }}"
+    headers:
+      Authorization: "Bearer {{ container_cloudflare_token }}"
+  register: container_cloudflare_zone
+  delegate_to: localhost
+  become: false
+  no_log: true
+
+- name: Find the tunnel
+  ansible.builtin.uri:
+    url: "{{ container_cloudflare_api }}/accounts/{{ container_cloudflare_zone.json.result[0].account.id }}/cfd_tunnel?name={{ project.prefix }}-site&is_deleted=false"
+    headers:
+      Authorization: "Bearer {{ container_cloudflare_token }}"
+  register: container_cloudflare_tunnel
+  delegate_to: localhost
+  become: false
+  no_log: true
+
+- name: Read the tunnel token
+  ansible.builtin.uri:
+    url: "{{ container_cloudflare_api }}/accounts/{{ container_cloudflare_zone.json.result[0].account.id }}/cfd_tunnel/{{ container_cloudflare_tunnel.json.result[0].id }}/token"
+    headers:
+      Authorization: "Bearer {{ container_cloudflare_token }}"
+  register: container_cloudflare_tunnel_token
+  delegate_to: localhost
+  become: false
+  no_log: true

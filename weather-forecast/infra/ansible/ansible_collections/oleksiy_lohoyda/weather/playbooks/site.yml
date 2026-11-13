@@ -24,3 +24,4 @@
     - { role: oleksiy_lohoyda.weather.container, container_service: history }
     - oleksiy_lohoyda.weather.certbot
     - { role: oleksiy_lohoyda.weather.container, container_service: ui }
+    - { role: oleksiy_lohoyda.weather.container, container_service: cloudflared }

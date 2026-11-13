@@ -13,6 +13,10 @@
       ansible.builtin.include_tasks: image.yml
       when: container_image == ''
 
+    - name: Read the tunnel token
+      ansible.builtin.include_tasks: cloudflared.yml
+      when: container_service == 'cloudflared'
+
     - name: Write config files
       ansible.builtin.template:
         src: "{{ item.name }}.j2"
@@ -22,18 +26,12 @@
       loop: "{{ container_spec.files | default([]) }}"
       register: container_files
 
-    - name: Write the environment file
-      ansible.builtin.template:
-        src: env.j2
-        dest: /etc/weather-forecast/weather-{{ container_service }}.env
-        mode: "0600"
-
     - name: Start the container
       community.docker.docker_container:
         name: weather-{{ container_service }}
         image: "{{ container_image or 'weather-' ~ container_service ~ ':' ~ container_built.image.Id[7:19] }}"
         command: "{{ container_command }}"
-        env_file: /etc/weather-forecast/weather-{{ container_service }}.env
+        env_file: "{{ '/etc/weather-forecast/' ~ container_env_file if container_env_file in container_spec.files | default([]) | map(attribute='name') else omit }}"
         volumes: "{{ container_spec.volumes | default([]) }}"
         network_mode: host
         restart_policy: unless-stopped
@@ -50,6 +48,15 @@
         port: "{{ container_spec.port }}"
         timeout: 120
       when: container_spec.port is defined
+
+    - name: Wait for the health check
+      ansible.builtin.uri:
+        url: "{{ container_spec.health }}"
+      register: container_health
+      until: container_health.status == 200
+      retries: 24
+      delay: 5
+      when: container_spec.health is defined
 
     - name: Sync the RabbitMQ password
       ansible.builtin.include_tasks: rabbitmq.yml
