@@ -68,7 +68,7 @@ class InventoryModule(BaseInventoryPlugin):
         }
 
         ssh = config["ssh"]
-        options = "-o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
+        options = "-o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=30"
         bastion_ip = None
         for name, vm in config["vms"]["instances"].items():
             if vm.get("role") == "bastion" and f"{prefix}-{name}" in running:
