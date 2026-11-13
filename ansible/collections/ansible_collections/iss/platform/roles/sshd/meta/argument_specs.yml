@@ -1,0 +1,37 @@
+---
+argument_specs:
+  main:
+    short_description: Manage the sshd drop-in and socket activation.
+    options:
+      sshd_allow_users:
+        type: list
+        elements: str
+        required: true
+        description: AllowUsers patterns, for example C(jump) or C(iss-admin@10.10.0.9).
+      sshd_port:
+        type: int
+        default: 22
+        description: Port sshd listens on.
+      sshd_options:
+        type: list
+        elements: str
+        description: Base options, one C(Keyword value) per item.
+        default:
+          - PasswordAuthentication no
+          - KbdInteractiveAuthentication no
+          - PermitRootLogin no
+          - AllowAgentForwarding no
+          - X11Forwarding no
+      sshd_extra_options:
+        type: list
+        elements: str
+        default: []
+        description: Options added after the base ones.
+      sshd_disable_socket:
+        type: bool
+        default: false
+        description: Disable ssh.socket and run ssh.service, required when the port differs from 22 on Ubuntu.
+      sshd_config_path:
+        type: path
+        default: /etc/ssh/sshd_config.d/10-iss.conf
+        description: Drop-in file the role owns.

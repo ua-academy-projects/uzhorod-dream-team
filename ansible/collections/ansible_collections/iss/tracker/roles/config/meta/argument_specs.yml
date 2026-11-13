@@ -1,0 +1,11 @@
+---
+argument_specs:
+  main:
+    short_description: Read config.json into iss_config and check it.
+    description:
+      - Loads the file with include_vars as iss_config on every host of the play.
+      - Validates it against config.schema.json and checks that exactly one VM is the bastion.
+    options:
+      iss_config_file:
+        type: path
+        description: Path to config.json on the controller; defaults to ISS_CONFIG or config.json next to the ansible directory.

@@ -1,0 +1,19 @@
+---
+namespace: iss
+name: platform
+version: 1.1.0
+readme: README.md
+authors:
+  - ISS position tracker
+description: "Base OS configuration for GCE VMs: sshd, fail2ban, Docker, guest agent and temporary admin access."
+license:
+  - MIT
+tags:
+  - infrastructure
+  - linux
+  - security
+  - cloud
+dependencies:
+  community.general: ">=14.0.0"
+build_ignore:
+  - tests/output

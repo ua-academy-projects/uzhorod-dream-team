@@ -1,0 +1,32 @@
+# Unbans an address in the fail2ban sshd jail on the bastion, e.g. an admin locked out from a new network.
+# Connects through a temporary iss-admin key, so the caller's address must be in access.admin_cidrs.
+# Usage: ./scripts/ansible.sh runbooks/fail2ban-unban.yml -e ip=203.0.113.7
+---
+- name: Check the input
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Check the address
+      ansible.builtin.assert:
+        that:
+          - ip is defined
+          - ip is string
+          - ip is match('^[0-9a-fA-F:.]+$')
+        fail_msg: "ip must be an IPv4 or IPv6 address, e.g. -e ip=203.0.113.7"
+        quiet: true
+
+- name: Unban the address on the bastion
+  hosts: bastion
+  gather_facts: false
+  become: true
+  tasks:
+    - name: Check the configuration
+      ansible.builtin.import_role:
+        name: iss.tracker.config
+
+    - name: Unban through a temporary admin key
+      ansible.builtin.import_role:
+        name: iss.tracker.bastion
+        tasks_from: unban
+      vars:
+        bastion_unban_ip: "{{ ip }}"

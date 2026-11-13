@@ -1,0 +1,85 @@
+{
+  "$schema": "./config.schema.json",
+  "project": {
+    "id": "",
+    "region": "changeme",
+    "zone": "changeme",
+    "name_prefix": "iss"
+  },
+  "network": { "subnet_cidr": "10.10.0.0/24", "psa_cidr": "10.20.0.0/24" },
+  "access": {
+    "admin_cidrs": ["203.0.113.7/32"],
+    "ssh_public_key": "~/.ssh/iss_gcp_ed25519.pub",
+    "ssh_port": 2222,
+    "sa_key_file": "../iss-gcp-keys/terraform.json"
+  },
+  "domain": { "zone": "example.com", "host": "iss" },
+  "tls": { "staging": false, "email": "" },
+  "vm_defaults": {
+    "image": "ubuntu-os-cloud/ubuntu-2604-lts-amd64",
+    "machine_type": "e2-micro",
+    "disk_type": "pd-standard",
+    "disk_gb": 10
+  },
+  "vms": {
+    "jump": { "host": 9, "bastion": true },
+    "db": { "host": 10 },
+    "history": { "host": 11, "service_account": true },
+    "fetcher": { "host": 12, "service_account": true },
+    "ui": { "host": 13 }
+  },
+  "cloudsql": {
+    "tier": "db-g1-small",
+    "version": "POSTGRES_18",
+    "edition": "ENTERPRISE",
+    "disk_gb": 10,
+    "deletion_protection": false
+  },
+  "postgres": {
+    "database_name": "iss",
+    "pgmq_version": "1.13.1",
+    "pg_cron_version": "1.6.8"
+  },
+  "monitoring": {
+    "ops_agent": true,
+    "notification_emails": [],
+    "alerts": {
+      "nginx_5xx_share": { "enabled": true, "threshold": 0.05, "duration_s": 300 },
+      "history_unreachable": { "enabled": true, "duration_s": 0 },
+      "positions_stalled": { "enabled": true, "duration_s": 600 },
+      "app_errors": { "enabled": true, "threshold": 5, "duration_s": 300 },
+      "agent_missing": { "enabled": true, "duration_s": 300 },
+      "disk_percent": { "enabled": true, "threshold": 85, "duration_s": 300 },
+      "memory_percent": { "enabled": true, "threshold": 90, "duration_s": 300 },
+      "cloudsql_cpu": { "enabled": true, "threshold": 0.8, "duration_s": 300 },
+      "cloudsql_disk": { "enabled": true, "threshold": 0.85, "duration_s": 300 }
+    }
+  },
+  "firewall": [
+    { "from": "ui", "to": "history", "ports": ["HISTORY_PORT"] },
+    {
+      "from": "history",
+      "to": "db",
+      "ports": ["REDIS_PORT", "RABBITMQ_PORT", "POSTGRES_PORT"]
+    },
+    {
+      "from": "fetcher",
+      "to": "db",
+      "ports": ["RABBITMQ_PORT", "POSTGRES_PORT"]
+    }
+  ],
+  "app": {
+    "POSTGRES_BACKEND": "cloudsql",
+    "QUEUE_BACKEND": "rabbitmq",
+    "SESSION_BACKEND": "redis",
+    "POSTGRES_PORT": 5432,
+    "RABBITMQ_PORT": 5672,
+    "RABBITMQ_QUEUE": "positions",
+    "REDIS_PORT": 6379,
+    "HISTORY_PORT": 8080,
+    "HISTORY_RESULT_LIMIT": 50,
+    "HISTORY_SESSION_TTL": "720h",
+    "FETCHER_ISS_API_URL": "https://api.wheretheiss.at/v1/satellites/25544",
+    "FETCHER_POLL_INTERVAL": "15s"
+  }
+}

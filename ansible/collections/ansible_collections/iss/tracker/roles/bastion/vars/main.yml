@@ -1,0 +1,18 @@
+---
+bastion_iap_range: 35.235.240.0/20
+bastion_admin_user: iss-admin
+bastion_ssh_port: "{{ iss_config.access.ssh_port | default(22) }}"
+bastion_project: "{{ iss_config.project.id }}"
+bastion_zone: "{{ iss_config.project.zone }}"
+bastion_public_key: "{{ lookup('ansible.builtin.file', iss_config.access.ssh_public_key | expanduser) }}"
+bastion_sshd_allow_users: >-
+  {{ ['jump']
+  + (iss_config.access.admin_cidrs | map('regex_replace', '^', bastion_admin_user ~ '@') | list)
+  + ['*@' ~ bastion_iap_range] }}
+bastion_sshd_extra_options:
+  - MaxAuthTries 3
+  - LoginGraceTime 20
+  - AllowTcpForwarding local
+  - AllowStreamLocalForwarding no
+  - PermitTunnel no
+  - GatewayPorts no

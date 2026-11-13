@@ -1,0 +1,11 @@
+---
+galaxy_info:
+  author: ISS position tracker
+  description: Temporary admin access to a GCE instance through an expiring ssh-keys metadata entry.
+  license: MIT
+  min_ansible_version: "2.19"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - all
+dependencies: []

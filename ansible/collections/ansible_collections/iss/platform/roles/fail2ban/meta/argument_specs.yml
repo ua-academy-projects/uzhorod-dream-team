@@ -1,0 +1,26 @@
+---
+argument_specs:
+  main:
+    short_description: Install fail2ban and configure the sshd jail.
+    options:
+      fail2ban_ignoreip:
+        type: list
+        elements: str
+        default: []
+        description: Addresses never banned, added to 127.0.0.1/8 and ::1.
+      fail2ban_port:
+        type: int
+        default: 22
+        description: SSH port the jail watches.
+      fail2ban_bantime:
+        type: str
+        default: 1h
+        description: Ban duration.
+      fail2ban_findtime:
+        type: str
+        default: 10m
+        description: Window for counting failures.
+      fail2ban_maxretry:
+        type: int
+        default: 5
+        description: Failures before a ban.

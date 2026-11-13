@@ -1,0 +1,44 @@
+---
+argument_specs:
+  main:
+    short_description: Configure the guest agent, sshd, fail2ban and the Ops Agent through a temporary admin key.
+    description:
+      - Start the play with gather_facts false and become true.
+    options:
+      iss_config:
+        type: dict
+        required: true
+        description: Parsed config.json.
+      bastion_ttl_minutes:
+        type: int
+        default: 15
+        description: Minutes until the temporary key expires.
+  os_update:
+    short_description: Upgrade the packages and reboot when needed, through a temporary admin key valid for 30 minutes.
+    options:
+      iss_config:
+        type: dict
+        required: true
+        description: Parsed config.json.
+  unban:
+    short_description: Unban an address in the fail2ban sshd jail through a temporary admin key.
+    options:
+      iss_config:
+        type: dict
+        required: true
+        description: Parsed config.json.
+      bastion_unban_ip:
+        type: str
+        required: true
+        description: Address to unban.
+      bastion_ttl_minutes:
+        type: int
+        default: 15
+        description: Minutes until the temporary key expires.
+  revoke:
+    short_description: Remove a leftover temporary admin key from the instance metadata without connecting.
+    options:
+      iss_config:
+        type: dict
+        required: true
+        description: Parsed config.json.

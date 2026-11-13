@@ -1,0 +1,94 @@
+---
+- name: Create the project directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "{{ item.mode }}"
+  loop:
+    - {path: "{{ app_deploy_dir }}", mode: "0755"}
+    - {path: "{{ app_deploy_dir }}/src", mode: "0755"}
+    - {path: "{{ app_deploy_dir }}/images", mode: "0700"}
+
+- name: Upload secrets.list
+  ansible.builtin.copy:
+    content: "{{ app_deploy_secret_names | map('regex_replace', '$', '\n') | join('') }}"
+    dest: "{{ app_deploy_dir }}/secrets.list"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Install iss-run and iss-compose
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "{{ app_deploy_bin_dir }}/{{ item }}"
+    owner: root
+    group: root
+    mode: "0755"
+  loop: [iss-run, iss-compose]
+
+- name: Check that this VM can read its secrets
+  ansible.builtin.command:
+    argv: ["{{ app_deploy_bin_dir }}/iss-run", "true"]
+  environment: "{{ app_deploy_iss_run_env }}"
+  register: app_deploy_secret_check
+  changed_when: false
+  failed_when: false
+
+- name: Report unreadable secrets
+  ansible.builtin.fail:
+    msg: >-
+      secrets not readable on {{ inventory_hostname }}: run ./scripts/bootstrap.sh and ./scripts/tf.sh apply
+      ({{ app_deploy_secret_check.stderr | trim }})
+  when: app_deploy_secret_check.rc != 0
+
+- name: Start with no images
+  ansible.builtin.set_fact:
+    app_deploy_images: []
+
+- name: Find the images built from this project
+  ansible.builtin.set_fact:
+    app_deploy_images: "{{ app_deploy_images + [{'name': item.value.image, 'args': item.value.build.args | default({})}] }}"
+  loop: "{{ app_deploy_services | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  when:
+    - item.value.image is defined
+    - item.value.image is match('iss-')
+
+- name: Ship the images
+  ansible.builtin.include_tasks: image.yml
+  loop: "{{ app_deploy_images }}"
+  loop_control:
+    loop_var: app_deploy_image
+    label: "{{ app_deploy_image.name }}"
+
+- name: Upload compose.yaml
+  ansible.builtin.copy:
+    content: "{{ app_deploy_compose }}"
+    dest: "{{ app_deploy_dir }}/compose.yaml"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Install iss.service
+  ansible.builtin.copy:
+    src: iss.service
+    dest: /etc/systemd/system/iss.service
+    owner: root
+    group: root
+    mode: "0644"
+  register: app_deploy_unit
+
+- name: Enable iss.service
+  ansible.builtin.systemd_service:
+    name: iss
+    enabled: true
+    daemon_reload: "{{ app_deploy_unit is changed }}"
+
+- name: Remove the old .env and Cloudflare credentials
+  ansible.builtin.file:
+    path: "{{ app_deploy_dir }}/{{ item }}"
+    state: absent
+  loop: [.env, secrets]

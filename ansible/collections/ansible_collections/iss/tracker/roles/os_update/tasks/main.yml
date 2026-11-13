@@ -1,0 +1,16 @@
+---
+- name: Upgrade the packages
+  ansible.builtin.apt:
+    upgrade: dist
+    update_cache: true
+    autoremove: true
+
+- name: Check whether a reboot is required
+  ansible.builtin.stat:
+    path: /var/run/reboot-required
+  register: os_update_reboot_required
+
+- name: Reboot
+  ansible.builtin.reboot:
+    reboot_timeout: 600
+  when: os_update_reboot_required.stat.exists

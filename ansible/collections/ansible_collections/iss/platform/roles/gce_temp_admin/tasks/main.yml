@@ -1,0 +1,21 @@
+---
+- name: Compute the key expiry
+  ansible.builtin.import_tasks: expiry.yml
+
+- name: Add a temporary admin key to the instance metadata
+  iss.platform.gce_ssh_key:
+    project: "{{ gce_temp_admin_project }}"
+    zone: "{{ gce_temp_admin_zone }}"
+    instance: "{{ gce_temp_admin_instance }}"
+    user: "{{ gce_temp_admin_user }}"
+    public_key: "{{ gce_temp_admin_public_key }}"
+    expire_on: "{{ gce_temp_admin_expire_on }}"
+  delegate_to: localhost
+  become: false
+
+- name: Wait until the guest agent has created the admin user
+  ansible.builtin.wait_for_connection:
+    timeout: 120
+
+- name: Gather facts
+  ansible.builtin.setup:

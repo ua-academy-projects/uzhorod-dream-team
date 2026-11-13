@@ -1,0 +1,27 @@
+---
+app_host_iap_range: 35.235.240.0/20
+app_host_bastion: "{{ groups.bastion | first }}"
+app_host_sshd_allow_users:
+  - iss-admin@{{ hostvars[app_host_bastion].gce_internal_ip }}
+  - "*@{{ app_host_iap_range }}"
+app_host_ops_agent_processors: "{{ ['docker_json'] + (['nginx_json'] if 'ui' in group_names else []) }}"
+app_host_ops_agent_config:
+  logging:
+    receivers:
+      docker:
+        type: files
+        include_paths:
+          - /var/lib/docker/containers/*/*-json.log
+    processors:
+      docker_json:
+        type: parse_json
+        time_key: time
+        time_format: "%Y-%m-%dT%H:%M:%S.%LZ"
+      nginx_json:
+        type: parse_json
+        field: log
+    service:
+      pipelines:
+        docker:
+          receivers: [docker]
+          processors: "{{ app_host_ops_agent_processors }}"

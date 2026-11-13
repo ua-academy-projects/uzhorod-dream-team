@@ -1,0 +1,2 @@
+#!/bin/sh
+exec /usr/local/sbin/iss-run docker compose --project-directory /opt/iss "$@"

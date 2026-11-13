@@ -1,0 +1,12 @@
+---
+postgres_dir: /opt/iss
+postgres_socket_dir: /opt/iss/postgres/run
+postgres_install_psycopg: true
+postgres_file_owner: root
+postgres_env: "{{ app_deploy_vars }}"
+postgres_compose: /usr/local/sbin/iss-compose
+postgres_pgmq_version: "{{ postgres_env.PGMQ_VERSION }}"
+postgres_pgmq_sql: "{{ lookup('ansible.builtin.env', 'ISS_ANSIBLE_CACHE') }}/pgmq/pgmq-{{ postgres_pgmq_version }}.sql"
+postgres_admin_password: "{{ app_deploy_secret_values.POSTGRES_PASSWORD }}"
+postgres_history_password: "{{ app_deploy_secret_values.POSTGRES_HISTORY_PASSWORD | default('') }}"
+postgres_fetcher_password: "{{ app_deploy_secret_values.POSTGRES_FETCHER_PASSWORD | default('') }}"

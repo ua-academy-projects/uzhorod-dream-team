@@ -1,0 +1,9 @@
+[DEFAULT]
+ignoreip = {{ (['127.0.0.1/8', '::1'] + fail2ban_ignoreip) | join(' ') }}
+bantime = {{ fail2ban_bantime }}
+findtime = {{ fail2ban_findtime }}
+maxretry = {{ fail2ban_maxretry }}
+
+[sshd]
+enabled = true
+port = {{ fail2ban_port }}

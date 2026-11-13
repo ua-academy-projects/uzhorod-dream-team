@@ -1,0 +1,4 @@
+---
+- name: Compute the key expiry
+  ansible.builtin.set_fact:
+    gce_temp_admin_expire_on: "{{ '%Y-%m-%dT%H:%M:%S+0000' | strftime(now().timestamp() + gce_temp_admin_ttl_minutes * 60, utc=true) }}"

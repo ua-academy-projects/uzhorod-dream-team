@@ -1,0 +1,12 @@
+---
+argument_specs:
+  main:
+    short_description: Wait for cloud-init, then configure sshd, Docker and the Ops Agent.
+    description:
+      - Start the play with gather_facts false, become true and force_handlers true.
+      - Needs the bastion group in the inventory with gce_internal_ip.
+    options:
+      iss_config:
+        type: dict
+        required: true
+        description: Parsed config.json.

@@ -67,7 +67,7 @@ func loadConfig() Config {
 		c.PostgresAddr = net.JoinHostPort(mustEnv("POSTGRES_HOST"), mustEnv("POSTGRES_PORT"))
 		postgresURL := url.URL{
 			Scheme:   "postgres",
-			User:     url.UserPassword(mustEnv("POSTGRES_FETCHER_USER"), mustEnv("POSTGRES_FETCHER_PASSWORD")),
+			User:     pgUserinfo(mustEnv("POSTGRES_FETCHER_USER"), optionalEnv("POSTGRES_FETCHER_PASSWORD")),
 			Host:     c.PostgresAddr,
 			Path:     "/" + mustEnv("POSTGRES_DB"),
 			RawQuery: "sslmode=disable",
@@ -86,6 +86,17 @@ func loadConfig() Config {
 	c.RabbitMQURL = rabbitURL.String()
 	c.RabbitMQQueue = mustEnv("RABBITMQ_QUEUE")
 	return c
+}
+
+func optionalEnv(key string) string {
+	return os.Getenv(key)
+}
+
+func pgUserinfo(user, password string) *url.Userinfo {
+	if password == "" {
+		return url.User(user)
+	}
+	return url.UserPassword(user, password)
 }
 
 func mustEnv(key string) string {
@@ -152,7 +163,7 @@ func newRabbitPublisher() (Publisher, error) {
 		conn.Close()
 		return nil, fmt.Errorf("rabbitmq channel: %w", err)
 	}
-	q, err := ch.QueueDeclare(cfg.RabbitMQQueue, false, false, false, false, nil)
+	q, err := ch.QueueDeclare(cfg.RabbitMQQueue, true, false, false, false, nil)
 	if err != nil {
 		ch.Close()
 		conn.Close()
@@ -164,8 +175,9 @@ func newRabbitPublisher() (Publisher, error) {
 
 func (p *rabbitPublisher) Publish(body []byte) error {
 	return p.ch.Publish("", p.queue, false, false, amqp.Publishing{
-		ContentType: "application/json",
-		Body:        body,
+		ContentType:  "application/json",
+		DeliveryMode: amqp.Persistent,
+		Body:         body,
 	})
 }
 

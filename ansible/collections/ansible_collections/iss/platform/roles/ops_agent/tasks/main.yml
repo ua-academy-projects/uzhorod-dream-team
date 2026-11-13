@@ -1,0 +1,86 @@
+---
+- name: Read the distribution release
+  ansible.builtin.setup:
+    gather_subset: [min]
+  when: ops_agent_repo_codename | length == 0 and ansible_facts.distribution_release is not defined
+
+- name: Install the Ops Agent
+  when: ops_agent_enabled
+  block:
+    - name: Create the apt keyring directory
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: "0755"
+
+    - name: Download the Google Cloud apt key
+      ansible.builtin.get_url:
+        url: "{{ ops_agent_key_url }}"
+        dest: "{{ ops_agent_key_file }}"
+        mode: "0644"
+
+    - name: Add the Ops Agent repository
+      ansible.builtin.deb822_repository:
+        name: google-cloud-ops-agent
+        types: [deb]
+        uris: [https://packages.cloud.google.com/apt]
+        suites: ["google-cloud-ops-agent-{{ ops_agent_codename }}-{{ ops_agent_repo_version }}"]
+        components: [main]
+        signed_by: "{{ ops_agent_key_file }}"
+        install_python_debian: true
+      register: ops_agent_repo
+
+    - name: Find the package list of the repository
+      ansible.builtin.find:
+        paths: /var/lib/apt/lists
+        patterns: "*_google-cloud-ops-agent-{{ ops_agent_codename }}-{{ ops_agent_repo_version }}_*Packages*"
+      register: ops_agent_lists
+
+    - name: Update the apt cache for the repository
+      ansible.builtin.apt:
+        update_cache: true
+      when: ops_agent_repo is changed or ops_agent_lists.matched == 0
+
+    - name: Install and configure the agent
+      when: not (ansible_check_mode and ops_agent_repo is changed)
+      block:
+        - name: Install the Ops Agent package
+          ansible.builtin.apt:
+            name: google-cloud-ops-agent
+            update_cache: true
+            cache_valid_time: 3600
+          notify: Restart the Ops Agent
+
+        - name: Write the Ops Agent configuration
+          ansible.builtin.copy:
+            content: "{{ ops_agent_config | to_nice_yaml(indent=2) }}"
+            dest: /etc/google-cloud-ops-agent/config.yaml
+            owner: root
+            group: root
+            mode: "0644"
+          notify: Restart the Ops Agent
+
+        - name: Enable the Ops Agent
+          ansible.builtin.systemd_service:
+            name: google-cloud-ops-agent.service
+            enabled: true
+
+- name: Remove the Ops Agent
+  when: not ops_agent_enabled
+  block:
+    - name: Remove the Ops Agent package
+      ansible.builtin.apt:
+        name: google-cloud-ops-agent
+        state: absent
+        purge: true
+
+    - name: Remove the Ops Agent repository
+      ansible.builtin.deb822_repository:
+        name: google-cloud-ops-agent
+        state: absent
+        install_python_debian: true
+
+    - name: Remove the Google Cloud apt key
+      ansible.builtin.file:
+        path: "{{ ops_agent_key_file }}"
+        state: absent

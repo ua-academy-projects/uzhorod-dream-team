@@ -1,0 +1,11 @@
+---
+galaxy_info:
+  author: ISS position tracker
+  description: Configures an application VM, sshd behind the bastion and Docker.
+  license: MIT
+  min_ansible_version: "2.19"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - all
+dependencies: []

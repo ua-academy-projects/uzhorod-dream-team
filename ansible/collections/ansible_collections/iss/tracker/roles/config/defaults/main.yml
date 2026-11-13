@@ -1,0 +1,2 @@
+---
+iss_config_file: "{{ lookup('ansible.builtin.env', 'ISS_CONFIG') | default(ansible_config_file | dirname | dirname ~ '/config.json', true) }}"

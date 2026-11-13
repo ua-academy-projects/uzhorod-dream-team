@@ -1,0 +1,23 @@
+---
+- name: Read config.json
+  ansible.builtin.include_vars:
+    file: "{{ iss_config_file }}"
+    name: iss_config
+
+- name: Check the configuration
+  run_once: true
+  delegate_to: localhost
+  block:
+    - name: Validate iss_config against config.schema.json
+      ansible.utils.validate:
+        data: "{{ iss_config }}"
+        criteria: "{{ lookup('ansible.builtin.file', config_schema_file) | from_json }}"
+        engine: ansible.utils.jsonschema
+      vars:
+        ansible_validate_jsonschema_draft: "2020-12"
+
+    - name: Check the bastion
+      ansible.builtin.assert:
+        that: config_bastion_count | int == 1
+        fail_msg: "exactly one VM must have bastion: true"
+        quiet: true

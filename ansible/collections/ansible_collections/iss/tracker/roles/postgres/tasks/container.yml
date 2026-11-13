@@ -1,0 +1,60 @@
+---
+- name: Install psycopg2
+  ansible.builtin.import_tasks: psycopg.yml
+
+- name: Set up Postgres through the socket
+  module_defaults:
+    group/community.postgresql.all: "{{ postgres_socket_login }}"
+  block:
+    - name: Wait for Postgres in the container
+      community.postgresql.postgresql_ping:
+        login_db: postgres
+      register: postgres_ping
+      until: postgres_ping.is_available
+      retries: 30
+      delay: 2
+
+    - name: Create the database
+      community.postgresql.postgresql_db:
+        name: "{{ postgres_db }}"
+
+    - name: Create the roles and set their passwords
+      community.postgresql.postgresql_user:
+        login_db: postgres
+        name: "{{ item.name }}"
+        password: "{{ item.password }}"
+        role_attr_flags: LOGIN
+      loop: "{{ postgres_roles | selectattr('name') | list }}"
+      loop_control:
+        label: "{{ item.name }}"
+      no_log: true
+
+    - name: Read the installed pgmq version
+      community.postgresql.postgresql_query:
+        login_db: "{{ postgres_db }}"
+        query: SELECT coalesce((SELECT extversion FROM pg_extension WHERE extname = 'pgmq'), '') AS version
+      register: postgres_pgmq_installed
+      changed_when: false
+
+    - name: Remove another pgmq version
+      community.postgresql.postgresql_ext:
+        name: pgmq
+        state: absent
+        cascade: true
+        login_db: "{{ postgres_db }}"
+      when: postgres_pgmq_installed.query_result[0].version not in ['', postgres_pgmq_version]
+
+    - name: Install pgmq
+      community.postgresql.postgresql_ext:
+        name: pgmq
+        version: "{{ postgres_pgmq_version }}"
+        login_db: "{{ postgres_db }}"
+
+    - name: Install or update hstore and pg_cron
+      ansible.builtin.import_tasks: extensions.yml
+
+    - name: Grant the history user
+      ansible.builtin.import_tasks: grants.yml
+
+    - name: Schedule the pg_cron jobs
+      ansible.builtin.import_tasks: cron.yml

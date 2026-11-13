@@ -1,0 +1,6 @@
+---
+- name: Configure the VMs
+  ansible.builtin.import_playbook: platform.yml
+
+- name: Deploy the containers
+  ansible.builtin.import_playbook: deploy.yml

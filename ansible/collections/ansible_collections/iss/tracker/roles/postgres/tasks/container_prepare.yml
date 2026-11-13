@@ -1,0 +1,8 @@
+---
+- name: Create the Postgres socket directory
+  ansible.builtin.file:
+    path: "{{ postgres_socket_dir }}"
+    state: directory
+    owner: "70"
+    group: "70"
+    mode: "0755"

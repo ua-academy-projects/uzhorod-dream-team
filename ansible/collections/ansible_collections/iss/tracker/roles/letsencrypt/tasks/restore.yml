@@ -1,0 +1,38 @@
+---
+- name: Look for the Let's Encrypt volume
+  ansible.builtin.command:
+    argv: [docker, volume, inspect, "{{ letsencrypt_volume }}"]
+  register: letsencrypt_volume_found
+  failed_when: false
+  changed_when: false
+
+- name: Create the Let's Encrypt volume
+  ansible.builtin.command:
+    argv:
+      - docker
+      - volume
+      - create
+      - --label
+      - com.docker.compose.project={{ letsencrypt_volume | regex_replace('_.*$', '') }}
+      - --label
+      - com.docker.compose.volume={{ letsencrypt_volume | regex_replace('^[^_]*_', '') }}
+      - "{{ letsencrypt_volume }}"
+  when: letsencrypt_volume_found.rc != 0
+  changed_when: true
+
+- name: Look for the certificate of the current host
+  ansible.builtin.command:
+    argv: [docker, run, --rm, -v, "{{ letsencrypt_volume }}:/le:ro", "{{ letsencrypt_image }}", test, -f, "/le/live/{{ letsencrypt_host }}/fullchain.pem"]
+  register: letsencrypt_cert_found
+  failed_when: false
+  changed_when: false
+
+- name: Restore the Let's Encrypt state from Secret Manager
+  ansible.builtin.command:
+    argv: [docker, run, --rm, -i, -v, "{{ letsencrypt_volume }}:/le", "{{ letsencrypt_image }}", sh, -c, base64 -d | tar xzf - -C /le]
+    stdin: "{{ letsencrypt_state }}"
+  when:
+    - letsencrypt_cert_found.rc != 0
+    - letsencrypt_state | length > 0
+  changed_when: true
+  no_log: true

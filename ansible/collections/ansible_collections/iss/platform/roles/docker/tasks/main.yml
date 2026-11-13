@@ -1,0 +1,21 @@
+---
+- name: Install Docker from the Ubuntu archive
+  ansible.builtin.apt:
+    name: "{{ docker_packages }}"
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Write the Docker daemon configuration
+  ansible.builtin.copy:
+    content: "{{ docker_daemon_config | to_nice_json(indent=2) }}\n"
+    dest: /etc/docker/daemon.json
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart Docker
+
+- name: Enable and start Docker
+  ansible.builtin.systemd_service:
+    name: docker.service
+    enabled: true
+    state: started

@@ -1,0 +1,18 @@
+---
+- name: Start the services
+  ansible.builtin.command:
+    argv: ["{{ app_deploy_compose_cmd }}", up, -d, --remove-orphans]
+  environment: "{{ app_deploy_iss_run_env }}"
+  register: app_deploy_up
+  changed_when: app_deploy_up.stderr is search('(Created|Recreated|Started|Removed)')
+
+- name: Start iss.service
+  ansible.builtin.systemd_service:
+    name: iss
+    state: started
+
+- name: Remove unused images
+  ansible.builtin.command:
+    argv: [docker, image, prune, -f]
+  register: app_deploy_prune
+  changed_when: "'deleted:' in app_deploy_prune.stdout | lower"

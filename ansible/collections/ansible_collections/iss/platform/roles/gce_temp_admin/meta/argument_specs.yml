@@ -1,0 +1,58 @@
+---
+argument_specs:
+  main:
+    short_description: Add an expiring admin key to the instance metadata and wait for SSH.
+    description:
+      - Runs the metadata change on localhost; start the play with gather_facts false.
+      - Always pair it with the revoke entry point in an always section.
+    options:
+      gce_temp_admin_project:
+        type: str
+        required: true
+        description: Project ID.
+      gce_temp_admin_zone:
+        type: str
+        required: true
+        description: Zone of the instance.
+      gce_temp_admin_instance:
+        type: str
+        required: true
+        description: Instance name.
+      gce_temp_admin_public_key:
+        type: str
+        required: true
+        description: OpenSSH public key content.
+      gce_temp_admin_user:
+        type: str
+        default: iss-admin
+        description: User the guest agent creates.
+      gce_temp_admin_ttl_minutes:
+        type: int
+        default: 15
+        description: Minutes until the key expires.
+  expiry:
+    short_description: Set gce_temp_admin_expire_on to now plus the TTL, in UTC.
+    options:
+      gce_temp_admin_ttl_minutes:
+        type: int
+        default: 15
+        description: Minutes until the key expires.
+  revoke:
+    short_description: Close the SSH connection and remove the admin key from the instance metadata.
+    options:
+      gce_temp_admin_project:
+        type: str
+        required: true
+        description: Project ID.
+      gce_temp_admin_zone:
+        type: str
+        required: true
+        description: Zone of the instance.
+      gce_temp_admin_instance:
+        type: str
+        required: true
+        description: Instance name.
+      gce_temp_admin_user:
+        type: str
+        default: iss-admin
+        description: User whose entry is removed.

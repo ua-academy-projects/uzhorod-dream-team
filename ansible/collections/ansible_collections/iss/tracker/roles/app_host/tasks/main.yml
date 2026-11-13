@@ -1,0 +1,26 @@
+---
+- name: Wait for cloud-init
+  ansible.builtin.command: cloud-init status --wait
+  register: app_host_cloud_init
+  changed_when: false
+  failed_when: app_host_cloud_init.rc not in [0, 2]
+
+- name: Gather facts
+  ansible.builtin.setup:
+
+- name: Configure sshd
+  ansible.builtin.import_role:
+    name: iss.platform.sshd
+  vars:
+    sshd_allow_users: "{{ app_host_sshd_allow_users }}"
+
+- name: Install Docker
+  ansible.builtin.import_role:
+    name: iss.platform.docker
+
+- name: Install the Ops Agent
+  ansible.builtin.import_role:
+    name: iss.platform.ops_agent
+  vars:
+    ops_agent_enabled: "{{ iss_config.monitoring.ops_agent }}"
+    ops_agent_config: "{{ app_host_ops_agent_config }}"

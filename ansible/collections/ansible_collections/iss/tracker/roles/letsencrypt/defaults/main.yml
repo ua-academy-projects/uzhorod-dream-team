@@ -1,0 +1,10 @@
+---
+letsencrypt_dir: /opt/iss
+letsencrypt_volume: iss_letsencrypt
+letsencrypt_image: alpine:3.22
+letsencrypt_host: "{{ app_deploy_vars.UI_HOST }}"
+letsencrypt_state: >-
+  {{ lookup('google.cloud.gcp_secret_manager', key='LETSENCRYPT_STATE', project=iss_config.project.id, on_error='warn') | default('', true) }}
+letsencrypt_save: true
+letsencrypt_gcloud: gcloud
+letsencrypt_limit: 65536

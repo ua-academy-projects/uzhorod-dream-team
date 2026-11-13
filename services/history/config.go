@@ -43,7 +43,7 @@ func loadConfig() Config {
 		PostgresHost:     mustEnv("POSTGRES_HOST"),
 		PostgresPort:     mustEnv("POSTGRES_PORT"),
 		PostgresUser:     mustEnv("POSTGRES_USER"),
-		PostgresPassword: mustEnv("POSTGRES_PASSWORD"),
+		PostgresPassword: optionalEnv("POSTGRES_PASSWORD"),
 		PostgresDB:       mustEnv("POSTGRES_DB"),
 		FetcherRole:      mustEnv("POSTGRES_FETCHER_USER"),
 		QueueBackend:     mustOneOf("QUEUE_BACKEND", "rabbitmq", "postgres", "pgmq"),
@@ -69,6 +69,17 @@ func loadConfig() Config {
 		c.RedisPassword = mustEnv("REDIS_PASSWORD")
 	}
 	return c
+}
+
+func optionalEnv(key string) string {
+	return os.Getenv(key)
+}
+
+func pgUserinfo(user, password string) *url.Userinfo {
+	if password == "" {
+		return url.User(user)
+	}
+	return url.UserPassword(user, password)
 }
 
 func mustEnv(key string) string {

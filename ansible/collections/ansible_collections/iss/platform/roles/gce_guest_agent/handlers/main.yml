@@ -1,0 +1,11 @@
+---
+- name: Read services
+  ansible.builtin.service_facts:
+  listen: Restart guest agent
+
+- name: Restart the guest agent when it is installed
+  ansible.builtin.systemd_service:
+    name: "{{ gce_guest_agent_service }}.service"
+    state: restarted
+  when: (gce_guest_agent_service ~ '.service') in ansible_facts.services
+  listen: Restart guest agent

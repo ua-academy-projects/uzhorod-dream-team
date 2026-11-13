@@ -1,0 +1,5 @@
+ansible-core==2.21.6
+google-auth==2.62.1
+requests==2.34.2
+check-jsonschema==0.39.0
+jsonschema==4.26.0

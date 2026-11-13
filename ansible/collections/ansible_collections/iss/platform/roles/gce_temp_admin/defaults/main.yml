@@ -1,0 +1,3 @@
+---
+gce_temp_admin_user: iss-admin
+gce_temp_admin_ttl_minutes: 15

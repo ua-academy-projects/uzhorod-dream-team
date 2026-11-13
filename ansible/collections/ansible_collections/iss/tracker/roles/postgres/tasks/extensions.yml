@@ -1,0 +1,12 @@
+---
+- name: Install or update hstore
+  community.postgresql.postgresql_ext:
+    name: hstore
+    version: latest
+    login_db: "{{ postgres_db }}"
+
+- name: Install or update pg_cron
+  community.postgresql.postgresql_ext:
+    name: pg_cron
+    version: latest
+    login_db: postgres

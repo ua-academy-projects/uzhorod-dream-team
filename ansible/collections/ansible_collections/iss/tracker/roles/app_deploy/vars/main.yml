@@ -1,0 +1,66 @@
+---
+app_deploy_services: "{{ (app_deploy_compose | from_yaml).services }}"
+app_deploy_compose_cmd: "{{ app_deploy_bin_dir }}/iss-compose"
+app_deploy_secret_list:
+  - RABBITMQ_USER
+  - RABBITMQ_PASSWORD
+  - REDIS_PASSWORD
+  - POSTGRES_PASSWORD
+  - POSTGRES_HISTORY_PASSWORD
+  - POSTGRES_FETCHER_PASSWORD
+  - CF_TUNNEL_TOKEN
+  - CLOUDFLARE_API_TOKEN
+  - LETSENCRYPT_STATE
+app_deploy_container_secrets:
+  - POSTGRES_PASSWORD
+  - POSTGRES_HISTORY_PASSWORD
+  - POSTGRES_FETCHER_PASSWORD
+app_deploy_dollar: '\$'
+app_deploy_bad_chars: '[\s#"'']'
+
+app_deploy_mode: "{{ iss_config.app.POSTGRES_BACKEND }}"
+app_deploy_queue: "{{ iss_config.app.QUEUE_BACKEND }}"
+app_deploy_key: "{{ inventory_hostname | regex_replace('^' ~ (iss_config.project.name_prefix | regex_escape) ~ '-', '') }}"
+app_deploy_compose_file: "{{ app_deploy_compose_dir }}/{{ app_deploy_key }}/compose.yaml"
+app_deploy_source: "{{ lookup('ansible.builtin.file', app_deploy_compose_file) }}"
+app_deploy_names: "{{ app_deploy_source | regex_findall('\\$\\{([A-Za-z_][A-Za-z0-9_]*)') | unique | sort }}"
+
+app_deploy_app: "{{ dict(iss_config.app.keys() | zip(iss_config.app.values() | map('string'))) }}"
+app_deploy_db_needed: >-
+  {{ app_deploy_mode == 'container' or app_deploy_queue == 'rabbitmq' or iss_config.app.SESSION_BACKEND == 'redis' }}
+app_deploy_needed_vms: "{{ iss_config.vms.keys() | reject('equalto', 'db' if not app_deploy_db_needed | bool else '') | list }}"
+app_deploy_present_vms: "{{ iss_config.vms.keys() | select('in', groups.keys() | list) | list }}"
+app_deploy_missing_vms: "{{ app_deploy_needed_vms | difference(app_deploy_present_vms) }}"
+app_deploy_ips: >-
+  {{ ({} if app_deploy_db_needed | bool else {'DB_IP': ''})
+  | combine(dict(app_deploy_present_vms | map('upper') | map('regex_replace', '$', '_IP')
+  | zip(app_deploy_present_vms | map('extract', groups) | map('first') | map('extract', hostvars, 'gce_internal_ip')))) }}
+app_deploy_sql_instances: "{{ app_deploy_cloudsql_instances if app_deploy_cloudsql_instances is defined else app_deploy_sql_lookup.instances | default([]) }}"
+app_deploy_sql_instance: "{{ app_deploy_sql_instances | first | default({}) }}"
+app_deploy_iam_user: "{{ iss_config.project.name_prefix }}-{key}@{{ iss_config.project.id }}.iam"
+app_deploy_derived:
+  UI_HOST: "{{ iss_config.domain.host }}.{{ iss_config.domain.zone }}"
+  TLS_STAGING: "{{ iss_config.tls.staging | default(false) | bool | ternary('true', 'false') }}"
+  TLS_EMAIL: "{{ iss_config.tls.email | default('') }}"
+  POSTGRES_HOST: "{{ 'cloudsql-proxy' if app_deploy_mode == 'cloudsql' else app_deploy_ips.DB_IP | default('') }}"
+  POSTGRES_DB: "{{ iss_config.postgres.database_name }}"
+  POSTGRES_USER: "{{ app_deploy_iam_user | replace('{key}', 'history') if app_deploy_mode == 'cloudsql' else 'history' }}"
+  POSTGRES_FETCHER_USER: "{{ app_deploy_iam_user | replace('{key}', 'fetcher') if app_deploy_mode == 'cloudsql' else 'fetcher' }}"
+  CLOUDSQL_INSTANCE: "{{ app_deploy_sql_instance.connection_name | default('') if app_deploy_mode == 'cloudsql' else '' }}"
+  PG_CRON_VERSION: "{{ iss_config.postgres.pg_cron_version }}"
+  PGMQ_VERSION: "{{ iss_config.postgres.pgmq_version }}"
+app_deploy_skipped_secrets: "{{ ['POSTGRES_HISTORY_PASSWORD', 'POSTGRES_FETCHER_PASSWORD'] if app_deploy_mode == 'cloudsql' else [] }}"
+app_deploy_blank_secrets: "{{ dict(app_deploy_skipped_secrets | zip(app_deploy_skipped_secrets | map('regex_replace', '^.*$', ''))) }}"
+app_deploy_public: "{{ app_deploy_app | combine(app_deploy_ips, app_deploy_derived, app_deploy_blank_secrets) }}"
+app_deploy_public_names: "{{ app_deploy_names | difference(app_deploy_secret_list) | union(app_deploy_names | intersect(app_deploy_skipped_secrets)) | sort }}"
+
+app_deploy_extra_names: >-
+  {{ (['POSTGRES_PASSWORD'] if app_deploy_key == 'history' and app_deploy_mode == 'cloudsql' else [])
+  + (app_deploy_container_secrets if app_deploy_key == 'db' and app_deploy_mode == 'container' else []) }}
+app_deploy_needed: "{{ app_deploy_secret_names | union(app_deploy_extra_names) }}"
+
+app_deploy_wanted_profiles: >-
+  {{ (['rabbitmq'] if app_deploy_queue == 'rabbitmq' else [])
+  + (['redis'] if iss_config.app.SESSION_BACKEND == 'redis' else [])
+  + (['cloudsql'] if app_deploy_mode == 'cloudsql' and (app_deploy_key == 'history' or app_deploy_queue in ['postgres', 'pgmq']) else [])
+  + (['postgres'] if app_deploy_mode == 'container' else []) }}

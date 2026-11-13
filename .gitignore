@@ -1,12 +1,15 @@
-.env
+/config.json
 
-.vagrant/
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+
+ansible/.generated/
+__pycache__/
 
 node_modules/
 services/ui/dist/
-
-services/*/fetcher_app
-services/*/history_app
 
 *.log
 .DS_Store

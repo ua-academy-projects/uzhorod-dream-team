@@ -1,0 +1,13 @@
+---
+- name: Close the persistent SSH connection
+  ansible.builtin.meta: reset_connection
+
+- name: Remove the temporary admin key from the instance metadata
+  iss.platform.gce_ssh_key:
+    project: "{{ gce_temp_admin_project }}"
+    zone: "{{ gce_temp_admin_zone }}"
+    instance: "{{ gce_temp_admin_instance }}"
+    user: "{{ gce_temp_admin_user }}"
+    state: absent
+  delegate_to: localhost
+  become: false

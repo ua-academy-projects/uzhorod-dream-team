@@ -1,0 +1,22 @@
+---
+namespace: iss
+name: tracker
+version: 1.0.0
+readme: README.md
+authors:
+  - ISS position tracker
+description: "ISS position tracker profile: configuration checks, bastion and app hosts, app deploy, Postgres and Let's Encrypt."
+license:
+  - MIT
+tags:
+  - infrastructure
+  - deployment
+  - docker
+  - cloud
+dependencies:
+  iss.platform: ">=1.0.0"
+  google.cloud: ">=1.15.0"
+  community.docker: ">=5.4.0"
+  ansible.utils: ">=6.1.1"
+build_ignore:
+  - tests/output

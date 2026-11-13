@@ -1,0 +1,67 @@
+---
+- name: Configure through a temporary admin key
+  block:
+    - name: Add the temporary admin key
+      ansible.builtin.import_role:
+        name: iss.platform.gce_temp_admin
+      vars:
+        gce_temp_admin_project: "{{ bastion_project }}"
+        gce_temp_admin_zone: "{{ bastion_zone }}"
+        gce_temp_admin_instance: "{{ inventory_hostname }}"
+        gce_temp_admin_public_key: "{{ bastion_public_key }}"
+        gce_temp_admin_user: "{{ bastion_admin_user }}"
+        gce_temp_admin_ttl_minutes: "{{ bastion_ttl_minutes }}"
+
+    - name: Wait for cloud-init
+      ansible.builtin.command: cloud-init status --wait
+      register: bastion_cloud_init
+      changed_when: false
+      failed_when: bastion_cloud_init.rc not in [0, 2]
+
+    - name: Configure the guest agent
+      ansible.builtin.import_role:
+        name: iss.platform.gce_guest_agent
+
+    - name: Configure sshd
+      ansible.builtin.import_role:
+        name: iss.platform.sshd
+      vars:
+        sshd_port: "{{ bastion_ssh_port }}"
+        sshd_allow_users: "{{ bastion_sshd_allow_users }}"
+        sshd_extra_options: "{{ bastion_sshd_extra_options }}"
+        sshd_disable_socket: true
+
+    - name: Configure fail2ban
+      ansible.builtin.import_role:
+        name: iss.platform.fail2ban
+      vars:
+        fail2ban_ignoreip: "{{ iss_config.access.admin_cidrs }}"
+        fail2ban_port: "{{ bastion_ssh_port }}"
+
+    - name: Install the Ops Agent
+      ansible.builtin.import_role:
+        name: iss.platform.ops_agent
+      vars:
+        ops_agent_enabled: "{{ iss_config.monitoring.ops_agent }}"
+
+    - name: Run pending handlers while the key is still valid
+      ansible.builtin.meta: flush_handlers
+
+  rescue:
+    - name: Run pending handlers before the key is revoked
+      ansible.builtin.meta: flush_handlers
+
+    - name: Fail the bastion
+      ansible.builtin.fail:
+        msg: "Configuring the bastion failed at {{ ansible_failed_task.name | default('an unknown task') }}: {{ ansible_failed_result.msg | default('') }}"
+
+  always:
+    - name: Revoke the temporary admin key
+      ansible.builtin.import_role:
+        name: iss.platform.gce_temp_admin
+        tasks_from: revoke
+      vars:
+        gce_temp_admin_project: "{{ bastion_project }}"
+        gce_temp_admin_zone: "{{ bastion_zone }}"
+        gce_temp_admin_instance: "{{ inventory_hostname }}"
+        gce_temp_admin_user: "{{ bastion_admin_user }}"

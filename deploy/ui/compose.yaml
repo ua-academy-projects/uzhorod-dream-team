@@ -1,12 +1,86 @@
 name: iss
 
 services:
+  certbot-init:
+    image: certbot/dns-cloudflare:v5.9.0
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        ca=acme-v02.api.letsencrypt.org
+        if [ "$$TLS_STAGING" = "true" ]; then ca=acme-staging-v02.api.letsencrypt.org; fi
+        cert="/etc/letsencrypt/live/$$UI_HOST/fullchain.pem"
+        conf="/etc/letsencrypt/renewal/$$UI_HOST.conf"
+        umask 077
+        printf 'dns_cloudflare_api_token = %s\n' "$$CLOUDFLARE_API_TOKEN" > /secrets/cloudflare.ini
+        umask 022
+        if [ -f "$$cert" ] && grep -q "^server = https://$$ca/" "$$conf" 2>/dev/null; then exit 0; fi
+        set -- certonly --dns-cloudflare --dns-cloudflare-credentials /secrets/cloudflare.ini \
+          --dns-cloudflare-propagation-seconds 30 -d "$$UI_HOST" --agree-tos --non-interactive
+        if [ -n "$$TLS_EMAIL" ]; then set -- "$$@" --email "$$TLS_EMAIL"; else set -- "$$@" --register-unsafely-without-email; fi
+        if [ "$$TLS_STAGING" = "true" ]; then set -- "$$@" --staging; fi
+        if [ -f "$$cert" ]; then set -- "$$@" --force-renewal --break-my-certs; fi
+        exec certbot "$$@"
+    environment:
+      UI_HOST: ${UI_HOST:?}
+      TLS_EMAIL: ${TLS_EMAIL}
+      TLS_STAGING: ${TLS_STAGING:?}
+      CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN:?}
+    tmpfs:
+      - /secrets:mode=0700
+    volumes:
+      - letsencrypt:/etc/letsencrypt
+
+  certbot:
+    image: certbot/dns-cloudflare:v5.9.0
+    restart: unless-stopped
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        umask 077
+        printf 'dns_cloudflare_api_token = %s\n' "$$CLOUDFLARE_API_TOKEN" > /secrets/cloudflare.ini
+        umask 022
+        while :; do certbot renew --quiet; sleep 12h; done
+    environment:
+      CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN:?}
+    tmpfs:
+      - /secrets:mode=0700
+    volumes:
+      - letsencrypt:/etc/letsencrypt
+    depends_on:
+      certbot-init:
+        condition: service_completed_successfully
+
   ui:
     build: ./src
     image: iss-ui:latest
     restart: unless-stopped
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        (while :; do sleep 6h; nginx -s reload; done) &
+        exec /docker-entrypoint.sh nginx -g 'daemon off;'
     environment:
       HISTORY_IP: ${HISTORY_IP:?}
       HISTORY_PORT: ${HISTORY_PORT:?}
-    ports:
-      - "${UI_PORT:?}:80"
+      UI_HOST: ${UI_HOST:?}
+    volumes:
+      - letsencrypt:/etc/letsencrypt:ro
+    networks:
+      default:
+        aliases:
+          - ${UI_HOST:?}
+    depends_on:
+      certbot-init:
+        condition: service_completed_successfully
+
+  cloudflared:
+    image: cloudflare/cloudflared:2026.10.3
+    restart: unless-stopped
+    command: ["tunnel", "--no-autoupdate", "run"]
+    environment:
+      TUNNEL_TOKEN: ${CF_TUNNEL_TOKEN:?}
+    depends_on:
+      - ui
+
+volumes:
+  letsencrypt:

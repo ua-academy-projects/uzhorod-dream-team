@@ -1,0 +1,99 @@
+---
+- name: Render compose.yaml on localhost
+  delegate_to: localhost
+  become: false
+  block:
+    - name: Check that config.json app has no empty values
+      ansible.builtin.assert:
+        that: app_deploy_empty_app | length == 0
+        fail_msg: "app.{{ app_deploy_empty_app | first | default('') }} is empty in config.json"
+        quiet: true
+      vars:
+        app_deploy_empty_app: "{{ iss_config.app | dict2items | selectattr('value', 'in', [none, '']) | map(attribute='key') | list }}"
+
+    - name: Check that config.json app holds no secrets
+      ansible.builtin.assert:
+        that: app_deploy_secrets_in_app | length == 0
+        fail_msg: "{{ app_deploy_secrets_in_app | join(', ') }} is a secret: remove it from config.json app and keep it in Secret Manager"
+        quiet: true
+      vars:
+        app_deploy_secrets_in_app: "{{ iss_config.app.keys() | intersect(app_deploy_secret_list) }}"
+
+    - name: Check that every needed VM is in the inventory
+      ansible.builtin.assert:
+        that: app_deploy_missing_vms | length == 0
+        fail_msg: >-
+          VM {{ app_deploy_missing_vms | map('regex_replace', '^', iss_config.project.name_prefix ~ '-') | join(', ') }}
+          is not in the inventory (stopped or not created); run ./scripts/tf.sh apply or start it
+        quiet: true
+
+    - name: Find the Cloud SQL instance
+      iss.platform.gce_sql_instance_info:
+        project: "{{ iss_config.project.id }}"
+        filters:
+          iss-prefix: "{{ iss_config.project.name_prefix }}"
+      register: app_deploy_sql_lookup
+      run_once: true
+      when: app_deploy_mode == 'cloudsql' and app_deploy_cloudsql_instances is not defined
+
+    - name: Check the Cloud SQL instance
+      ansible.builtin.assert:
+        that:
+          - app_deploy_sql_instances | length == 1
+          - app_deploy_sql_instance.state == 'RUNNABLE'
+        fail_msg: >-
+          expected one RUNNABLE Cloud SQL instance with label iss-prefix={{ iss_config.project.name_prefix }}, found
+          {{ app_deploy_sql_instances | map(attribute='name') | zip(app_deploy_sql_instances | map(attribute='state')) | map('join', ' ') | join(', ') or 'none' }};
+          run ./scripts/tf.sh apply
+        quiet: true
+      when: app_deploy_mode == 'cloudsql'
+
+    - name: Check that every compose variable has a source
+      ansible.builtin.assert:
+        that: app_deploy_missing | length == 0
+        fail_msg: "{{ app_deploy_missing | join(', ') }} is referenced in deploy/{{ app_deploy_key }}/compose.yaml but missing in config.json app and Secret Manager"
+        quiet: true
+      vars:
+        app_deploy_missing: "{{ app_deploy_names | difference(app_deploy_public.keys()) | difference(app_deploy_secret_list) }}"
+
+    - name: Render compose.yaml
+      ansible.builtin.set_fact:
+        app_deploy_vars: "{{ dict(app_deploy_public_names | zip(app_deploy_public_names | map('extract', app_deploy_public))) }}"
+        app_deploy_compose: "{{ app_deploy_rendered }}"
+        app_deploy_secret_names: >-
+          {{ app_deploy_rendered | regex_findall('\$\{([A-Za-z_][A-Za-z0-9_]*)') | intersect(app_deploy_secret_list) | unique | sort }}
+      vars:
+        app_deploy_rendered: >-
+          {{ app_deploy_source | iss.tracker.compose_render(dict(app_deploy_public_names | zip(app_deploy_public_names | map('extract', app_deploy_public))),
+          app_deploy_wanted_profiles) }}
+
+    - name: Start with no secrets
+      ansible.builtin.set_fact:
+        app_deploy_secret_values: {}
+
+    - name: Read the secrets
+      ansible.builtin.set_fact:
+        app_deploy_secret_values: >-
+          {{ app_deploy_secret_values | combine({item: app_deploy_secrets[item] if item in app_deploy_secrets
+          else lookup('google.cloud.gcp_secret_manager', key=item, project=iss_config.project.id)}) }}
+      loop: "{{ app_deploy_needed }}"
+      no_log: true
+
+    - name: Check the values
+      ansible.builtin.assert:
+        that:
+          - app_deploy_with_dollar | length == 0
+          - app_deploy_with_bad_chars | length == 0
+          - app_deploy_empty_secrets | length == 0
+        fail_msg: >-
+          {% if app_deploy_with_dollar %}{{ app_deploy_with_dollar | join(', ') }} contains '$', which compose would interpolate
+          {% elif app_deploy_with_bad_chars %}{{ app_deploy_with_bad_chars | join(', ') }} contains whitespace, '#' or a quote,
+          which iss-run refuses
+          {% else %}secret {{ app_deploy_empty_secret }} is empty, run ./scripts/secret-set.sh {{ app_deploy_empty_secret }}{% endif %}
+        quiet: true
+      vars:
+        app_deploy_checked: "{{ app_deploy_vars | combine(app_deploy_secret_values) | dict2items }}"
+        app_deploy_with_dollar: "{{ app_deploy_checked | selectattr('value', 'search', app_deploy_dollar) | map(attribute='key') | list }}"
+        app_deploy_with_bad_chars: "{{ app_deploy_checked | selectattr('value', 'search', app_deploy_bad_chars) | map(attribute='key') | list }}"
+        app_deploy_empty_secrets: "{{ app_deploy_secret_values | dict2items | selectattr('value', 'equalto', '') | map(attribute='key') | list }}"
+        app_deploy_empty_secret: "{{ app_deploy_empty_secrets | first | default('') }}"

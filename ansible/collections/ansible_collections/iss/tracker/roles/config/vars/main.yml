@@ -1,0 +1,3 @@
+---
+config_schema_file: "{{ ansible_config_file | dirname | dirname }}/config.schema.json"
+config_bastion_count: "{{ iss_config.vms.values() | selectattr('bastion', 'defined') | selectattr('bastion') | list | length }}"

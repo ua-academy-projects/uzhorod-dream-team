@@ -1,25 +1,46 @@
 name: iss
 
 services:
+  cloudsql-proxy:
+    profiles: [cloudsql]
+    image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.26.2
+    restart: unless-stopped
+    command:
+      - --private-ip
+      - --auto-iam-authn
+      - --address
+      - 0.0.0.0
+      - --port
+      - "${POSTGRES_PORT:?}"
+      - "${CLOUDSQL_INSTANCE?}"
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:?}:${POSTGRES_PORT:?}"
+
   history:
     build: ./src
     image: iss-history:latest
     restart: unless-stopped
+    labels:
+      iss.pgmq-version: ${PGMQ_VERSION:?}
+    depends_on:
+      cloudsql-proxy:
+        condition: service_started
+        required: false
     environment:
       QUEUE_BACKEND: ${QUEUE_BACKEND:?}
       SESSION_BACKEND: ${SESSION_BACKEND:?}
-      POSTGRES_HOST: ${DB_IP:?}
+      POSTGRES_HOST: ${POSTGRES_HOST:?}
       POSTGRES_PORT: ${POSTGRES_PORT:?}
       POSTGRES_USER: ${POSTGRES_USER:?}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+      POSTGRES_PASSWORD: ${POSTGRES_HISTORY_PASSWORD?}
       POSTGRES_DB: ${POSTGRES_DB:?}
       POSTGRES_FETCHER_USER: ${POSTGRES_FETCHER_USER:?}
-      RABBITMQ_HOST: ${DB_IP:?}
+      RABBITMQ_HOST: ${DB_IP?}
       RABBITMQ_PORT: ${RABBITMQ_PORT:?}
       RABBITMQ_USER: ${RABBITMQ_USER:?}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?}
       RABBITMQ_QUEUE: ${RABBITMQ_QUEUE:?}
-      REDIS_HOST: ${DB_IP:?}
+      REDIS_HOST: ${DB_IP?}
       REDIS_PORT: ${REDIS_PORT:?}
       REDIS_PASSWORD: ${REDIS_PASSWORD:?}
       HISTORY_PORT: ${HISTORY_PORT:?}

@@ -1,0 +1,72 @@
+---
+argument_specs:
+  render:
+    short_description: Render the compose.yaml and secret names of this VM on localhost.
+    description:
+      - Runs only on localhost; never connects to the VM.
+      - Sets app_deploy_compose (compose.yaml with public values substituted and services of inactive profiles removed),
+        app_deploy_secret_names (secrets the kept services reference, for secrets.list), app_deploy_vars (public values)
+        and app_deploy_secret_values (secret values, checked here and used by role postgres; never written to the VM).
+      - The VM key is the host name without the name_prefix; deploy/<key>/compose.yaml lists the variables.
+      - VM IPs come from gce_internal_ip of the inventory groups named by VM key; in mode cloudsql the instance is found by
+        the label iss-prefix through the Cloud SQL Admin API.
+    options:
+      iss_config:
+        type: dict
+        required: true
+        description: Parsed config.json.
+      app_deploy_cloudsql_instances:
+        type: list
+        elements: dict
+        description: Cloud SQL instances as returned by iss.platform.gce_sql_instance_info, used instead of the API (tests).
+      app_deploy_secrets:
+        type: dict
+        default: {}
+        no_log: true
+        description: Secret values by name; names missing here are read from Secret Manager.
+      app_deploy_compose_dir:
+        type: str
+        description: Directory with deploy/<key>/compose.yaml; defaults to deploy next to the ansible directory.
+  files:
+    short_description: Ship the iss-* images, compose.yaml, secrets.list, iss-run and iss.service of this VM.
+    description:
+      - Start the play with become true; local steps run on localhost without become.
+      - Images named iss-<name> are built from <services dir>/<name> with the build args of the rendered compose file.
+      - An image is copied only when the content hash recorded on the VM differs from the local build or the image is missing.
+      - Removes the old .env and secrets directory, then fails unless iss-run can read every secret in secrets.list.
+    options: &app_deploy_options
+      iss_config:
+        type: dict
+        required: true
+        description: Parsed config.json.
+      app_deploy_compose:
+        type: str
+        description: Rendered compose.yaml (no secret values); set by the entry point render.
+      app_deploy_secret_names:
+        type: list
+        elements: str
+        description: Secret names for secrets.list; set by the entry point render.
+      app_deploy_services_dir:
+        type: str
+        description: Directory with one build context per image; defaults to services.
+      app_deploy_dir:
+        type: str
+        default: /opt/iss
+        description: Project directory on the VM.
+      app_deploy_bin_dir:
+        type: str
+        default: /usr/local/sbin
+        description: Directory of iss-run and iss-compose on the VM.
+      app_deploy_image_cache:
+        type: str
+        description: Local directory for image archives; defaults to $ISS_ANSIBLE_CACHE/images.
+      app_deploy_iss_run_env:
+        type: dict
+        default: {}
+        description: Extra environment for iss-run (ISS_METADATA_URL, ISS_SECRETMANAGER_URL in tests); never secrets.
+  up:
+    short_description: Start the compose project of this VM through iss-compose and prune unused images.
+    description:
+      - Runs after files in the same play.
+      - iss-compose reads the secrets from Secret Manager; --remove-orphans removes services no longer in compose.yaml.
+    options: *app_deploy_options

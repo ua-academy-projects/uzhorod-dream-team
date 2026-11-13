@@ -1,0 +1,258 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ISS position tracker config.json",
+  "type": "object",
+  "required": ["project", "network", "access", "domain", "tls", "vm_defaults", "vms", "postgres", "monitoring", "firewall", "app"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "project": {
+      "type": "object",
+      "required": ["id", "region", "zone", "name_prefix"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "GCP project ID; empty until bootstrap.sh creates the project.",
+          "pattern": "^$|^[a-z][a-z0-9-]{4,28}[a-z0-9]$"
+        },
+        "region": { "$ref": "#/$defs/name" },
+        "zone": { "$ref": "#/$defs/name" },
+        "name_prefix": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$",
+          "maxLength": 23,
+          "description": "At most 23 characters: bootstrap.sh builds project.id as <name_prefix>-<6 hex>, at most 30."
+        }
+      }
+    },
+    "network": {
+      "type": "object",
+      "required": ["subnet_cidr", "psa_cidr"],
+      "additionalProperties": false,
+      "properties": {
+        "subnet_cidr": { "$ref": "#/$defs/cidr" },
+        "psa_cidr": { "$ref": "#/$defs/cidr" }
+      }
+    },
+    "access": {
+      "type": "object",
+      "required": ["admin_cidrs", "ssh_public_key", "sa_key_file"],
+      "additionalProperties": false,
+      "properties": {
+        "admin_cidrs": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/cidr" } },
+        "ssh_public_key": { "type": "string", "pattern": "\\.pub$", "description": "Path to the public key (.pub)." },
+        "ssh_port": { "type": "integer", "minimum": 1, "maximum": 65535, "default": 22 },
+        "sa_key_file": { "type": "string", "minLength": 1 }
+      }
+    },
+    "domain": {
+      "type": "object",
+      "required": ["zone", "host"],
+      "additionalProperties": false,
+      "properties": {
+        "zone": { "$ref": "#/$defs/name" },
+        "host": { "$ref": "#/$defs/name" },
+        "direct_host": { "not": {}, "description": "Removed: the UI is reachable only through the Cloudflare Tunnel; set domain.host." }
+      }
+    },
+    "tls": {
+      "type": "object",
+      "required": ["staging", "email"],
+      "additionalProperties": false,
+      "properties": {
+        "staging": { "type": "boolean" },
+        "email": { "type": "string" }
+      }
+    },
+    "vm_defaults": {
+      "type": "object",
+      "required": ["image", "machine_type", "disk_type", "disk_gb"],
+      "additionalProperties": false,
+      "properties": {
+        "image": { "$ref": "#/$defs/name" },
+        "machine_type": { "$ref": "#/$defs/name" },
+        "disk_type": { "$ref": "#/$defs/name" },
+        "disk_gb": { "type": "integer", "minimum": 10 }
+      }
+    },
+    "vms": {
+      "type": "object",
+      "required": ["db", "history", "fetcher", "ui"],
+      "propertyNames": { "pattern": "^[a-z][a-z0-9]*$", "not": { "enum": ["bastion", "internal"] } },
+      "additionalProperties": { "$ref": "#/$defs/vm" }
+    },
+    "cloudsql": {
+      "type": "object",
+      "required": ["tier", "version", "edition", "disk_gb", "deletion_protection"],
+      "additionalProperties": false,
+      "properties": {
+        "tier": { "$ref": "#/$defs/name" },
+        "version": { "type": "string", "pattern": "^POSTGRES_[0-9]+$" },
+        "edition": { "enum": ["ENTERPRISE", "ENTERPRISE_PLUS"] },
+        "disk_gb": { "type": "integer", "minimum": 10 },
+        "deletion_protection": { "type": "boolean" },
+        "database_name": { "not": {}, "description": "Moved to postgres.database_name." },
+        "pgmq_version": { "not": {}, "description": "Moved to postgres.pgmq_version." }
+      }
+    },
+    "postgres": {
+      "type": "object",
+      "required": ["database_name", "pgmq_version", "pg_cron_version"],
+      "additionalProperties": false,
+      "properties": {
+        "database_name": { "$ref": "#/$defs/name" },
+        "pgmq_version": { "$ref": "#/$defs/name" },
+        "pg_cron_version": { "$ref": "#/$defs/name" }
+      }
+    },
+    "monitoring": {
+      "type": "object",
+      "required": ["ops_agent", "notification_emails", "alerts"],
+      "additionalProperties": false,
+      "description": "With ops_agent true, Terraform (module monitoring) also creates the log-based metrics, email channels, alert policies and the dashboard; with false none of them exist.",
+      "properties": {
+        "ops_agent": { "type": "boolean", "description": "Google Cloud Ops Agent on every VM, with a service account that may write logs and metrics." },
+        "notification_emails": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$" },
+          "description": "One email notification channel per address; every alert notifies all of them. Empty: alerts open incidents in the console only."
+        },
+        "alerts": {
+          "type": "object",
+          "required": ["nginx_5xx_share", "history_unreachable", "positions_stalled", "app_errors", "agent_missing", "disk_percent", "memory_percent", "cloudsql_cpu", "cloudsql_disk"],
+          "additionalProperties": false,
+          "description": "One alert policy per enabled entry; duration_s is how long the condition must hold.",
+          "properties": {
+            "nginx_5xx_share": { "$ref": "#/$defs/alert_ratio", "description": "Share of nginx responses with status 5xx over 5 minutes above threshold." },
+            "history_unreachable": { "$ref": "#/$defs/alert", "description": "nginx answered 502 or 504 in the last 5 minutes: history is down or too slow." },
+            "positions_stalled": { "$ref": "#/$defs/alert", "description": "history stored no position in the last 5 minutes." },
+            "app_errors": { "$ref": "#/$defs/alert_count", "description": "Error lines from all containers in 5 minutes above threshold." },
+            "agent_missing": { "$ref": "#/$defs/alert_absent","description": "A VM sends no Ops Agent uptime metric." },
+            "disk_percent": { "$ref": "#/$defs/alert_percent", "description": "A disk of a VM (snap loop devices excluded) used above threshold percent." },
+            "memory_percent": { "$ref": "#/$defs/alert_percent", "description": "Memory of a VM used above threshold percent." },
+            "cloudsql_cpu": { "$ref": "#/$defs/alert_ratio", "description": "Cloud SQL CPU utilization above threshold; mode cloudsql only." },
+            "cloudsql_disk": { "$ref": "#/$defs/alert_ratio", "description": "Cloud SQL disk utilization above threshold; mode cloudsql only." }
+          }
+        }
+      }
+    },
+    "firewall": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["from", "to", "ports"],
+        "additionalProperties": false,
+        "properties": {
+          "from": { "type": "string", "pattern": "^[a-z][a-z0-9]*$" },
+          "to": { "type": "string", "pattern": "^[a-z][a-z0-9]*$" },
+          "ports": { "type": "array", "minItems": 1, "items": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*_PORT$" } }
+        }
+      }
+    },
+    "app": {
+      "type": "object",
+      "required": ["POSTGRES_BACKEND", "QUEUE_BACKEND", "SESSION_BACKEND"],
+      "propertyNames": { "pattern": "^[A-Z][A-Z0-9_]*$" },
+      "properties": {
+        "POSTGRES_BACKEND": { "enum": ["cloudsql", "container"] },
+        "QUEUE_BACKEND": { "enum": ["rabbitmq", "postgres", "pgmq"] },
+        "SESSION_BACKEND": { "enum": ["redis", "postgres", "hstore"] }
+      },
+      "additionalProperties": { "type": ["string", "number"] }
+    },
+    "ui": { "not": {}, "description": "Removed: the UI is reachable only through the Cloudflare Tunnel; set domain.host." }
+  },
+  "if": {
+    "properties": { "app": { "properties": { "POSTGRES_BACKEND": { "const": "cloudsql" } } } }
+  },
+  "then": {
+    "required": ["cloudsql"],
+    "properties": {
+      "vms": {
+        "properties": {
+          "history": { "required": ["service_account"], "properties": { "service_account": { "const": true } } },
+          "fetcher": { "required": ["service_account"], "properties": { "service_account": { "const": true } } }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "name": { "type": "string", "minLength": 1 },
+    "enabled": { "type": "boolean", "description": "Create this alert policy." },
+    "duration_s": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 86400,
+      "multipleOf": 60,
+      "description": "Seconds the condition must hold before an incident opens; 0 fires at once."
+    },
+    "alert": {
+      "type": "object",
+      "required": ["enabled", "duration_s"],
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "$ref": "#/$defs/enabled" },
+        "duration_s": { "$ref": "#/$defs/duration_s" }
+      }
+    },
+    "alert_absent": {
+      "type": "object",
+      "required": ["enabled", "duration_s"],
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "$ref": "#/$defs/enabled" },
+        "duration_s": { "$ref": "#/$defs/duration_s", "minimum": 120, "description": "Seconds without data before an incident opens; the API needs at least 120." }
+      }
+    },
+    "alert_ratio": {
+      "type": "object",
+      "required": ["enabled", "threshold", "duration_s"],
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "$ref": "#/$defs/enabled" },
+        "threshold": { "type": "number", "exclusiveMinimum": 0, "maximum": 1, "description": "Fraction from 0 to 1." },
+        "duration_s": { "$ref": "#/$defs/duration_s" }
+      }
+    },
+    "alert_count": {
+      "type": "object",
+      "required": ["enabled", "threshold", "duration_s"],
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "$ref": "#/$defs/enabled" },
+        "threshold": { "type": "integer", "minimum": 0, "description": "Number of lines in 5 minutes." },
+        "duration_s": { "$ref": "#/$defs/duration_s" }
+      }
+    },
+    "alert_percent": {
+      "type": "object",
+      "required": ["enabled", "threshold", "duration_s"],
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "$ref": "#/$defs/enabled" },
+        "threshold": { "type": "number", "minimum": 1, "maximum": 100, "description": "Percent used." },
+        "duration_s": { "$ref": "#/$defs/duration_s" }
+      }
+    },
+    "cidr": {
+      "type": "string",
+      "pattern": "^(25[0-5]|2[0-4][0-9]|1?[0-9]?[0-9])(\\.(25[0-5]|2[0-4][0-9]|1?[0-9]?[0-9])){3}/([0-9]|[12][0-9]|3[0-2])$"
+    },
+    "vm": {
+      "type": "object",
+      "required": ["host"],
+      "additionalProperties": false,
+      "properties": {
+        "host": { "type": "integer", "minimum": 2 },
+        "bastion": { "type": "boolean" },
+        "service_account": { "type": "boolean" },
+        "image": { "$ref": "#/$defs/name" },
+        "machine_type": { "$ref": "#/$defs/name" },
+        "disk_type": { "$ref": "#/$defs/name" },
+        "disk_gb": { "type": "integer", "minimum": 10 }
+      }
+    }
+  }
+}

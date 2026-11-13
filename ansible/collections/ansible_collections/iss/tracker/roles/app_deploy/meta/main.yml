@@ -1,0 +1,11 @@
+---
+galaxy_info:
+  author: ISS position tracker
+  description: Builds images locally, copies them to the VM and starts the compose project.
+  license: MIT
+  min_ansible_version: "2.19"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - all
+dependencies: []

@@ -1,0 +1,19 @@
+log_format iss_json escape=json
+    '{"time":"$time_iso8601","status":"$status","upstream_status":"$upstream_status",'
+    '"request_time":$request_time,"upstream_response_time":"$upstream_response_time",'
+    '"method":"$request_method","uri":"$uri","bytes":$body_bytes_sent}';
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name ${UI_HOST};
+
+    access_log /dev/stdout iss_json;
+
+    ssl_certificate /etc/letsencrypt/live/${UI_HOST}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${UI_HOST}/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_session_cache shared:SSL:10m;
+
+    include /etc/nginx/conf.d/app.inc;
+}

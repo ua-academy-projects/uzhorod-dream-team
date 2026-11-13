@@ -1,0 +1,76 @@
+---
+- name: Ensure the privilege separation directory exists
+  ansible.builtin.file:
+    path: /run/sshd
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Configure sshd and keep the previous file on error
+  block:
+    - name: Write the sshd drop-in
+      ansible.builtin.template:
+        src: 10-iss.conf.j2
+        dest: "{{ sshd_config_path }}"
+        owner: root
+        group: root
+        mode: "0644"
+        backup: true
+      register: sshd_dropin
+      notify: Restart sshd
+
+    - name: Test the full sshd configuration
+      ansible.builtin.command: /usr/sbin/sshd -t
+      changed_when: false
+
+    - name: Remove the backup of the previous drop-in
+      ansible.builtin.file:
+        path: "{{ sshd_dropin.backup_file }}"
+        state: absent
+      when: sshd_dropin.backup_file is defined
+
+  rescue:
+    - name: Restore the previous drop-in
+      ansible.builtin.copy:
+        src: "{{ sshd_dropin.backup_file }}"
+        dest: "{{ sshd_config_path }}"
+        remote_src: true
+        owner: root
+        group: root
+        mode: "0644"
+      when: sshd_dropin.backup_file | default('') | length > 0
+
+    - name: Remove the backup after restoring it
+      ansible.builtin.file:
+        path: "{{ sshd_dropin.backup_file }}"
+        state: absent
+      when: sshd_dropin.backup_file | default('') | length > 0
+
+    - name: Remove the new drop-in that had no previous version
+      ansible.builtin.file:
+        path: "{{ sshd_config_path }}"
+        state: absent
+      when:
+        - sshd_dropin is defined
+        - sshd_dropin is changed
+        - sshd_dropin.backup_file | default('') | length == 0
+
+    - name: Stop after restoring the configuration
+      ansible.builtin.fail:
+        msg: "sshd rejected the new configuration, the previous file is back: {{ ansible_failed_result.stderr | default(ansible_failed_result.msg) }}"
+
+- name: Disable socket activation
+  when: sshd_disable_socket
+  block:
+    - name: Stop and disable ssh.socket
+      ansible.builtin.systemd_service:
+        name: ssh.socket
+        enabled: false
+        state: stopped
+
+    - name: Enable and start ssh.service
+      ansible.builtin.systemd_service:
+        name: ssh.service
+        enabled: true
+        state: started

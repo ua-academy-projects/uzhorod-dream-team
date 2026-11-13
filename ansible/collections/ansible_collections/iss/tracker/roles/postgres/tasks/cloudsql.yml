@@ -1,0 +1,151 @@
+---
+- name: Start the Cloud SQL proxy
+  ansible.builtin.command:
+    argv: ["{{ postgres_compose }}", up, -d, cloudsql-proxy]
+  register: postgres_proxy_up
+  changed_when: postgres_proxy_up.stderr is search('(Created|Recreated|Started|Removed)')
+
+- name: Install psycopg2
+  ansible.builtin.import_tasks: psycopg.yml
+
+- name: Set up Cloud SQL through the proxy
+  module_defaults:
+    group/community.postgresql.all: "{{ postgres_tcp_login }}"
+  block:
+    - name: Wait for Postgres behind the proxy
+      community.postgresql.postgresql_ping:
+        login_db: "{{ postgres_db }}"
+      register: postgres_ping
+      until: postgres_ping.is_available or postgres_ping.conn_err_msg is search('password authentication failed')
+      retries: 30
+      delay: 2
+
+    - name: Set the postgres password through the Cloud SQL Admin API
+      when: not postgres_ping.is_available
+      block:
+        - name: Get an access token
+          ansible.builtin.command:
+            argv: [gcloud, auth, print-access-token]
+          register: postgres_token
+          changed_when: false
+          delegate_to: localhost
+          become: false
+          no_log: true
+
+        - name: Set the postgres password
+          ansible.builtin.uri:
+            url: "{{ postgres_api }}/instances/{{ postgres_instance }}/users?name=postgres"
+            method: PUT
+            headers:
+              Authorization: Bearer {{ postgres_token.stdout }}
+            body_format: json
+            body:
+              name: postgres
+              password: "{{ postgres_admin_password }}"
+          register: postgres_operation
+          changed_when: true
+          delegate_to: localhost
+          become: false
+          no_log: true
+
+        - name: Wait for the Cloud SQL operation
+          ansible.builtin.uri:
+            url: "{{ postgres_api }}/operations/{{ postgres_operation.json.name }}"
+            headers:
+              Authorization: Bearer {{ postgres_token.stdout }}
+          register: postgres_operation_state
+          until: postgres_operation_state.json.status | default('') == 'DONE'
+          retries: 60
+          delay: 5
+          delegate_to: localhost
+          become: false
+          no_log: true
+
+        - name: Check the Cloud SQL operation
+          ansible.builtin.assert:
+            that: postgres_operation_state.json.error is not defined
+            fail_msg: "cannot set the postgres password on {{ postgres_instance }}: {{ postgres_operation_state.json.error | default({}) | to_json }}"
+            quiet: true
+
+        - name: Log in with the new password
+          community.postgresql.postgresql_ping:
+            login_db: "{{ postgres_db }}"
+          register: postgres_ping_again
+          until: postgres_ping_again.is_available
+          retries: 10
+          delay: 3
+
+    - name: Read the installed pgmq version
+      community.postgresql.postgresql_query:
+        login_db: "{{ postgres_db }}"
+        query: SELECT coalesce((SELECT obj_description(oid, 'pg_namespace') FROM pg_namespace WHERE nspname = 'pgmq'), '') AS comment
+      register: postgres_pgmq_installed
+      changed_when: false
+
+    - name: Reinstall pgmq
+      when: postgres_pgmq_installed.query_result[0].comment != postgres_pgmq_comment
+      block:
+        - name: Create the local pgmq cache
+          ansible.builtin.file:
+            path: "{{ postgres_pgmq_sql | dirname }}"
+            state: directory
+            mode: "0700"
+          delegate_to: localhost
+          become: false
+
+        - name: Download pgmq.sql
+          ansible.builtin.get_url:
+            url: https://raw.githubusercontent.com/pgmq/pgmq/v{{ postgres_pgmq_version }}/pgmq-extension/sql/pgmq.sql
+            dest: "{{ postgres_pgmq_sql }}"
+            mode: "0600"
+            force: false
+          delegate_to: localhost
+          become: false
+
+        - name: Create the setup directory
+          ansible.builtin.file:
+            path: "{{ postgres_dir }}/setup"
+            state: directory
+            owner: "{{ postgres_file_owner }}"
+            group: "{{ postgres_file_owner }}"
+            mode: "0700"
+
+        - name: Upload the pgmq install script
+          ansible.builtin.template:
+            src: pgmq_install.sql.j2
+            dest: "{{ postgres_dir }}/setup/pgmq.sql"
+            owner: "{{ postgres_file_owner }}"
+            group: "{{ postgres_file_owner }}"
+            mode: "0600"
+
+        - name: Stop history while pgmq is reinstalled
+          ansible.builtin.command:
+            argv: ["{{ postgres_compose }}", stop, history]
+          changed_when: true
+
+        - name: Install pgmq
+          community.postgresql.postgresql_script:
+            login_db: "{{ postgres_db }}"
+            path: "{{ postgres_dir }}/setup/pgmq.sql"
+
+    - name: Install or update hstore and pg_cron
+      ansible.builtin.import_tasks: extensions.yml
+
+    - name: Grant the history user
+      ansible.builtin.import_tasks: grants.yml
+
+    - name: Schedule the pg_cron jobs
+      ansible.builtin.import_tasks: cron.yml
+
+  rescue:
+    - name: Start history again
+      ansible.builtin.command:
+        argv: ["{{ postgres_compose }}", start, history]
+      changed_when: true
+      failed_when: false
+
+    - name: Report the failed setup
+      ansible.builtin.fail:
+        msg: >-
+          Postgres setup failed on {{ inventory_hostname }}: {{ ansible_failed_result.msg | default('') }}
+          history runs again with the previous schema; fix the error and rerun ./scripts/ansible.sh deploy.yml --limit {{ inventory_hostname }}

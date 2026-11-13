@@ -1,0 +1,11 @@
+---
+- name: Set deprovision_remove for accounts created from metadata keys
+  community.general.ini_file:
+    path: "{{ gce_guest_agent_config_path }}"
+    section: Accounts
+    option: deprovision_remove
+    value: "{{ gce_guest_agent_deprovision_remove | string | lower }}"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart guest agent

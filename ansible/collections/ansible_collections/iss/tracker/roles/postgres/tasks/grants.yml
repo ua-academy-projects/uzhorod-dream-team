@@ -1,0 +1,57 @@
+---
+- name: Grant the database to the history user
+  community.postgresql.postgresql_privs:
+    login_db: "{{ postgres_db }}"
+    type: database
+    objs: "{{ postgres_db }}"
+    privs: ALL
+    roles: "{{ postgres_owner }}"
+
+- name: Grant the public schema to the history user
+  community.postgresql.postgresql_privs:
+    login_db: "{{ postgres_db }}"
+    type: schema
+    objs: public
+    privs: USAGE,CREATE
+    roles: "{{ postgres_owner }}"
+
+- name: Grant the pgmq schema to the history user
+  community.postgresql.postgresql_privs:
+    login_db: "{{ postgres_db }}"
+    type: schema
+    objs: pgmq
+    privs: USAGE,CREATE
+    roles: "{{ postgres_owner }}"
+    grant_option: true
+
+- name: List the pgmq tables and sequences owned by postgres
+  community.postgresql.postgresql_query:
+    login_db: "{{ postgres_db }}"
+    query: >-
+      SELECT
+        coalesce((SELECT string_agg(tablename, ',' ORDER BY tablename) FROM pg_tables
+                  WHERE schemaname = 'pgmq' AND tableowner = current_user), '') AS tables,
+        coalesce((SELECT string_agg(sequencename, ',' ORDER BY sequencename) FROM pg_sequences
+                  WHERE schemaname = 'pgmq' AND sequenceowner = current_user), '') AS sequences
+  register: postgres_pgmq_objects
+  changed_when: false
+
+- name: Grant the pgmq tables to the history user
+  community.postgresql.postgresql_privs:
+    login_db: "{{ postgres_db }}"
+    type: table
+    schema: pgmq
+    objs: "{{ postgres_pgmq_objects.query_result[0].tables }}"
+    privs: ALL
+    roles: "{{ postgres_owner }}"
+  when: postgres_pgmq_objects.query_result[0].tables | length > 0
+
+- name: Grant the pgmq sequences to the history user
+  community.postgresql.postgresql_privs:
+    login_db: "{{ postgres_db }}"
+    type: sequence
+    schema: pgmq
+    objs: "{{ postgres_pgmq_objects.query_result[0].sequences }}"
+    privs: ALL
+    roles: "{{ postgres_owner }}"
+  when: postgres_pgmq_objects.query_result[0].sequences | length > 0

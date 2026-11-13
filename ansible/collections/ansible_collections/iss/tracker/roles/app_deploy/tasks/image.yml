@@ -1,0 +1,95 @@
+---
+- name: Name the image files
+  ansible.builtin.set_fact:
+    app_deploy_image_file: "{{ app_deploy_image.name | regex_replace('[^A-Za-z0-9_.-]', '_') }}"
+    app_deploy_image_args: >-
+      {{ app_deploy_image.args | dict2items | map(attribute='key')
+      | zip(app_deploy_image.args.values() | map('string'))
+      | map('join', '=') | map('regex_replace', '^', '--build-arg=') | list }}
+
+- name: Build the image locally
+  ansible.builtin.command:
+    argv: >-
+      {{ ['docker', 'build', '-q', '-t', app_deploy_image.name] + app_deploy_image_args
+      + [app_deploy_services_dir ~ '/' ~ (app_deploy_image.name | regex_replace('^iss-([^:]+).*$', '\1'))] }}
+  delegate_to: localhost
+  become: false
+  changed_when: false
+
+- name: Hash the content of the local image
+  ansible.builtin.shell:
+    cmd: >-
+      set -o pipefail &&
+      docker image inspect --format {{ "'{{json .Config}}{{json .RootFS.Layers}}'" }} {{ app_deploy_image.name | quote }}
+      | sha256sum | cut -d' ' -f1
+    executable: /bin/bash
+  delegate_to: localhost
+  become: false
+  register: app_deploy_build
+  changed_when: false
+
+- name: Read the image ID recorded on the VM
+  ansible.builtin.command:
+    argv: [cat, "{{ app_deploy_dir }}/images/{{ app_deploy_image_file }}.id"]
+  register: app_deploy_recorded
+  changed_when: false
+  failed_when: false
+
+- name: Check that the image exists on the VM
+  ansible.builtin.command:
+    argv: [docker, image, inspect, "{{ app_deploy_image.name }}"]
+  register: app_deploy_present
+  changed_when: false
+  failed_when: false
+
+- name: Copy the image to the VM
+  when: app_deploy_present.rc != 0 or app_deploy_recorded.stdout | trim != app_deploy_build.stdout | trim
+  block:
+    - name: Create the local image cache
+      ansible.builtin.file:
+        path: "{{ app_deploy_image_cache }}"
+        state: directory
+        mode: "0700"
+      delegate_to: localhost
+      become: false
+
+    - name: Save the image locally
+      ansible.builtin.shell:
+        cmd: >-
+          set -o pipefail &&
+          docker save {{ app_deploy_image.name | quote }}
+          | gzip -1 > {{ (app_deploy_image_cache ~ '/' ~ app_deploy_image_file ~ '.tar.gz') | quote }}
+        executable: /bin/bash
+      delegate_to: localhost
+      become: false
+      changed_when: false
+
+    - name: Upload the image
+      ansible.builtin.copy:
+        src: "{{ app_deploy_image_cache }}/{{ app_deploy_image_file }}.tar.gz"
+        dest: "{{ app_deploy_dir }}/images/{{ app_deploy_image_file }}.tar.gz"
+        mode: "0600"
+
+    - name: Load the image
+      ansible.builtin.command:
+        argv: [docker, load, -q, -i, "{{ app_deploy_dir }}/images/{{ app_deploy_image_file }}.tar.gz"]
+      changed_when: true
+
+    - name: Record the image ID
+      ansible.builtin.copy:
+        content: "{{ app_deploy_build.stdout | trim }}\n"
+        dest: "{{ app_deploy_dir }}/images/{{ app_deploy_image_file }}.id"
+        mode: "0600"
+
+  always:
+    - name: Remove the uploaded archive
+      ansible.builtin.file:
+        path: "{{ app_deploy_dir }}/images/{{ app_deploy_image_file }}.tar.gz"
+        state: absent
+
+    - name: Remove the local archive
+      ansible.builtin.file:
+        path: "{{ app_deploy_image_cache }}/{{ app_deploy_image_file }}.tar.gz"
+        state: absent
+      delegate_to: localhost
+      become: false

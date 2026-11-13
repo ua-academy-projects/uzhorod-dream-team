@@ -1,0 +1,5 @@
+BEGIN;
+DROP SCHEMA IF EXISTS pgmq CASCADE;
+{{ lookup('ansible.builtin.file', postgres_pgmq_sql) }}
+COMMENT ON SCHEMA pgmq IS '{{ postgres_pgmq_comment }}';
+COMMIT;

@@ -1,0 +1,11 @@
+---
+galaxy_info:
+  author: ISS position tracker
+  description: Docker Engine and the compose plugin from the Ubuntu archive.
+  license: MIT
+  min_ansible_version: "2.19"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - all
+dependencies: []

@@ -1,0 +1,7 @@
+---
+argument_specs:
+  main:
+    short_description: Upgrade the packages and reboot when /var/run/reboot-required exists.
+    description:
+      - Start the play with become true.
+    options: {}

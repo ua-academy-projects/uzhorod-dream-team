@@ -1,0 +1,142 @@
+---
+- name: Render and check every compose.yaml before any VM changes
+  hosts: app
+  gather_facts: false
+  any_errors_fatal: true
+  tasks:
+    - name: Check the configuration
+      ansible.builtin.import_role:
+        name: iss.tracker.config
+
+    - name: Render compose.yaml
+      ansible.builtin.import_role:
+        name: iss.tracker.app_deploy
+        tasks_from: render
+
+- name: Deploy db
+  hosts: db
+  gather_facts: false
+  become: true
+  serial: 1
+  tasks:
+    - name: Check the configuration
+      ansible.builtin.import_role:
+        name: iss.tracker.config
+
+    - name: Render compose.yaml
+      ansible.builtin.import_role:
+        name: iss.tracker.app_deploy
+        tasks_from: render
+
+    - name: Upload the images, compose.yaml and iss-run
+      ansible.builtin.import_role:
+        name: iss.tracker.app_deploy
+        tasks_from: files
+
+    - name: Prepare the Postgres container
+      ansible.builtin.import_role:
+        name: iss.tracker.postgres
+        tasks_from: container_prepare
+      when: iss_config.app.POSTGRES_BACKEND == 'container'
+
+    - name: Start the containers
+      ansible.builtin.import_role:
+        name: iss.tracker.app_deploy
+        tasks_from: up
+
+    - name: Set up Postgres in the container
+      ansible.builtin.import_role:
+        name: iss.tracker.postgres
+        tasks_from: container
+      when: iss_config.app.POSTGRES_BACKEND == 'container'
+
+- name: Deploy history
+  hosts: history
+  gather_facts: false
+  become: true
+  serial: 1
+  tasks:
+    - name: Check the configuration
+      ansible.builtin.import_role:
+        name: iss.tracker.config
+
+    - name: Render compose.yaml
+      ansible.builtin.import_role:
+        name: iss.tracker.app_deploy
+        tasks_from: render
+
+    - name: Upload the images, compose.yaml and iss-run
+      ansible.builtin.import_role:
+        name: iss.tracker.app_deploy
+        tasks_from: files
+
+    - name: Set up Cloud SQL
+      ansible.builtin.import_role:
+        name: iss.tracker.postgres
+        tasks_from: cloudsql
+      when: iss_config.app.POSTGRES_BACKEND == 'cloudsql'
+
+    - name: Start the containers
+      ansible.builtin.import_role:
+        name: iss.tracker.app_deploy
+        tasks_from: up
+
+- name: Deploy fetcher
+  hosts: fetcher
+  gather_facts: false
+  become: true
+  serial: 1
+  tasks:
+    - name: Check the configuration
+      ansible.builtin.import_role:
+        name: iss.tracker.config
+
+    - name: Render compose.yaml
+      ansible.builtin.import_role:
+        name: iss.tracker.app_deploy
+        tasks_from: render
+
+    - name: Upload the images, compose.yaml and iss-run
+      ansible.builtin.import_role:
+        name: iss.tracker.app_deploy
+        tasks_from: files
+
+    - name: Start the containers
+      ansible.builtin.import_role:
+        name: iss.tracker.app_deploy
+        tasks_from: up
+
+- name: Deploy ui
+  hosts: ui
+  gather_facts: false
+  become: true
+  serial: 1
+  tasks:
+    - name: Check the configuration
+      ansible.builtin.import_role:
+        name: iss.tracker.config
+
+    - name: Render compose.yaml
+      ansible.builtin.import_role:
+        name: iss.tracker.app_deploy
+        tasks_from: render
+
+    - name: Upload the images, compose.yaml and iss-run
+      ansible.builtin.import_role:
+        name: iss.tracker.app_deploy
+        tasks_from: files
+
+    - name: Restore the Let's Encrypt state
+      ansible.builtin.import_role:
+        name: iss.tracker.letsencrypt
+        tasks_from: restore
+
+    - name: Start the containers
+      ansible.builtin.import_role:
+        name: iss.tracker.app_deploy
+        tasks_from: up
+
+    - name: Back up the Let's Encrypt state
+      ansible.builtin.import_role:
+        name: iss.tracker.letsencrypt
+        tasks_from: backup

@@ -13,7 +13,7 @@ import (
 func initDB() {
 	connURL := url.URL{
 		Scheme:   "postgres",
-		User:     url.UserPassword(cfg.PostgresUser, cfg.PostgresPassword),
+		User:     pgUserinfo(cfg.PostgresUser, cfg.PostgresPassword),
 		Host:     net.JoinHostPort(cfg.PostgresHost, cfg.PostgresPort),
 		Path:     "/" + cfg.PostgresDB,
 		RawQuery: "sslmode=disable",
@@ -70,19 +70,12 @@ func migrate() {
 			ADD COLUMN IF NOT EXISTS longitude DOUBLE PRECISION,
 			ADD COLUMN IF NOT EXISTS radius_km DOUBLE PRECISION`,
 		`CREATE INDEX IF NOT EXISTS positions_timestamp_idx ON positions (timestamp)`,
-		`CREATE EXTENSION IF NOT EXISTS pgmq`,
-		`CREATE EXTENSION IF NOT EXISTS hstore`,
-		`CREATE EXTENSION IF NOT EXISTS pg_cron`,
 		`SELECT pgmq.create('` + pgmqQueue + `')`,
 		`CREATE UNLOGGED TABLE IF NOT EXISTS kv_sessions (
 			session_id UUID PRIMARY KEY,
 			data hstore NOT NULL,
 			expires_at TIMESTAMPTZ NOT NULL
 		)`,
-		`SELECT cron.schedule('iss-expire-sessions', '* * * * *',
-			$$DELETE FROM kv_sessions WHERE expires_at <= now()$$)`,
-		`SELECT cron.schedule('iss-purge-queue-archive', '17 * * * *',
-			$$DELETE FROM pgmq.a_` + pgmqQueue + ` WHERE archived_at < now() - interval '1 day'$$)`,
 	}
 	for _, statement := range statements {
 		if _, err := db.Exec(statement); err != nil {
@@ -90,9 +83,24 @@ func migrate() {
 		}
 	}
 	slog.Info("schema ready",
-		"tables", "positions, position_queue, sessions, kv_sessions",
-		"extensions", "pgmq, hstore, pg_cron", "pgmq_queue", pgmqQueue)
+		"tables", "positions, position_queue, sessions, kv_sessions", "pgmq_queue", pgmqQueue)
 	grantFetcherRole()
+	grantCronRole()
+}
+
+const cronRole = "postgres"
+
+func grantCronRole() {
+	role := pq.QuoteIdentifier(cronRole)
+	for _, statement := range []string{
+		"GRANT SELECT, DELETE ON kv_sessions TO " + role,
+		"GRANT SELECT, DELETE ON pgmq.a_" + pgmqQueue + " TO " + role,
+	} {
+		if _, err := db.Exec(statement); err != nil {
+			fatal("cron role grant failed", "role", cronRole, "err", err)
+		}
+	}
+	slog.Info("cron role may clean up sessions and queue archive", "role", cronRole)
 }
 
 func grantFetcherRole() {

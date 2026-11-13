@@ -1,0 +1,4 @@
+---
+gce_guest_agent_config_path: /etc/default/instance_configs.cfg
+gce_guest_agent_deprovision_remove: true
+gce_guest_agent_service: google-guest-agent

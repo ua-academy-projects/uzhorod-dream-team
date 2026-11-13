@@ -1,0 +1,22 @@
+# Prints the compose.yaml and secrets.list each application VM would get; neither holds a secret value.
+# Runs only on localhost: reads config.json, the inventory, the Cloud SQL Admin API and Secret Manager, never connects to a VM.
+# Usage: ./scripts/ansible.sh runbooks/app-compose.yml [--limit <vm name>]
+---
+- name: Print the compose.yaml of the application VMs
+  hosts: app
+  gather_facts: false
+  tasks:
+    - name: Check the configuration
+      ansible.builtin.import_role:
+        name: iss.tracker.config
+
+    - name: Render compose.yaml
+      ansible.builtin.import_role:
+        name: iss.tracker.app_deploy
+        tasks_from: render
+
+    - name: Print compose.yaml and secrets.list
+      ansible.builtin.debug:
+        msg:
+          compose.yaml: "{{ app_deploy_compose | split('\n') }}"
+          secrets.list: "{{ app_deploy_secret_names }}"

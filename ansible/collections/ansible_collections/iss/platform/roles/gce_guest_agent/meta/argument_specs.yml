@@ -1,0 +1,17 @@
+---
+argument_specs:
+  main:
+    short_description: Configure the GCE guest agent.
+    options:
+      gce_guest_agent_config_path:
+        type: path
+        default: /etc/default/instance_configs.cfg
+        description: Guest agent configuration file.
+      gce_guest_agent_deprovision_remove:
+        type: bool
+        default: true
+        description: Delete the Linux user when all its metadata keys are removed.
+      gce_guest_agent_service:
+        type: str
+        default: google-guest-agent
+        description: Service restarted after a change, skipped when it is not installed.

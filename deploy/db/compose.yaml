@@ -2,15 +2,19 @@ name: iss
 
 services:
   postgres:
-    build: ./src
-    image: iss-postgres:16
+    profiles: [postgres]
+    build:
+      context: ./src
+      args:
+        PG_CRON_VERSION: ${PG_CRON_VERSION:?}
+        PGMQ_VERSION: ${PGMQ_VERSION:?}
+    image: iss-postgres:18
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:?}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD?}
       POSTGRES_DB: ${POSTGRES_DB:?}
-      POSTGRES_FETCHER_USER: ${POSTGRES_FETCHER_USER:?}
-      POSTGRES_FETCHER_PASSWORD: ${POSTGRES_FETCHER_PASSWORD:?}
+      HISTORY_DB_USER: ${POSTGRES_USER:?}
+      FETCHER_DB_USER: ${POSTGRES_FETCHER_USER:?}
       HISTORY_IP: ${HISTORY_IP:?}
       FETCHER_IP: ${FETCHER_IP:?}
       QUEUE_BACKEND: ${QUEUE_BACKEND:?}
@@ -20,26 +24,27 @@ services:
         cat > /tmp/pg_hba.conf <<EOF
         local all all trust
         host all all 127.0.0.1/32 scram-sha-256
-        host $$POSTGRES_DB $$POSTGRES_USER $$HISTORY_IP/32 scram-sha-256
+        host $$POSTGRES_DB $$HISTORY_DB_USER $$HISTORY_IP/32 scram-sha-256
         EOF
         case "$$QUEUE_BACKEND" in
-          postgres|pgmq) echo "host $$POSTGRES_DB $$POSTGRES_FETCHER_USER $$FETCHER_IP/32 scram-sha-256" >> /tmp/pg_hba.conf ;;
+          postgres|pgmq) echo "host $$POSTGRES_DB $$FETCHER_DB_USER $$FETCHER_IP/32 scram-sha-256" >> /tmp/pg_hba.conf ;;
         esac
         exec docker-entrypoint.sh postgres -c hba_file=/tmp/pg_hba.conf \
-          -c shared_preload_libraries=pg_cron -c cron.database_name="$$POSTGRES_DB" -c cron.use_background_workers=on
+          -c shared_preload_libraries=pg_cron -c cron.database_name=postgres -c cron.use_background_workers=on
     ports:
       - "${POSTGRES_PORT:?}:5432"
     volumes:
-      - postgres-data:/var/lib/postgresql/data
+      - postgres18-data:/var/lib/postgresql
+      - ./postgres/run:/var/run/postgresql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d \"$$POSTGRES_DB\""]
       interval: 10s
       timeout: 5s
       retries: 5
 
   redis:
     profiles: [redis]
-    image: redis:7-alpine
+    image: redis:8-alpine
     restart: unless-stopped
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD:?}
@@ -56,7 +61,7 @@ services:
 
   rabbitmq:
     profiles: [rabbitmq]
-    image: rabbitmq:3.13-alpine
+    image: rabbitmq:4.3-alpine
     restart: unless-stopped
     hostname: iss-rabbitmq
     environment:
@@ -65,7 +70,7 @@ services:
     ports:
       - "${RABBITMQ_PORT:?}:5672"
     volumes:
-      - rabbitmq-data:/var/lib/rabbitmq
+      - rabbitmq4-data:/var/lib/rabbitmq
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 15s
@@ -73,6 +78,6 @@ services:
       retries: 5
 
 volumes:
-  postgres-data:
+  postgres18-data:
   redis-data:
-  rabbitmq-data:
+  rabbitmq4-data:

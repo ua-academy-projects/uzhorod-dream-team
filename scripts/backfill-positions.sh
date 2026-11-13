@@ -10,9 +10,11 @@ HOURS=${1:-24}
 STEP=${2:-60}
 [[ $HOURS =~ ^[1-9][0-9]*$ && $STEP =~ ^[1-9][0-9]*$ ]] || usage
 
-ROOT=$(cd "$(dirname "$0")/.." && pwd)
-API=$(sed -n 's/^FETCHER_ISS_API_URL=//p' "$ROOT/.env" | tr -d '\r')
-[[ -n $API ]] || { echo "FETCHER_ISS_API_URL not found in $ROOT/.env" >&2; exit 1; }
+source "$(dirname "$0")/lib.sh"
+need jq curl ssh
+config_check
+API=$(cfg '.app.FETCHER_ISS_API_URL // ""')
+[[ -n $API ]] || die "app.FETCHER_ISS_API_URL not found in $CONFIG"
 
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
@@ -54,7 +56,11 @@ SELECT p.name, p.id, p.latitude, p.longitude, p.altitude, p.velocity, p.visibili
 SQL
 done <"$TMP/positions.jsonl" >"$TMP/backfill.sql"
 
-echo "==> Inserting into iss-db"
-ssh -o BatchMode=yes iss-db \
-  "cd /opt/iss && sudo docker compose exec -T postgres sh -c 'psql -X -1 -v ON_ERROR_STOP=1 -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\"'" \
+HISTORY_HOST=${ISS_HISTORY_HOST:-gcp-$(cfg '.project.name_prefix')-history}
+REMOTE=$(cat <<'EOF'
+sudo /usr/local/sbin/iss-run bash -c 'docker run --rm -i --network iss_default --env-file <(docker inspect --format "{{range .Config.Env}}{{println .}}{{end}}" iss-history-1 | grep -E "^(POSTGRES_HOST|POSTGRES_USER|POSTGRES_DB|POSTGRES_PORT)=") -e POSTGRES_HISTORY_PASSWORD postgres:18-alpine sh -c '"'"'[ -z "$POSTGRES_HISTORY_PASSWORD" ] || export PGPASSWORD="$POSTGRES_HISTORY_PASSWORD"; psql -X -w -1 -v ON_ERROR_STOP=1 -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_DB"'"'"''
+EOF
+)
+echo "==> Inserting into Postgres from $HISTORY_HOST"
+ssh -o BatchMode=yes "$HISTORY_HOST" "$REMOTE" \
   <"$TMP/backfill.sql" | awk '$1 == "INSERT" { n += $3 } END { printf "    %d new positions inserted, the rest were already present\n", n }'

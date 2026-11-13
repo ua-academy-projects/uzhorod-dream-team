@@ -1,0 +1,7 @@
+---
+ops_agent_enabled: true
+ops_agent_config: {}
+ops_agent_repo_codename: ""
+ops_agent_repo_version: all
+ops_agent_key_url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
+ops_agent_key_file: /etc/apt/keyrings/google-cloud-ops-agent.asc

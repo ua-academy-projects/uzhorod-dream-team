@@ -1,0 +1,34 @@
+---
+postgres_queue: positions
+postgres_db: "{{ postgres_env.POSTGRES_DB }}"
+postgres_owner: "{{ postgres_env.POSTGRES_USER }}"
+postgres_port: "{{ postgres_env.POSTGRES_PORT }}"
+postgres_project: "{{ iss_config.project.id }}"
+postgres_instance: "{{ postgres_env.CLOUDSQL_INSTANCE | default('') | split(':') | last }}"
+postgres_api: https://sqladmin.googleapis.com/v1/projects/{{ postgres_project }}
+postgres_pgmq_comment: pgmq {{ postgres_pgmq_version }}
+postgres_roles:
+  - name: postgres
+    password: "{{ postgres_admin_password }}"
+  - name: "{{ postgres_owner }}"
+    password: "{{ postgres_history_password }}"
+  - name: "{{ postgres_env.POSTGRES_FETCHER_USER | default('') }}"
+    password: "{{ postgres_fetcher_password }}"
+postgres_cron_jobs:
+  - jobname: iss-expire-sessions
+    schedule: "* * * * *"
+    command: DELETE FROM kv_sessions WHERE expires_at <= now()
+    database: "{{ postgres_db }}"
+  - jobname: iss-purge-queue-archive
+    schedule: 17 * * * *
+    command: DELETE FROM pgmq.a_{{ postgres_queue }} WHERE archived_at < now() - interval '1 day'
+    database: "{{ postgres_db }}"
+postgres_socket_login:
+  login_unix_socket: "{{ postgres_socket_dir }}"
+  login_user: postgres
+postgres_tcp_login:
+  login_host: 127.0.0.1
+  login_port: "{{ postgres_port | int }}"
+  login_user: postgres
+  login_password: "{{ postgres_admin_password }}"
+  ssl_mode: disable

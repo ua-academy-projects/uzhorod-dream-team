@@ -1,0 +1,17 @@
+---
+argument_specs:
+  main:
+    short_description: Install and start Docker.
+    description:
+      - Writes /etc/docker/daemon.json and restarts Docker when it changes; existing containers keep their log options until they are recreated.
+    options:
+      docker_packages:
+        type: list
+        elements: str
+        default:
+          - docker.io
+          - docker-compose-v2
+        description: Packages to install.
+      docker_daemon_config:
+        type: dict
+        description: Content of /etc/docker/daemon.json; the default is the json-file log driver with the container name as tag, max-size 10m and max-file 3.

@@ -80,7 +80,7 @@ func processMessages() {
 	}
 	defer ch.Close()
 
-	q, err := ch.QueueDeclare(cfg.RabbitMQQueue, false, false, false, false, nil)
+	q, err := ch.QueueDeclare(cfg.RabbitMQQueue, true, false, false, false, nil)
 	if err != nil {
 		slog.Error("rabbitmq queue declare failed", "queue", cfg.RabbitMQQueue, "err", err)
 		return

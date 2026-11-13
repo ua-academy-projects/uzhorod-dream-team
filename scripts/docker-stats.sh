@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-VMS=(iss-db iss-history iss-fetcher iss-ui)
+source "$(dirname "$0")/lib.sh"
+need jq ssh
+config_check
+PREFIX=$(cfg '.project.name_prefix')
+mapfile -t VMS < <(cfg '.vms | to_entries[] | select(.value.bastion != true) | .key' | sed "s/^/gcp-$PREFIX-/")
 
 export LC_ALL=C.UTF-8
 

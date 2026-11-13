@@ -1,0 +1,31 @@
+# Upgrades Ubuntu packages and reboots a VM when /var/run/reboot-required exists.
+# App VMs go one at a time; rebooting db or history stops the application for a few minutes.
+# The bastion is updated last through a temporary iss-admin key (TTL 30 minutes), revoked at the end.
+# Usage: ./scripts/ansible.sh runbooks/os-update.yml [--limit <vm name>]
+---
+- name: Update the application VMs
+  hosts: app
+  serial: 1
+  become: true
+  tasks:
+    - name: Check the configuration
+      ansible.builtin.import_role:
+        name: iss.tracker.config
+
+    - name: Update the OS
+      ansible.builtin.import_role:
+        name: iss.tracker.os_update
+
+- name: Update the bastion
+  hosts: bastion
+  gather_facts: false
+  become: true
+  tasks:
+    - name: Check the configuration
+      ansible.builtin.import_role:
+        name: iss.tracker.config
+
+    - name: Update the OS through a temporary admin key
+      ansible.builtin.import_role:
+        name: iss.tracker.bastion
+        tasks_from: os_update

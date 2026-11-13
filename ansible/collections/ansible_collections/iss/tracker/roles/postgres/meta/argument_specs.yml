@@ -1,0 +1,77 @@
+---
+argument_specs:
+  container_prepare:
+    short_description: Create the Postgres socket directory on db before compose up.
+    options:
+      iss_config:
+        type: dict
+        required: true
+        description: Parsed config.json.
+      postgres_socket_dir:
+        type: str
+        default: /opt/iss/postgres/run
+        description: Host directory mounted as /var/run/postgresql in the postgres container.
+  container:
+    short_description: Prepare Postgres in the postgres container on db.
+    description:
+      - Runs after compose up on db, with become true.
+      - Connects as postgres through the socket mounted on the host (trust), with community.postgresql modules.
+      - Creates the database and the history and fetcher roles and keeps their passwords equal to the secrets.
+      - Installs pgmq (extension; another version is dropped with CASCADE first), hstore and pg_cron, grants, pg_cron jobs.
+    options: &postgres_options
+      iss_config:
+        type: dict
+        required: true
+        description: Parsed config.json.
+      postgres_dir:
+        type: str
+        default: /opt/iss
+        description: Compose project directory on the VM.
+      postgres_socket_dir:
+        type: str
+        default: /opt/iss/postgres/run
+        description: Host directory with the Postgres socket (container).
+      postgres_install_psycopg:
+        type: bool
+        default: true
+        description: Install python3-psycopg2 for the modules.
+      postgres_file_owner:
+        type: str
+        default: root
+        description: Owner and group of the setup files on the VM (cloudsql).
+      postgres_env:
+        type: dict
+        no_log: true
+        description: Compose variables of this VM; defaults to app_deploy_vars.
+      postgres_compose:
+        type: str
+        default: /usr/local/sbin/iss-compose
+        description: Command that runs docker compose for the project with the secrets of this VM (cloudsql).
+      postgres_pgmq_version:
+        type: str
+        description: pgmq version; defaults to PGMQ_VERSION.
+      postgres_pgmq_sql:
+        type: str
+        description: Local path of pgmq.sql (cloudsql); downloaded when missing; defaults to $ISS_ANSIBLE_CACHE/pgmq/pgmq-<version>.sql.
+      postgres_admin_password:
+        type: str
+        no_log: true
+        description: Password of the postgres user; defaults to the secret POSTGRES_PASSWORD.
+      postgres_history_password:
+        type: str
+        no_log: true
+        description: Password of the history role (container); defaults to the secret POSTGRES_HISTORY_PASSWORD.
+      postgres_fetcher_password:
+        type: str
+        no_log: true
+        description: Password of the fetcher role (container); defaults to the secret POSTGRES_FETCHER_PASSWORD.
+  cloudsql:
+    short_description: Prepare Cloud SQL from the history VM.
+    description:
+      - Runs after the files and before compose up on history, with become true.
+      - Starts cloudsql-proxy (published on 127.0.0.1 of the VM) and connects as postgres with POSTGRES_PASSWORD.
+      - Sets the postgres password through the Cloud SQL Admin API when the login with it fails.
+      - Installs pgmq as a SQL script when the schema comment differs; history is stopped only then.
+      - Installs or updates hstore and pg_cron, grants, pg_cron jobs.
+      - On failure history is started again and the play fails with "Postgres setup failed".
+    options: *postgres_options

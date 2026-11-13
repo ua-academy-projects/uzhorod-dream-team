@@ -1,0 +1,27 @@
+---
+- name: Configure the bastion
+  hosts: bastion
+  gather_facts: false
+  become: true
+  tasks:
+    - name: Check the configuration
+      ansible.builtin.import_role:
+        name: iss.tracker.config
+
+    - name: Configure the bastion
+      ansible.builtin.import_role:
+        name: iss.tracker.bastion
+
+- name: Configure the application VMs
+  hosts: app
+  gather_facts: false
+  become: true
+  force_handlers: true
+  tasks:
+    - name: Check the configuration
+      ansible.builtin.import_role:
+        name: iss.tracker.config
+
+    - name: Configure the application VM
+      ansible.builtin.import_role:
+        name: iss.tracker.app_host

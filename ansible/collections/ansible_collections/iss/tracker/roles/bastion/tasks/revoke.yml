@@ -1,0 +1,10 @@
+---
+- name: Remove the temporary admin key from the instance metadata
+  iss.platform.gce_ssh_key:
+    project: "{{ bastion_project }}"
+    zone: "{{ bastion_zone }}"
+    instance: "{{ inventory_hostname }}"
+    user: "{{ bastion_admin_user }}"
+    state: absent
+  delegate_to: localhost
+  become: false

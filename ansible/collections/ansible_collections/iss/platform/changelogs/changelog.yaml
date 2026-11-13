@@ -1,0 +1,11 @@
+---
+ancestor: null
+releases:
+  1.0.0:
+    changes:
+      release_summary: Initial release with roles gce_temp_admin, gce_guest_agent, sshd, fail2ban, docker and module gce_ssh_key.
+    release_date: "2026-11-04"
+  1.1.0:
+    changes:
+      release_summary: Module gce_sql_instance_info; module_utils sessions take scopes; role ops_agent; docker writes daemon.json (json-file log driver with container name tag and rotation).
+    release_date: "2026-11-08"

@@ -1,0 +1,26 @@
+---
+- name: Read the pg_cron jobs
+  community.postgresql.postgresql_query:
+    login_db: postgres
+    query: SELECT jobname, schedule, command, database FROM cron.job WHERE jobname LIKE 'iss-%' ORDER BY jobname
+  register: postgres_cron_current
+  changed_when: false
+
+- name: Reschedule the pg_cron jobs
+  when: postgres_cron_current.query_result | list != postgres_cron_jobs | sort(attribute='jobname')
+  block:
+    - name: Unschedule the old pg_cron jobs
+      community.postgresql.postgresql_query:
+        login_db: postgres
+        query: SELECT count(cron.unschedule(jobid)) AS removed FROM cron.job WHERE jobname LIKE 'iss-%'
+      changed_when: true
+
+    - name: Schedule the pg_cron jobs
+      community.postgresql.postgresql_query:
+        login_db: postgres
+        query: SELECT cron.schedule_in_database(%(jobname)s, %(schedule)s, %(command)s, %(database)s) AS jobid
+        named_args: "{{ item }}"
+      loop: "{{ postgres_cron_jobs }}"
+      loop_control:
+        label: "{{ item.jobname }}"
+      changed_when: true

@@ -1,0 +1,10 @@
+---
+docker_packages:
+  - docker.io
+  - docker-compose-v2
+docker_daemon_config:
+  log-driver: json-file
+  log-opts:
+    tag: !unsafe "{{.Name}}"
+    max-size: 10m
+    max-file: "3"

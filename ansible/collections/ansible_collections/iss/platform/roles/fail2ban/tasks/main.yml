@@ -1,0 +1,33 @@
+---
+- name: Install fail2ban
+  ansible.builtin.apt:
+    name: fail2ban
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Send fail2ban logs to syslog
+  ansible.builtin.copy:
+    src: fail2ban.local
+    dest: /etc/fail2ban/fail2ban.d/iss.local
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart fail2ban
+
+- name: Configure the sshd jail
+  ansible.builtin.template:
+    src: jail.local.j2
+    dest: /etc/fail2ban/jail.d/iss.local
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart fail2ban
+
+- name: Enable and start fail2ban
+  ansible.builtin.systemd_service:
+    name: fail2ban.service
+    enabled: true
+    state: started
+
+- name: Apply a changed configuration before checks that follow
+  ansible.builtin.meta: flush_handlers

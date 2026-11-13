@@ -1,8 +1,8 @@
 module fetcher
 
-go 1.21
+go 1.27
 
 require (
-	github.com/lib/pq v1.10.9
-	github.com/rabbitmq/amqp091-go v1.15.0
+	github.com/lib/pq v1.12.3
+	github.com/rabbitmq/amqp091-go v1.16.0
 )

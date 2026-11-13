@@ -1,0 +1,70 @@
+---
+- name: Pack the Let's Encrypt volume
+  ansible.builtin.command:
+    argv: [docker, run, --rm, -i, -v, "{{ letsencrypt_volume }}:/le:ro", "{{ letsencrypt_image }}", sh, -s, "{{ letsencrypt_host }}"]
+    stdin: "{{ lookup('ansible.builtin.file', 'le_pack.sh') }}"
+  register: letsencrypt_pack
+  changed_when: false
+  no_log: true
+
+- name: Keep the archive when it fits the secret
+  ansible.builtin.set_fact:
+    letsencrypt_archive: "{{ letsencrypt_pack.stdout if letsencrypt_pack.stdout | length <= letsencrypt_limit | int else '' }}"
+  no_log: true
+
+- name: Warn about an archive over the secret limit
+  ansible.builtin.debug:
+    msg: >-
+      warning: Let's Encrypt state is {{ letsencrypt_pack.stdout | length }} bytes,
+      over the {{ (letsencrypt_limit | int / 1024) | round(0) | int }} KiB secret limit; not saved
+  when: letsencrypt_pack.stdout | length > letsencrypt_limit | int
+
+- name: Decide once whether the state changed
+  ansible.builtin.set_fact:
+    letsencrypt_changed: >-
+      {{ letsencrypt_save | bool and letsencrypt_archive | length > 0 and letsencrypt_archive != letsencrypt_state }}
+  no_log: true
+
+- name: Save the Let's Encrypt state to Secret Manager
+  when: letsencrypt_changed | bool
+  delegate_to: localhost
+  become: false
+  block:
+    - name: Add a secret version
+      ansible.builtin.command:
+        argv: ["{{ letsencrypt_gcloud }}", secrets, versions, add, LETSENCRYPT_STATE, --data-file=-, --project, "{{ iss_config.project.id }}"]
+        stdin: "{{ letsencrypt_archive }}"
+        stdin_add_newline: false
+      changed_when: true
+      no_log: true
+
+    - name: List the enabled secret versions
+      ansible.builtin.command:
+        argv:
+          - "{{ letsencrypt_gcloud }}"
+          - secrets
+          - versions
+          - list
+          - LETSENCRYPT_STATE
+          - --project
+          - "{{ iss_config.project.id }}"
+          - --filter=state:ENABLED
+          - --sort-by=~createTime
+          - --format=value(name)
+      register: letsencrypt_versions
+      changed_when: false
+
+    - name: Destroy all but the two newest versions
+      ansible.builtin.command:
+        argv:
+          - "{{ letsencrypt_gcloud }}"
+          - secrets
+          - versions
+          - destroy
+          - "{{ item | split('/') | last }}"
+          - --secret=LETSENCRYPT_STATE
+          - --project
+          - "{{ iss_config.project.id }}"
+          - --quiet
+      loop: "{{ letsencrypt_versions.stdout_lines[2:] }}"
+      changed_when: true

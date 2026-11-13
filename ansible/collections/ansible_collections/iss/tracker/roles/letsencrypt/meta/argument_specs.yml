@@ -1,0 +1,50 @@
+---
+argument_specs:
+  restore:
+    short_description: Restore the Let's Encrypt volume before compose up.
+    description:
+      - Creates the volume with compose labels.
+      - Restores the volume from LETSENCRYPT_STATE only when it has no certificate for the current host.
+    options: &letsencrypt_options
+      iss_config:
+        type: dict
+        required: true
+        description: Parsed config.json.
+      letsencrypt_dir:
+        type: str
+        default: /opt/iss
+        description: Compose project directory on the VM.
+      letsencrypt_volume:
+        type: str
+        default: iss_letsencrypt
+        description: Docker volume of /etc/letsencrypt.
+      letsencrypt_image:
+        type: str
+        default: alpine:3.22
+        description: Image of the one-off containers that read and write the volume.
+      letsencrypt_host:
+        type: str
+        description: Certificate host name; defaults to UI_HOST.
+      letsencrypt_state:
+        type: str
+        no_log: true
+        description: Saved archive (base64 of tar.gz); defaults to the latest LETSENCRYPT_STATE version or empty.
+      letsencrypt_save:
+        type: bool
+        default: true
+        description: Save a changed archive to LETSENCRYPT_STATE.
+      letsencrypt_gcloud:
+        type: str
+        default: gcloud
+        description: gcloud command on the controller.
+      letsencrypt_limit:
+        type: int
+        default: 65536
+        description: Largest archive that is kept, in bytes (the Secret Manager limit).
+  backup:
+    short_description: Pack the Let's Encrypt volume after compose up and save it when it changed.
+    description:
+      - Packs only the current host, without archive files the live links do not use.
+      - Sets the fact letsencrypt_archive (empty when over letsencrypt_limit).
+      - After saving, destroys all but the two newest enabled versions.
+    options: *letsencrypt_options

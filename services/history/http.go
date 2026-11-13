@@ -2,12 +2,17 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"time"
 
 	"github.com/google/uuid"
 )
+
+const maxSettingsBodyBytes = 1024
+
+var allowedThemes = map[string]bool{"light": true, "dark": true}
 
 type statusRecorder struct {
 	http.ResponseWriter
@@ -118,8 +123,18 @@ func SettingsHandler(w http.ResponseWriter, r *http.Request) {
 			Theme    *string   `json:"theme"`
 			Location *Location `json:"location"`
 		}
+		r.Body = http.MaxBytesReader(w, r.Body, maxSettingsBodyBytes)
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			var tooLarge *http.MaxBytesError
+			if errors.As(err, &tooLarge) {
+				http.Error(w, "Request Entity Too Large", http.StatusRequestEntityTooLarge)
+				return
+			}
 			http.Error(w, "Invalid JSON", http.StatusBadRequest)
+			return
+		}
+		if req.Theme != nil && !allowedThemes[*req.Theme] {
+			http.Error(w, "Invalid theme", http.StatusBadRequest)
 			return
 		}
 		if req.Location != nil && !req.Location.valid() {

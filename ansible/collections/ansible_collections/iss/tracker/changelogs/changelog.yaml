@@ -1,0 +1,7 @@
+---
+ancestor: null
+releases:
+  1.0.0:
+    changes:
+      release_summary: Initial release with roles config, bastion, app_host, app_deploy, postgres and letsencrypt.
+    release_date: "2026-11-05"

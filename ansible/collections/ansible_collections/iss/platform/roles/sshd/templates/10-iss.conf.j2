@@ -1,0 +1,5 @@
+Port {{ sshd_port }}
+{% for option in sshd_options + sshd_extra_options %}
+{{ option }}
+{% endfor %}
+AllowUsers {{ sshd_allow_users | join(' ') }}

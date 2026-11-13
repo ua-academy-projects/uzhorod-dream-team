@@ -1,0 +1,2 @@
+---
+ops_agent_codename: "{{ ops_agent_repo_codename if ops_agent_repo_codename | length > 0 else ansible_facts.distribution_release }}"

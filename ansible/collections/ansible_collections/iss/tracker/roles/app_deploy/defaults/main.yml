@@ -1,0 +1,9 @@
+---
+app_deploy_root: "{{ ansible_config_file | dirname | dirname }}"
+app_deploy_services_dir: "{{ app_deploy_root }}/services"
+app_deploy_dir: /opt/iss
+app_deploy_bin_dir: /usr/local/sbin
+app_deploy_image_cache: "{{ lookup('ansible.builtin.env', 'ISS_ANSIBLE_CACHE', default='/tmp/iss-ansible') }}/images"
+app_deploy_iss_run_env: {}
+app_deploy_secrets: {}
+app_deploy_compose_dir: "{{ app_deploy_root }}/deploy"

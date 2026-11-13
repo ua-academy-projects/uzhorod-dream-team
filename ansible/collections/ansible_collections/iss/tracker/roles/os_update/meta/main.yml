@@ -1,0 +1,11 @@
+---
+galaxy_info:
+  author: ISS position tracker
+  description: Upgrades Ubuntu packages and reboots when the system asks for it.
+  license: MIT
+  min_ansible_version: "2.19"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - all
+dependencies: []

@@ -1,0 +1,28 @@
+---
+- name: Update through a temporary admin key
+  block:
+    - name: Add the temporary admin key
+      ansible.builtin.import_role:
+        name: iss.platform.gce_temp_admin
+      vars:
+        gce_temp_admin_project: "{{ bastion_project }}"
+        gce_temp_admin_zone: "{{ bastion_zone }}"
+        gce_temp_admin_instance: "{{ inventory_hostname }}"
+        gce_temp_admin_public_key: "{{ bastion_public_key }}"
+        gce_temp_admin_user: "{{ bastion_admin_user }}"
+        gce_temp_admin_ttl_minutes: 30
+
+    - name: Update the OS
+      ansible.builtin.import_role:
+        name: iss.tracker.os_update
+
+  always:
+    - name: Revoke the temporary admin key
+      ansible.builtin.import_role:
+        name: iss.platform.gce_temp_admin
+        tasks_from: revoke
+      vars:
+        gce_temp_admin_project: "{{ bastion_project }}"
+        gce_temp_admin_zone: "{{ bastion_zone }}"
+        gce_temp_admin_instance: "{{ inventory_hostname }}"
+        gce_temp_admin_user: "{{ bastion_admin_user }}"
