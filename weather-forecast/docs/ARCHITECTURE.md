@@ -167,7 +167,7 @@ the project once (Organization Policies) before step 5 can succeed.
 
 `infra/terraform/` is the root module. `providers.tf` reads the config once,
 sets the project (`TF_VAR_project_id`), region and zone, and declares the GCS
-backend. `main.tf` passes the whole config to seven local modules and wires
+backend. `main.tf` passes the whole config to eight local modules and wires
 their outputs together:
 
 ```text
@@ -184,7 +184,8 @@ network ──networks──► firewall
 | `service_accounts` | one service account per entry and its project roles |
 | `secrets` | one Secret Manager secret per entry in `secrets` and `secretAccessor` for each listed reader; no secret values |
 | `vms` | VMs, static IPs of VMs with `public_ip`, additional disks, the egress route through Bastion, cloud-init user data |
-| `dns` | the Cloudflare A record `app.public.domain` pointing to the UI's public IP |
+| `dns` | the Cloudflare Tunnel `<prefix>-site`, its route from `app.public.domain` to `https://localhost:443` on `ui`, and the proxied CNAME record to the tunnel |
+| `monitoring` | the email notification channel, the log-based metric `<prefix>-nginx-responses`, uptime checks of `/` and `/api/latest`, alerts for CPU, memory, root disk, the 5xx share and uptime, and the `<prefix> overview` dashboard |
 | `cloudsql` | created only when `app.database` is `cloudsql`: the `VPC_PEERING` address range, the Service Networking connection, the Cloud SQL instance (no public IP, encrypted connections only) and the database |
 
 Each VM has the network tag of its own name. VMs without a public IP also get
@@ -237,6 +238,7 @@ Secret Manager:
 ```bash
 set -a; source ~/.config/weather-forecast/local.env; set +a
 export TF_VAR_project_id=$PROJECT_ID
+export TF_VAR_alert_email=<email for alerts>
 export CLOUDFLARE_API_TOKEN=$(gcloud secrets versions access latest --secret=tf-weather-cloudflare-api-token)
 terraform -chdir=infra/terraform plan
 terraform -chdir=infra/terraform apply
@@ -258,6 +260,15 @@ Outputs: `external_ips`, `internal_ips`, `secrets` (full secret names) and
 | `int-redis` | `history` | `db` | tcp 6379 |
 | `int-history-api` | `ui` | `history` | tcp 8002 |
 
+Visitors reach the site through Cloudflare Tunnel. `cloudflared` on `ui`
+connects out to Cloudflare, so requests pass the Cloudflare Web Application
+Firewall and need no open inbound port. Ansible reads the tunnel token from
+the Cloudflare API on each run, so it is not stored in the Terraform state.
+nginx takes the visitor address from `CF-Connecting-IP` for requests from
+`cloudflared` on `127.0.0.1`, so rate limits and logs use the real client IP.
+The Cloudflare API token needs the `Account / Cloudflare Tunnel / Edit`
+permission.
+
 Only the UI is open to the internet, and only on 80 and 443. Port 80 answers
 with a 308 redirect to HTTPS. Nodes without a public IP send outbound traffic
 through the route `0.0.0.0/0` (priority 800, tag `via-bastion`) to Bastion,
@@ -268,7 +279,7 @@ pass through Bastion.
 SSH always goes through Bastion:
 
 ```text
-operator -> jump@<bastion public IP>:22043 -> <user>@192.168.56.12-15:22043
+operator -> jump@<bastion public IP>:22043 -> <user>@192.168.56.11-14:22043
 ```
 
 - Bastion accepts only `jump`, password login is disabled, sessions are
@@ -326,9 +337,8 @@ their values in `defaults`. There are no `group_vars`.
 
 **Roles**, in the order of `playbooks/site.yml`:
 
-1. `validate_config` checks the config against
-   `roles/validate_config/files/deployment.schema.json` and stops the run on
-   an error.
+1. `validate_config` checks the config against `deployment.schema.json`
+   from the same directory as the config and stops the run on an error.
 2. `base` upgrades packages and installs the base packages.
 3. `ops_agent` installs the Google Cloud Ops Agent.
 4. `docker` installs `docker.io` and sets its MTU from the VPC network.
@@ -369,7 +379,7 @@ with `gcloud` under the operator's account. Secrets:
 | `fetcher-db-password` | Fetcher (`weather_fetcher`, `postgres` mode) | `fetcher` |
 | `rabbitmq-password` | RabbitMQ, History, Fetcher (`rabbitmq_redis` mode) | `db`, `history`, `fetcher` |
 | `redis-password` | Redis, History (`rabbitmq_redis` mode) | `db`, `history` |
-| `cloudflare-api-token` | Certbot on `ui`, Terraform | `ui` |
+| `cloudflare-api-token` | Certbot on `ui`, Terraform, Ansible for the tunnel token | `ui` |
 
 Values are added by hand (`gcloud secrets versions add <name> --data-file=-`
 or the console) and never pass through Terraform. Passwords must contain at
@@ -388,6 +398,11 @@ system logs and metrics to Cloud Logging and Cloud Monitoring. nginx on `ui`
 writes its logs to `/var/log/weather-nginx`, and the Ops Agent sends them to
 Cloud Logging with the HTTP status in `httpRequest.status`. logrotate rotates
 them daily and keeps 7 days.
+
+The `container` role waits for `/health` of `history` and `fetcher` after a
+start: `history` answers 200 only when PostgreSQL responds, `fetcher` only
+when its queue worker is connected. The other containers are checked by their
+port.
 
 ## Source layout
 
