@@ -40,6 +40,13 @@ module "dns" {
   config = local.config
 }
 
+module "monitoring" {
+  source = "./modules/monitoring"
+
+  config      = local.config
+  alert_email = var.alert_email
+}
+
 module "cloudsql" {
   source = "./modules/cloudsql"
   count  = { vm = 0, cloudsql = 1 }[local.config.app.database]
