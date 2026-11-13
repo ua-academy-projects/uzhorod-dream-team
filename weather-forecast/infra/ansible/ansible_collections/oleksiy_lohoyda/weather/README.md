@@ -23,7 +23,7 @@ ansible-playbook oleksiy_lohoyda.weather.site
 | --- | --- | --- |
 | `gcp_vms` | inventory plugin | running VMs from the config, reached through the bastion |
 | `site` | playbook | runs all roles in order |
-| `validate_config` | role | checks the config against `files/deployment.schema.json` |
+| `validate_config` | role | checks the config against `deployment.schema.json` next to the config |
 | `base` | role | package upgrades and base packages |
 | `ops_agent` | role | Google Cloud Ops Agent |
 | `docker` | role | Docker with the VPC MTU |
