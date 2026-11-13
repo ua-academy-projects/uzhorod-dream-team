@@ -72,3 +72,11 @@ module "dns" {
 
   ip = module.load_balancer.ip
 }
+
+module "monitoring" {
+  source = "./modules/monitoring"
+
+  config = local.config
+
+  https_rule = module.load_balancer.https_rule_name
+}

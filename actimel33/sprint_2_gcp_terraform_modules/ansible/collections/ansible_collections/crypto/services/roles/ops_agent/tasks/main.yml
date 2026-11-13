@@ -1,0 +1,17 @@
+---
+- name: Download the Ops Agent install script
+  ansible.builtin.get_url:
+    url: https://dl.google.com/cloudagents/add-google-cloud-ops-agent-repo.sh
+    dest: /root/add-google-cloud-ops-agent-repo.sh
+    mode: "0700"
+
+- name: Install the Ops Agent
+  ansible.builtin.command: bash /root/add-google-cloud-ops-agent-repo.sh --also-install
+  register: ops_agent_install
+  changed_when: "'No changes made.' not in ops_agent_install.stdout"
+
+- name: Enable and start the Ops Agent
+  ansible.builtin.service:
+    name: google-cloud-ops-agent
+    state: started
+    enabled: true

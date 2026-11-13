@@ -3,7 +3,7 @@
     "title": "crypto-price-service configuration",
     "description": "Read by Terraform (each module gets its own part), bootstrap/bootstrap.sh and build-and-push.sh.",
     "type": "object",
-    "required": ["project", "bootstrap", "app", "network", "firewall", "vms", "service_accounts", "secrets", "cloud_sql", "registry", "load_balancer", "dns", "ssh"],
+    "required": ["project", "bootstrap", "app", "network", "firewall", "vms", "service_accounts", "secrets", "cloud_sql", "registry", "load_balancer", "monitoring", "dns", "ssh"],
     "additionalProperties": false,
     "properties": {
         "$schema": { "type": "string" },
@@ -91,10 +91,11 @@
         },
         "vms": {
             "type": "object",
-            "required": ["service_account_prefix", "defaults", "machines"],
+            "required": ["service_account_prefix", "service_account_roles", "defaults", "machines"],
             "additionalProperties": false,
             "properties": {
                 "service_account_prefix": { "description": "Each VM gets the service account <prefix><VM name>.", "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+                "service_account_roles": { "description": "Roles on the project for every VM account, such as writing logs and metrics for the Ops Agent.", "type": "array", "uniqueItems": true, "items": { "type": "string", "pattern": "^roles/" } },
                 "defaults": {
                     "description": "Values for every VM; a machine lists only what differs.",
                     "allOf": [
@@ -181,6 +182,21 @@
                 "backend": { "description": "VM behind the load balancer; it needs a port in vms.machines.", "type": "string" },
                 "health_check_path": { "type": "string", "pattern": "^/" },
                 "domain": { "description": "Domain of the site and its Google-managed certificate.", "type": "string", "pattern": "^([a-z0-9]([a-z0-9-]*[a-z0-9])?\\.)+[a-z]{2,}$" }
+            }
+        },
+        "monitoring": {
+            "description": "Dashboard, uptime check of https://<load_balancer.domain><uptime_check_path> and alert policies.",
+            "type": "object",
+            "required": ["notification_email", "uptime_check_path", "uptime_check_content", "uptime_check_regions", "cpu_threshold", "memory_threshold_percent", "lb_5xx_ratio_threshold"],
+            "additionalProperties": false,
+            "properties": {
+                "notification_email": { "description": "Every alert is sent to this address.", "type": "string", "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$" },
+                "uptime_check_path": { "type": "string", "pattern": "^/" },
+                "uptime_check_content": { "description": "Text the response must contain.", "type": "string", "minLength": 1 },
+                "uptime_check_regions": { "description": "At least 3 locations; USA counts as 3 (Oregon, Iowa, Virginia).", "type": "array", "uniqueItems": true, "minItems": 1, "items": { "enum": ["USA", "EUROPE", "SOUTH_AMERICA", "ASIA_PACIFIC", "USA_OREGON", "USA_IOWA", "USA_VIRGINIA"] } },
+                "cpu_threshold": { "description": "Alert when the CPU of a VM stays above this share (0-1) for 5 minutes.", "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
+                "memory_threshold_percent": { "description": "Alert when the used memory of a VM stays above this percent for 5 minutes.", "type": "number", "exclusiveMinimum": 0, "maximum": 100 },
+                "lb_5xx_ratio_threshold": { "description": "Alert when this share (0-1) of the requests gets a 5xx answer within 5 minutes.", "type": "number", "exclusiveMinimum": 0, "maximum": 1 }
             }
         },
         "dns": {

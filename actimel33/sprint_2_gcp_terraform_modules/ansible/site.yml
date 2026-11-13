@@ -1,5 +1,5 @@
 ---
-- name: Find Cloud SQL in GCP
+- name: Find the VMs and Cloud SQL in GCP and Download certificate
   ansible.builtin.import_playbook: discover.yml
 
 - name: Install docker to fetcher, history, ui, broker, db
@@ -9,34 +9,94 @@
   roles:
     - crypto.services.docker
 
+- name: Install the Ops Agent to fetcher, history, ui, broker, db
+  hosts: private
+  become: true
+  roles:
+    - crypto.services.ops_agent
+
 - name: Broker VM provision
   hosts: broker
   become: true
+  vars_files:
+    - ../../terraform_resources_configuration/config.json
   roles:
-    - crypto.services.redis
+    - role: crypto.services.redis
+      vars:
+        project_id: "{{ project.id }}"
 
 - name: DB VM provision
   hosts: db
   become: true
+  vars_files:
+    - ../../terraform_resources_configuration/config.json
   roles:
-    - crypto.services.postgres
+    - role: crypto.services.postgres
+      vars:
+        project_id: "{{ project.id }}"
+        db_name: "{{ cloud_sql.database }}"
+        db_user: "{{ cloud_sql.user }}"
+        db_password_secret: "{{ cloud_sql.password_secret }}"
+        db_disk: "/dev/disk/by-id/google-{{ vms.machines.db.data_disk.device_name }}"
 
 - name: History VM provision
   hosts: history
   become: true
+  vars_files:
+    - ../../terraform_resources_configuration/config.json
   roles:
-    - crypto.services.history
+    - role: crypto.services.history
+      vars:
+        project_id: "{{ project.id }}"
+        backend: "{{ app.backend }}"
+        database: "{{ app.database }}"
+        db_host: "{{ hostvars['localhost'].db_host }}"
+        db_name: "{{ cloud_sql.database }}"
+        db_user: "{{ cloud_sql.user }}"
+        db_password_secret: "{{ cloud_sql.password_secret }}"
+        registry_host: "{{ project.region }}-docker.pkg.dev"
+        repository_id: "{{ registry.repository_id }}"
+        history_image_tag: "{{ vms.machines.history.image_tag }}"
+        hosts_broker: "{{ hostvars['broker'].internal_dns }}"
     - role: crypto.services.db_roles
-      when: backend == "postgres"
+      when: app.backend == "postgres"
+      vars:
+        project_id: "{{ project.id }}"
+        database: "{{ app.database }}"
+        db_host: "{{ hostvars['localhost'].db_host }}"
+        db_name: "{{ cloud_sql.database }}"
+        db_user: "{{ cloud_sql.user }}"
+        db_password_secret: "{{ cloud_sql.password_secret }}"
 
 - name: Fetcher VM provision
   hosts: fetcher
   become: true
+  vars_files:
+    - ../../terraform_resources_configuration/config.json
   roles:
-    - crypto.services.fetcher
+    - role: crypto.services.fetcher
+      vars:
+        project_id: "{{ project.id }}"
+        backend: "{{ app.backend }}"
+        database: "{{ app.database }}"
+        db_host: "{{ hostvars['localhost'].db_host }}"
+        db_name: "{{ cloud_sql.database }}"
+        registry_host: "{{ project.region }}-docker.pkg.dev"
+        repository_id: "{{ registry.repository_id }}"
+        fetcher_image_tag: "{{ vms.machines.fetcher.image_tag }}"
+        hosts_broker: "{{ hostvars['broker'].internal_dns }}"
 
 - name: UI VM provision
   hosts: ui
   become: true
+  vars_files:
+    - ../../terraform_resources_configuration/config.json
   roles:
-    - crypto.services.ui
+    - role: crypto.services.ui
+      vars:
+        project_id: "{{ project.id }}"
+        registry_host: "{{ project.region }}-docker.pkg.dev"
+        repository_id: "{{ registry.repository_id }}"
+        ui_image_tag: "{{ vms.machines.ui.image_tag }}"
+        ui_port: "{{ vms.machines.ui.port }}"
+        hosts_history: "{{ hostvars['history'].internal_dns }}"

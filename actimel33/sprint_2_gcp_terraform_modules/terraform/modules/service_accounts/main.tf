@@ -13,6 +13,11 @@ locals {
       for role in account.roles : "${name}/${role}" => { account = name, role = role }
     }
   ]...)
+  vm_roles = merge([
+    for vm in local.vms : {
+      for role in var.config.vms.service_account_roles : "${vm}/${role}" => { vm = vm, role = role }
+    }
+  ]...)
 }
 
 resource "google_service_account" "vm" {
@@ -35,4 +40,12 @@ resource "google_project_iam_member" "role" {
   project = var.config.project.id
   role    = each.value.role
   member  = "serviceAccount:${google_service_account.account[each.value.account].email}"
+}
+
+resource "google_project_iam_member" "vm_role" {
+  for_each = local.vm_roles
+
+  project = var.config.project.id
+  role    = each.value.role
+  member  = "serviceAccount:${google_service_account.vm[each.value.vm].email}"
 }

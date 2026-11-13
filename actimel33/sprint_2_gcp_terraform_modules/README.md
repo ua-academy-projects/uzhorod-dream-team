@@ -3,8 +3,8 @@
 ## Requirements
 
 `gcloud`, `terraform` 1.15+, `ansible-core` 2.19+, `docker`, `python3`, and `uv` for the pre-commit hook.
-The Ansible inventory reads GCP, so Ansible needs two Python packages:
-`uv tool install --force ansible-core --with google-auth --with requests`.
+Ansible finds the VMs in GCP itself, so it needs the Python packages `google-auth` and `requests`;
+[step 1](#1-tools-once-per-machine) installs them.
 
 ## Access
 
@@ -12,28 +12,39 @@ The project owner grants you the Owner role: Console → IAM & Admin → IAM →
 The project is not in an organization, so Google sends you an invitation; you get access after you accept it.
 Owner is full trust: it can read every secret and create keys for the `terraform` account.
 
-## First-time setup
+## Step by step
+
+Run the steps in order, in one terminal: later steps use the variables of step 3, the token that step 4 loads
+and the SSH agent of step 7. Every command is one line. Step 1 is needed once per machine; after
+`terraform destroy`, start again at step 4.
+
+### 1. Tools, once per machine
 
 From the repository root:
 
 ```bash
 uv tool install pre-commit && pre-commit install
+uv tool install --force ansible-core --with google-auth --with requests
 gcloud auth login
+```
+
+### 2. Bootstrap
+
+```bash
 cd actimel33/sprint_2_gcp_terraform_modules
 ./bootstrap/bootstrap.sh
 ```
 
-- `project.id` is set in `config.json`: bootstrap reuses that project and creates your own key in `~/.config/gcloud/`.
-- `project.id` is empty: bootstrap creates a new project and writes its ID to `config.json`. Commit that change.
-- In a new project, add the Cloudflare API token once. Create it in Cloudflare (My Profile → API Tokens,
-  permission Zone → DNS → Edit for the zone of the domain) or ask the project owner. Bootstrap prints the command
-  to store it; the input is hidden.
+### 3. Shell variables
 
-`terraform/backend.hcl` and `terraform/.env` are personal and git-ignored. `.env` holds no secrets:
-it points to your key and reads the token from Secret Manager each time you source it.
-After `source .env` the token is in your shell environment, so do not share the output of `env`.
+```bash
+export PROJECT=$(python3 -c 'import json; print(json.load(open("../terraform_resources_configuration/config.json"))["project"]["id"])')
+export ZONE=$(python3 -c 'import json; print(json.load(open("../terraform_resources_configuration/config.json"))["vms"]["defaults"]["zone"])')
+export DOMAIN=$(python3 -c 'import json; print(json.load(open("../terraform_resources_configuration/config.json"))["load_balancer"]["domain"])')
+echo "$PROJECT $ZONE $DOMAIN"
+```
 
-## Deploy
+### 4. Terraform
 
 ```bash
 cd terraform
@@ -41,38 +52,87 @@ source .env
 terraform init -reconfigure -backend-config=backend.hcl
 terraform plan
 terraform apply
-cd .. && ./build-and-push.sh
-./ssh-config.sh
-cd ansible
-export GCP_SERVICE_ACCOUNT_FILE=~/.config/gcloud/<project id>-ansible.json
-ansible-galaxy collection install -r requirements.yml
-ansible-playbook site.yml
+cd ..
 ```
 
-- Terraform creates the VMs empty. Ansible installs Docker and starts the services on them; it connects through
-  the SSH config from `ssh-config.sh` (see [SSH](#ssh)).
+### 5. Images
+
+```bash
+./build-and-push.sh
+```
+
+### 6. The key of the ansible account
+
+```bash
+rm -f ~/.config/gcloud/$PROJECT-ansible.json
+(umask 077 && gcloud iam service-accounts keys create ~/.config/gcloud/$PROJECT-ansible.json --iam-account=ansible@$PROJECT.iam.gserviceaccount.com --project=$PROJECT)
+```
+
+### 7. SSH
+
+```bash
+gcloud compute ssh bastion --tunnel-through-iap --project=$PROJECT --zone=$ZONE --command=true
+eval "$(ssh-agent -s)" && ssh-add ~/.ssh/google_compute_engine
+./ssh-config.sh
+ssh-keygen -R bastion; for vm in $(gcloud compute instances list --project=$PROJECT --format='value(name)'); do ssh-keygen -R "$vm.$ZONE.c.$PROJECT.internal"; done
+for vm in $(gcloud compute instances list --project=$PROJECT --format='value(name)'); do echo "$vm $(gcloud compute instances get-serial-port-output "$vm" --project=$PROJECT --zone=$ZONE 2>/dev/null | grep -A6 'BEGIN SSH HOST KEY FINGERPRINTS' | grep ED25519 | grep -oE 'SHA256:[A-Za-z0-9+/]+')"; done
+for vm in $(gcloud compute instances list --project=$PROJECT --format='value(name)'); do ssh "$vm" true; done
+```
+
+### 8. Ansible
+
+```bash
+cd ansible
+ansible-galaxy collection install -r requirements.yml
+export GCP_SERVICE_ACCOUNT_FILE=~/.config/gcloud/$PROJECT-ansible.json
+ansible-playbook site.yml
+ansible-playbook site.yml
+cd ..
+```
+
+### 9. Check the site
+
+```bash
+gcloud compute ssl-certificates list --project=$PROJECT --format='table(name,managed.status,managed.domainStatus)'
+curl -s https://$DOMAIN/api/health
+for vm in $(gcloud compute instances list --project=$PROJECT --filter='tags.items:internal-vm' --format='value(name)'); do echo "$vm $(ssh "$vm" systemctl is-active google-cloud-ops-agent)"; done
+```
+
+
+### 10. Tear down
+
+```bash
+cd terraform
+source .env
+terraform destroy
+cd ..
+```
+
+`terraform destroy` deletes the VMs, the database with its data, the registry with its images, and the `sa-vm-*` and
+`ansible` accounts with their keys. The project, the `terraform` account and the Cloudflare token stay. To bring
+everything back, start again at step 4.
+
+## How it works
+
+- Terraform creates the VMs empty. Ansible installs Docker and the Ops Agent and starts the services on them; it
+  connects through the SSH config from `ssh-config.sh` (see [SSH](#ssh)).
 - The roles are in the collection `crypto.services` (`ansible/collections/ansible_collections/crypto/services`),
   and `site.yml` calls them as `crypto.services.<role>`. Ansible finds it next to `site.yml` by itself.
-- Ansible needs no output of Terraform:
-  - `ansible/inventory/gcp_compute.yml` lists the running VMs from GCP and groups them by their network tags;
-  - `ansible/inventory/group_vars/all.yml` takes the other values from `config.json`;
-  - `discover.yml`, the first play of `site.yml`, finds the Cloud SQL endpoint and writes the CA of the instance
-    to `ansible/files/db-ca.pem` (git-ignored).
+- Ansible needs no output of Terraform and has no inventory file:
+  - every play that needs settings loads `config.json` with `vars_files`, and `site.yml` hands each role the
+    values it uses in `vars:`;
+  - `discover.yml`, the first play of `site.yml`, asks GCP for the running VMs of `project.id` and adds them to
+    the inventory with `add_host`: the VMs with the network tag `internal-vm` to the group `private`, the bastion
+    to `management`. It also finds the Cloud SQL endpoint and writes the CA of the instance to
+    `ansible/files/db-ca.pem` (git-ignored).
 
-  The inventory and `discover.yml` read GCP with the key in `GCP_SERVICE_ACCOUNT_FILE`: the key of the `ansible`
-  account, which may only read the VMs and Cloud SQL (`service_accounts` in `config.json`). Terraform creates the
-  account; after the first `terraform apply`, create your key once:
-  `(umask 077 && gcloud iam service-accounts keys create ~/.config/gcloud/<project id>-ansible.json --iam-account=ansible@<project id>.iam.gserviceaccount.com --project=<project id>)`.
-- `gcp_compute.yml` names the project itself (`projects:`), the inventory plugin cannot read `config.json`.
-  After bootstrap creates a new project, put its ID there too.
-- Run `site.yml` without `--limit`: the `localhost` play of `discover.yml` must run, or `db_host` stays unknown.
-- If your SSH key has a passphrase, load it first: `eval "$(ssh-agent -s)" && ssh-add ~/.ssh/google_compute_engine`.
-  Ansible cannot type it.
-- A second `ansible-playbook site.yml` run must show `changed=0`.
-
-Without `source .env`, Terraform runs as you instead of the `terraform` service account.
-
-Do not run Terraform with `TF_LOG=DEBUG` or `TF_LOG=TRACE`: the log then holds the requests to Google, passwords included.
+  `discover.yml` reads GCP with the key in `GCP_SERVICE_ACCOUNT_FILE`: the key of the `ansible` account
+  ([step 6](#6-the-key-of-the-ansible-account)), which may only read the VMs and Cloud SQL (`service_accounts` in
+  `config.json`).
+- Run `site.yml` without `--limit`: the `localhost` play of `discover.yml` must run, or there are no VMs to
+  configure and `db_host` stays unknown.
+- The VMs exist in the inventory only while `site.yml` runs: `ansible-inventory --graph` and ad-hoc commands such
+  as `ansible history -m ping` do not see them. Use `ssh <vm>` instead.
 
 After pulling changes that need new APIs or roles, re-run `./bootstrap/bootstrap.sh` before `terraform apply`.
 Cloud SQL is such a change: bootstrap enables its APIs and gives the `terraform` account `roles/cloudsql.admin`.
@@ -85,26 +145,57 @@ Keep the key to yourself.
 
 ## SSH
 
-The first time in a project, log in once with `gcloud`. It creates `~/.ssh/google_compute_engine` if you have none
-and your OS Login user for this project:
-
-```bash
-gcloud compute ssh bastion --tunnel-through-iap --project=<project id> --zone=<zone of bastion>
-```
-
-Then:
-
-```bash
-./ssh-config.sh
-ssh bastion
-ssh history
-```
+[Step 7](#7-ssh) sets SSH up. After it, `ssh bastion`, `ssh history` and the other VM names work from any
+terminal.
 
 - The user name comes from the OS Login profile of your `gcloud` account.
 - `~/.ssh/config` needs `Include config.d/*` at the top; the script reminds you if it is missing.
 - The bastion is reached through IAP (Identity-Aware Proxy), the other VMs through the bastion by their internal
   DNS names, so the config stays valid when VMs are recreated.
-- A recreated VM has a new host key. Remove the old one: `ssh-keygen -R <vm>.<zone>.c.<project id>.internal`.
+- A recreated VM has a new host key. `~/.ssh/known_hosts` keeps the bastion under the name `bastion` and the other
+  VMs under their internal DNS names; step 7 removes both kinds.
+
+## Logs and metrics
+
+The role `ops_agent` installs Google Cloud Ops Agent on the private VMs with Google's script
+(`add-google-cloud-ops-agent-repo.sh --also-install`). The agent sends the system logs (`/var/log/syslog`) to Cloud
+Logging and the VM metrics to Cloud Monitoring: Console → Logging → Logs Explorer, and Console → Monitoring →
+Metrics explorer, resource VM Instance.
+
+- The VM accounts may write there with `roles/logging.logWriter` and `roles/monitoring.metricWriter`
+  (`vms.service_account_roles` in `config.json`). Without these roles the agent runs, but every write is refused.
+- The bastion has no agent: its subnet has neither Cloud NAT nor Private Google Access, so it can download nothing
+  and reach no Google API.
+- When the agent is already installed, the script prints `No changes made.`, and the task reports no change.
+
+## Monitoring
+
+The `monitoring` module (`terraform/modules/monitoring`) creates, from `monitoring` in `config.json`:
+
+- the dashboard `crypto-price-service` (Console → Monitoring → Dashboards): requests to the load balancer by
+  response class, CPU of every VM, memory and disk of the private VMs, and with `app.database = cloud_sql` CPU,
+  memory, connections and disk of Cloud SQL. The CPU and memory charts draw the alert thresholds;
+- an uptime check of `https://<load_balancer.domain><uptime_check_path>` every minute from `uptime_check_regions`;
+  the answer must contain `uptime_check_content`;
+- four alert policies, each sent by email to `notification_email`:
+
+| Alert | Fires when |
+|---|---|
+| Site … is down | the health check fails in more than one region for 2 minutes |
+| High CPU on a VM | the CPU of a VM stays above `cpu_threshold` for 5 minutes |
+| Low memory on a VM | the used memory of a VM stays above `memory_threshold_percent` for 5 minutes |
+| 5xx errors on the load balancer | more than `lb_5xx_ratio_threshold` of the requests get 5xx within 5 minutes |
+
+- The `terraform` account needs `roles/monitoring.editor`: run `./bootstrap/bootstrap.sh` again before the first
+  `terraform apply` with this module.
+- The email of an alert lists what to check first. An incident closes by itself when its problem is gone, or after
+  30 minutes without data.
+- Right after the first `terraform apply` in a new project the site alert fires until Google issues the certificate
+  (15–60 minutes): the uptime check validates it.
+- The memory alert and the memory and disk charts come from the Ops Agent, so the bastion is not on them.
+- With little traffic, one failed request is enough for the 5xx alert.
+- Dashboards are free, Google does not charge for alert policies before September 2027, and the uptime check runs
+  about 130,000 times a month, under the free million.
 
 ## Database
 

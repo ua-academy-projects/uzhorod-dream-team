@@ -1,36 +1,65 @@
 ---
-- name: Find Cloud SQL in GCP
+- name: Find the VMs and Cloud SQL in GCP
   hosts: localhost
   connection: local
   gather_facts: false
+  vars_files:
+    - ../../terraform_resources_configuration/config.json
   tasks:
+    - name: Find the running VMs
+      google.cloud.gcp_compute_instance_info:
+        auth_kind: serviceaccount
+        project: "{{ project.id }}"
+        zone: "{{ item }}"
+        filters:
+          - status = RUNNING
+          - labels.managed_by = terraform
+      loop: "{{ vms.machines.values() | map(attribute='zone', default=vms.defaults.zone) | unique }}"
+      register: found_vms
+
+    - name: Add the VMs to the inventory
+      ansible.builtin.add_host:
+        name: "{{ item.name }}"
+        groups: "{{ 'private' if 'internal-vm' in item.tags['items'] else 'management' }}"
+        private_ip: "{{ item.networkInterfaces[0].networkIP }}"
+        internal_dns: "{{ item.name }}.{{ item.zone | basename }}.c.{{ project.id }}.internal"
+        ansible_python_interpreter: /usr/bin/python3
+      loop: "{{ found_vms.results | map(attribute='resources') | flatten }}"
+      loop_control:
+        label: "{{ item.name }}"
+      changed_when: false
+
     - name: Find the Private Service Connect endpoint of Cloud SQL
       google.cloud.gcp_compute_address_info:
         auth_kind: serviceaccount
-        project: "{{ project_id }}"
-        region: "{{ region }}"
+        project: "{{ project.id }}"
+        region: "{{ project.region }}"
         filters:
-          - name = {{ config.cloud_sql.endpoint }}
+          - name = {{ cloud_sql.endpoint }}
       register: db_endpoint
-      when: database == "cloud_sql"
+      when: app.database == "cloud_sql"
 
     - name: Find the Cloud SQL instance
       google.cloud.gcp_sql_instance_info:
         auth_kind: serviceaccount
-        project: "{{ project_id }}"
+        project: "{{ project.id }}"
       register: sql_instances
-      when: database == "cloud_sql"
+      when: app.database == "cloud_sql"
 
     - name: Ensure the files directory exists
       ansible.builtin.file:
         path: "{{ playbook_dir }}/files"
         state: directory
         mode: "0755"
-      when: database == "cloud_sql"
+      when: app.database == "cloud_sql"
 
     - name: Write the CA certificate of the Cloud SQL instance
       ansible.builtin.copy:
-        content: "{{ (sql_instances.resources | selectattr('name', 'match', config.cloud_sql.name ~ '-') | first).serverCaCert.cert }}"
+        content: "{{ (sql_instances.resources | selectattr('name', 'match', cloud_sql.name ~ '-') | first).serverCaCert.cert }}"
         dest: "{{ playbook_dir }}/files/db-ca.pem"
         mode: "0644"
-      when: database == "cloud_sql"
+      when: app.database == "cloud_sql"
+
+    - name: Remember the address of the database
+      ansible.builtin.set_fact:
+        db_host: "{{ db_endpoint.resources[0].address if app.database == 'cloud_sql' else hostvars['db'].internal_dns }}"

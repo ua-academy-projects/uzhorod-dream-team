@@ -28,7 +28,8 @@
             "sqladmin.googleapis.com",
             "servicenetworking.googleapis.com",
             "networkconnectivity.googleapis.com",
-            "servicedirectory.googleapis.com"
+            "servicedirectory.googleapis.com",
+            "monitoring.googleapis.com"
         ],
         "terraform_roles": [
             "roles/compute.admin",
@@ -38,7 +39,8 @@
             "roles/artifactregistry.admin",
             "roles/cloudsql.admin",
             "roles/servicedirectory.editor",
-            "roles/resourcemanager.projectIamAdmin"
+            "roles/resourcemanager.projectIamAdmin",
+            "roles/monitoring.editor"
         ]
     },
     "app": {
@@ -145,6 +147,10 @@
     },
     "vms": {
         "service_account_prefix": "sa-vm-",
+        "service_account_roles": [
+            "roles/logging.logWriter",
+            "roles/monitoring.metricWriter"
+        ],
         "defaults": {
             "type": "e2-small",
             "zone": "europe-central2-a",
@@ -254,6 +260,19 @@
         "backend": "ui",
         "health_check_path": "/",
         "domain": "crypto.ai-optimizer.net"
+    },
+    "monitoring": {
+        "notification_email": "some@email.com",
+        "uptime_check_path": "/api/health",
+        "uptime_check_content": "\"db\":\"ok\"",
+        "uptime_check_regions": [
+            "EUROPE",
+            "USA_VIRGINIA",
+            "ASIA_PACIFIC"
+        ],
+        "cpu_threshold": 0.8,
+        "memory_threshold_percent": 90,
+        "lb_5xx_ratio_threshold": 0.05
     },
     "dns": {
         "cloudflare_zone_id": "6eb0f4498c576e43d1731bfdfd82825e"

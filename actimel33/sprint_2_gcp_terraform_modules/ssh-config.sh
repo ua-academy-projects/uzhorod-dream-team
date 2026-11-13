@@ -13,7 +13,6 @@ die() {
   exit 1
 }
 
-# config_value KEY [KEY...] prints the value of config.json at that path.
 config_value() {
   python3 -I -c '
 import json, sys
