@@ -37,8 +37,7 @@ module "vms" {
 module "dns" {
   source = "./modules/dns"
 
-  config       = local.config
-  external_ips = module.vms.external_ips
+  config = local.config
 }
 
 module "cloudsql" {
