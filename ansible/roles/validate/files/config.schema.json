@@ -167,13 +167,53 @@
                       },
                       "minItems": 1,
                       "uniqueItems": true
+                    },
+                    "port_keys": {
+                      "type": "array",
+                      "items": {
+                        "enum": [
+                          "ssh",
+                          "fetcher",
+                          "history",
+                          "postgres",
+                          "rabbitmq",
+                          "redis",
+                          "http",
+                          "https",
+                          "ui",
+                          "bastion_ssh"
+                        ]
+                      },
+                      "minItems": 1,
+                      "uniqueItems": true
                     }
                   },
                   "required": [
-                    "protocol",
-                    "ports"
+                    "protocol"
                   ],
-                  "additionalProperties": true
+                  "additionalProperties": true,
+                  "oneOf": [
+                    {
+                      "required": [
+                        "ports"
+                      ],
+                      "not": {
+                        "required": [
+                          "port_keys"
+                        ]
+                      }
+                    },
+                    {
+                      "required": [
+                        "port_keys"
+                      ],
+                      "not": {
+                        "required": [
+                          "ports"
+                        ]
+                      }
+                    }
+                  ]
                 },
                 "minItems": 1,
                 "uniqueItems": true
@@ -596,79 +636,86 @@
       ],
       "additionalProperties": false
     },
-    "ssh": {
-      "type": "object",
-      "properties": {
-        "iap_enabled": {
-          "const": true
-        }
-      },
-      "required": [
-        "iap_enabled"
-      ],
-      "additionalProperties": false
-    },
     "ansible_ssh_private_key_file": {
       "type": "string",
       "minLength": 1
     },
-    "monitoring": {
+    "ports": {
       "type": "object",
-      "additionalProperties": false,
       "properties": {
-        "enabled": {
-          "type": "boolean"
+        "ssh": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535,
+          "const": 22,
+          "description": "Application VM SSH remains on port 22; changing sshd and bootstrap access requires a separate migration."
         },
-        "notification_email": {
-          "type": "string",
-          "pattern": "^[^ @]+@[^ @]+\\.[^ @]+$"
+        "fetcher": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
         },
-        "cpu_threshold": {
-          "type": "number",
-          "exclusiveMinimum": 0,
-          "exclusiveMaximum": 1
+        "history": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
         },
-        "disk_threshold": {
-          "type": "number",
-          "exclusiveMinimum": 0,
-          "exclusiveMaximum": 1
+        "postgres": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
         },
-        "memory_threshold": {
-          "type": "number",
-          "exclusiveMinimum": 0,
-          "exclusiveMaximum": 1
+        "rabbitmq": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
         },
-        "duration": {
-          "type": "string",
-          "pattern": "^[1-9][0-9]*s$"
+        "redis": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "http": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "https": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "ui": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
         }
       },
       "required": [
-        "enabled"
+        "ssh",
+        "fetcher",
+        "history",
+        "postgres",
+        "rabbitmq",
+        "redis",
+        "http",
+        "https",
+        "ui"
       ],
-      "allOf": [
-        {
-          "if": {
-            "properties": {
-              "enabled": {
-                "const": true
-              }
-            },
-            "required": [
-              "enabled"
-            ]
-          },
-          "then": {
-            "required": [
-              "notification_email",
-              "cpu_threshold",
-              "disk_threshold",
-              "memory_threshold",
-              "duration"
-            ]
-          }
+      "additionalProperties": false
+    },
+    "deployment": {
+      "type": "object",
+      "properties": {
+        "app_dir": {
+          "type": "string",
+          "pattern": "^/[^\\n\\r]+$"
         }
-      ]
+      },
+      "required": [
+        "app_dir"
+      ],
+      "additionalProperties": false
     }
   },
   "required": [
@@ -683,8 +730,9 @@
     "compute",
     "database",
     "registry",
-    "ssh",
-    "ansible_ssh_private_key_file"
+    "ansible_ssh_private_key_file",
+    "ports",
+    "deployment"
   ],
   "additionalProperties": false,
   "$defs": {

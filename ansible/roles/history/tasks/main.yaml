@@ -1,57 +1,11 @@
 ---
-- name: Validate History port
-  ansible.builtin.assert:
-    that:
-      - history_port | int > 0
-      - history_port | int < 65536
-    fail_msg: History must use a port between 1 and 65535.
-
-- name: Validate release and authenticate to Artifact Registry
+- name: Deploy the history HTTP service
   ansible.builtin.include_role:
-    name: registry_access
-
-- name: Get application code
-  ansible.builtin.include_role:
-    name: datamonitor.platform.app_source
+    name: http_service
   vars:
-    app_source_dir: "{{ history_app_dir }}"
-    app_source_repo: "{{ compute.application.repo_url }}"
-    app_source_ref: "{{ app_release_commit | default(compute.application.repo_branch) }}"
-
-- name: Fetch the History environment using the VM service account
-  ansible.builtin.include_role:
-    name: datamonitor.platform.secret_access
-  vars:
-    secret_access_project: "{{ project_id }}"
-    secret_access_secret_id: "{{ secret_manager.services.history.secret_id }}"
-    secret_access_dest: "{{ history_compose_dir }}/history/.env"
-  when: not ansible_check_mode
-
-- name: Deploy History containers
-  ansible.builtin.include_role:
-    name: datamonitor.platform.compose_app
-  vars:
-    compose_app_dir: "{{ history_compose_dir }}"
-    compose_app_template: "{{ deployment_root }}/ansible/roles/history/templates/compose.history.yaml.j2"
-    compose_app_files: [compose.history.yaml]
-    compose_app_services: [history]
-    compose_app_wait_timeout: "{{ history_wait_timeout }}"
-
-- name: Wait for the History HTTP endpoint
-  ansible.builtin.uri:
-    url: "http://{{ compute.instances.history.network_ip }}:{{ history_port }}/health"
-    use_proxy: false
-    status_code: 200
-    timeout: 5
-  register: history_health
-  until: history_health is succeeded
-  retries: 12
-  delay: 5
-  when: not ansible_check_mode
-
-- name: Remove the legacy shared environment
-  ansible.builtin.include_role:
-    name: datamonitor.platform.compose_app
-    tasks_from: cleanup.yaml
-  vars:
-    compose_app_dir: "{{ history_compose_dir }}"
+    http_service_name: history
+    http_service_app_dir: "{{ history_app_dir }}"
+    http_service_compose_dir: "{{ history_compose_dir }}"
+    http_service_port: "{{ history_port }}"
+    http_service_wait_timeout: "{{ history_wait_timeout }}"
+    http_service_template: "{{ deployment_root }}/ansible/roles/history/templates/compose.history.yaml.j2"

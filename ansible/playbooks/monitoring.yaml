@@ -5,6 +5,7 @@
   gather_facts: false
   vars_files:
     - "{{ lookup('env', 'DATAMONITOR_CONFIG') | default(playbook_dir ~ '/../../config.json', true) }}"
+    - "{{ playbook_dir }}/../../monitoring.json"
   pre_tasks:
     - name: Validate configuration
       ansible.builtin.import_role:
@@ -13,4 +14,6 @@
   roles:
     - role: datamonitor.platform.connection
     - role: datamonitor.platform.ops_agent
-      when: (monitoring | default({})).enabled | default(false) | bool
+      vars:
+        ops_agent_enabled: "{{ monitoring.enabled and monitoring.agent.enabled }}"
+        ops_agent_config: "{{ monitoring.agent.config }}"

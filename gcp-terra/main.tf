@@ -4,10 +4,9 @@ module "network" {
 }
 
 module "firewall" {
-  source        = "./modules/firewall"
-  config        = local.config
-  network_id    = module.network.network_id
-  admin_ip_cidr = var.admin_ip_cidr
+  source     = "./modules/firewall"
+  config     = local.config
+  network_id = module.network.network_id
 }
 
 module "secrets" {
@@ -20,7 +19,7 @@ module "compute" {
   config                 = local.config
   subnet_id              = module.network.subnet_id
   service_account_emails = module.secrets.service_account_emails
-  depends_on             = [module.network, module.secrets, module.firewall, module.cloud_sql]
+  depends_on             = [module.firewall]
 }
 
 module "registry" {
@@ -46,6 +45,7 @@ module "cloud_sql" {
 
 module "monitoring" {
   source                 = "./modules/monitoring"
+  monitoring             = local.monitoring
   config                 = local.config
   instance_ids           = module.compute.numeric_instance_ids
   service_account_emails = module.secrets.service_account_emails

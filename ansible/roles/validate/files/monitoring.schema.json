@@ -1,0 +1,518 @@
+{
+  "type": "object",
+  "properties": {
+    "monitoring": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "notification": {
+          "type": "object",
+          "properties": {
+            "display_name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "email": {
+              "type": "string",
+              "pattern": "^[^ @]+@[^ @]+\\.[^ @]+$"
+            },
+            "enabled": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "display_name",
+            "email",
+            "enabled"
+          ],
+          "additionalProperties": false
+        },
+        "agent": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "write_logs": {
+              "type": "boolean"
+            },
+            "config": {
+              "type": "object",
+              "required": [
+                "logging",
+                "metrics",
+                "global"
+              ]
+            }
+          },
+          "required": [
+            "enabled",
+            "write_logs",
+            "config"
+          ],
+          "additionalProperties": false,
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "write_logs": {
+                    "const": false
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "config": {
+                    "properties": {
+                      "logging": {
+                        "type": "object",
+                        "required": [
+                          "service"
+                        ],
+                        "properties": {
+                          "service": {
+                            "type": "object",
+                            "required": [
+                              "pipelines"
+                            ],
+                            "properties": {
+                              "pipelines": {
+                                "type": "object",
+                                "required": [
+                                  "default_pipeline"
+                                ],
+                                "additionalProperties": {
+                                  "type": "object",
+                                  "required": [
+                                    "receivers"
+                                  ],
+                                  "properties": {
+                                    "receivers": {
+                                      "type": "array",
+                                      "maxItems": 0
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "global": {
+                        "type": "object",
+                        "required": [
+                          "default_self_log_file_collection"
+                        ],
+                        "properties": {
+                          "default_self_log_file_collection": {
+                            "const": false
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "uptime_check": {
+          "type": "object",
+          "properties": {
+            "display_name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "timeout": {
+              "type": "string",
+              "pattern": "^([1-9]|[1-5][0-9]|60)s$"
+            },
+            "period": {
+              "enum": [
+                "60s",
+                "300s",
+                "600s"
+              ]
+            },
+            "regions": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "path": {
+              "type": "string",
+              "minLength": 1
+            },
+            "port": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65535
+            },
+            "use_ssl": {
+              "type": "boolean"
+            },
+            "validate_ssl": {
+              "type": "boolean"
+            },
+            "status_class": {
+              "type": "string",
+              "minLength": 1
+            },
+            "enabled": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "display_name",
+            "timeout",
+            "period",
+            "regions",
+            "path",
+            "port",
+            "use_ssl",
+            "validate_ssl",
+            "status_class",
+            "enabled"
+          ],
+          "additionalProperties": false
+        },
+        "metrics": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "enabled": {
+                "type": "boolean"
+              },
+              "title": {
+                "type": "string",
+                "minLength": 1
+              },
+              "scope": {
+                "enum": [
+                  "vm",
+                  "agent",
+                  "sql"
+                ]
+              },
+              "filter": {
+                "type": "string",
+                "minLength": 1
+              },
+              "threshold": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "scale": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "alert_enabled": {
+                "type": "boolean"
+              },
+              "alert_name": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "enabled",
+              "title",
+              "scope",
+              "filter",
+              "threshold",
+              "scale",
+              "alert_enabled",
+              "alert_name"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "utilization_alert": {
+          "type": "object",
+          "properties": {
+            "condition_name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "comparison": {
+              "enum": [
+                "COMPARISON_GT",
+                "COMPARISON_GE",
+                "COMPARISON_LT",
+                "COMPARISON_LE",
+                "COMPARISON_EQ",
+                "COMPARISON_NE"
+              ]
+            },
+            "duration": {
+              "type": "string",
+              "pattern": "^[0-9]+s$"
+            },
+            "alignment_period": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*s$"
+            },
+            "aligner": {
+              "type": "string",
+              "minLength": 1
+            },
+            "trigger_count": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "auto_close": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*s$"
+            },
+            "documentation": {
+              "type": "string",
+              "minLength": 1
+            },
+            "enabled": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "condition_name",
+            "comparison",
+            "duration",
+            "alignment_period",
+            "aligner",
+            "trigger_count",
+            "auto_close",
+            "documentation",
+            "enabled"
+          ],
+          "additionalProperties": false
+        },
+        "uptime_alert": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "display_name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "condition_name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "comparison": {
+              "enum": [
+                "COMPARISON_GT",
+                "COMPARISON_GE",
+                "COMPARISON_LT",
+                "COMPARISON_LE",
+                "COMPARISON_EQ",
+                "COMPARISON_NE"
+              ]
+            },
+            "threshold": {
+              "type": "number"
+            },
+            "duration": {
+              "type": "string",
+              "pattern": "^[0-9]+s$"
+            },
+            "alignment_period": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*s$"
+            },
+            "aligner": {
+              "type": "string",
+              "minLength": 1
+            },
+            "reducer": {
+              "type": "string",
+              "minLength": 1
+            },
+            "group_by_fields": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "trigger_count": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "auto_close": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*s$"
+            },
+            "documentation": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "enabled",
+            "display_name",
+            "condition_name",
+            "comparison",
+            "threshold",
+            "duration",
+            "alignment_period",
+            "aligner",
+            "reducer",
+            "group_by_fields",
+            "trigger_count",
+            "auto_close",
+            "documentation"
+          ],
+          "additionalProperties": false
+        },
+        "dashboard": {
+          "type": "object",
+          "properties": {
+            "display_name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "columns": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "alignment_period": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*s$"
+            },
+            "widgets": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "metric": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "title": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "axis_label": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "aligner": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "legend_template": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "enum": [
+                      "line",
+                      "bar",
+                      "donut",
+                      "scorecard",
+                      "pie"
+                    ]
+                  },
+                  "x": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "y": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "width": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "height": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "service": {
+                    "type": "string"
+                  },
+                  "filter": {
+                    "type": "string"
+                  },
+                  "reducer": {
+                    "type": "string"
+                  },
+                  "group_by_fields": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "unit": {
+                    "type": "string"
+                  },
+                  "upper_bound": {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  },
+                  "threshold": {
+                    "type": "number"
+                  },
+                  "threshold_direction": {
+                    "enum": [
+                      "ABOVE",
+                      "BELOW"
+                    ]
+                  },
+                  "show_threshold": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "metric",
+                  "title",
+                  "axis_label",
+                  "aligner",
+                  "type",
+                  "x",
+                  "y",
+                  "width",
+                  "height"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "enabled": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "display_name",
+            "columns",
+            "alignment_period",
+            "widgets",
+            "enabled"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "enabled",
+        "notification",
+        "agent",
+        "uptime_check",
+        "metrics",
+        "utilization_alert",
+        "uptime_alert",
+        "dashboard"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "monitoring"
+  ],
+  "additionalProperties": false
+}

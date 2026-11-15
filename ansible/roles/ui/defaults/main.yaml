@@ -1,11 +1,11 @@
 ---
-ui_app_dir: /opt/datamonitor
-ui_compose_dir: "{{ ui_app_dir }}/DataFetcher"
+ui_app_dir: "{{ deployment_app_dir }}"
+ui_compose_dir: "{{ deployment_compose_dir }}"
 ui_wait_timeout: 120
 # Host loopback port; the application listens on 8000 inside the container.
-ui_port: 8080
-ui_http_port: 80
-ui_https_port: 443
+ui_port: "{{ ports.ui }}"
+ui_http_port: "{{ ports.http }}"
+ui_https_port: "{{ ports.https }}"
 ui_bind_ip: 0.0.0.0
 ui_https_enabled: "{{ compute.instances.ui.startup.ip_https | default(false) | bool }}"
 # Empty means discover the attached public IPv4 address through GCP metadata.

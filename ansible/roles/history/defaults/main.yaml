@@ -1,5 +1,5 @@
 ---
-history_app_dir: /opt/datamonitor
-history_compose_dir: "{{ history_app_dir }}/DataFetcher"
+history_app_dir: "{{ deployment_app_dir }}"
+history_compose_dir: "{{ deployment_compose_dir }}"
 history_wait_timeout: 120
-history_port: 8000
+history_port: "{{ ports.history }}"

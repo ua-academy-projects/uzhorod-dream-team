@@ -7,6 +7,15 @@
   ansible.builtin.stat:
     path: '{{ build_release_file }}'
   register: build_manifest_stat
+- name: Validate an existing release before reusing it
+  ansible.builtin.include_role:
+    name: release_manifest
+  vars:
+    release_manifest_commit: "{{ cached_release.app_release_commit | default('') }}"
+    release_manifest_images: "{{ cached_release.app_images | default({}) }}"
+    cached_release: "{{ lookup('ansible.builtin.file', build_release_file) | from_json }}"
+  when: build_manifest_stat.stat.exists
+
 - name: Build and publish a new release when missing
   when: not build_manifest_stat.stat.exists
   block:
@@ -114,6 +123,12 @@
       loop_control:
         label: '{{ item.item }}'
       no_log: true
+    - name: Validate the completed release before saving it
+      ansible.builtin.include_role:
+        name: release_manifest
+      vars:
+        release_manifest_commit: "{{ build_manifest.app_release_commit }}"
+        release_manifest_images: "{{ build_manifest.app_images }}"
     - name: Write the nonsecret release manifest for deployment and rollback
       ansible.builtin.copy:
         content: "{{ build_manifest | to_nice_json }}\n"

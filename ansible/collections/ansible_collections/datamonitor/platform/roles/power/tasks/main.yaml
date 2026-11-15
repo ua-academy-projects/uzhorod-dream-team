@@ -36,8 +36,34 @@
     auth_kind: application
     state: present
     status: RUNNING
+    # The module reconciles mutable fields before changing power state.
+    # Preserve them from the API response rather than applying empty defaults.
+    deletion_protection: "{{ item.deletionProtection | default(false) }}"
+    machine_type: "{{ item.machineType }}"
+    labels: "{{ item.labels | default({}) }}"
+    tags:
+      tag_values: "{{ item.tags.get('items', []) }}"
+    shielded_instance_config:
+      enable_secure_boot: "{{ item.shieldedInstanceConfig.enableSecureBoot | default(false) }}"
+      enable_vtpm: "{{ item.shieldedInstanceConfig.enableVtpm | default(false) }}"
+      enable_integrity_monitoring: "{{ item.shieldedInstanceConfig.enableIntegrityMonitoring | default(false) }}"
   loop: "{{ power_instances | selectattr('status', 'equalto', 'TERMINATED') | list }}"
   loop_control:
     label: "{{ item.name }}"
+  async: 900
+  poll: 0
+  register: power_start_jobs
   changed_when: true
+  no_log: true
+
+- name: Wait for all VM start operations
+  ansible.builtin.async_status:
+    jid: "{{ item.ansible_job_id }}"
+  register: power_start_result
+  until: power_start_result.finished
+  retries: 180
+  delay: 5
+  loop: "{{ power_start_jobs.results }}"
+  loop_control:
+    label: "{{ item.item.name }}"
   no_log: true

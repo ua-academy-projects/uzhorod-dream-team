@@ -8,6 +8,9 @@ resource "google_secret_manager_secret" "datamonitor_env" {
   replication {
     auto {}
   }
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "google_service_account" "datamonitor" {
@@ -29,6 +32,9 @@ resource "google_secret_manager_secret" "service_env" {
   secret_id = each.value.secret_id
   replication {
     auto {}
+  }
+  lifecycle {
+    prevent_destroy = true
   }
 }
 

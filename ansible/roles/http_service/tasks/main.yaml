@@ -1,0 +1,58 @@
+---
+- name: Validate the HTTP service port
+  ansible.builtin.assert:
+    that:
+      - http_service_port | int > 0
+      - http_service_port | int < 65536
+
+- name: Validate release and authenticate to Artifact Registry
+  ansible.builtin.include_role:
+    name: registry_access
+
+- name: Get application code
+  ansible.builtin.include_role:
+    name: datamonitor.platform.app_source
+  vars:
+    app_source_dir: "{{ http_service_app_dir }}"
+    app_source_repo: "{{ compute.application.repo_url }}"
+    app_source_ref: "{{ app_release_commit }}"
+
+- name: Prepare the service environment
+  ansible.builtin.include_role:
+    name: datamonitor.platform.secret_access
+  vars:
+    secret_access_project: "{{ project_id }}"
+    secret_access_secret_id: "{{ secret_manager.services[http_service_name].secret_id }}"
+    secret_access_dest: "{{ http_service_compose_dir }}/{{ http_service_name }}/.env"
+    secret_access_url_endpoints: "{{ [{'variable': 'RABBITMQ_URL', 'schemes': ['amqp', 'amqps'], 'host': compute.instances.postgres.network_ip, 'port': ports.rabbitmq}] if compute.application.app_backend == 'hybrid' else [] }}"
+
+  when: not ansible_check_mode
+
+- name: Deploy the HTTP service containers
+  ansible.builtin.include_role:
+    name: datamonitor.platform.compose_app
+  vars:
+    compose_app_dir: "{{ http_service_compose_dir }}"
+    compose_app_template: "{{ http_service_template }}"
+    compose_app_files: ["compose.{{ http_service_name }}.yaml"]
+    compose_app_services: ["{{ http_service_name }}"]
+    compose_app_wait_timeout: "{{ http_service_wait_timeout }}"
+
+- name: Wait for the service HTTP endpoint
+  ansible.builtin.uri:
+    url: "http://{{ compute.instances[http_service_name].network_ip }}:{{ http_service_port }}/health"
+    use_proxy: false
+    status_code: 200
+    timeout: 5
+  register: http_service_health
+  until: http_service_health is succeeded
+  retries: 12
+  delay: 5
+  when: not ansible_check_mode
+
+- name: Remove the legacy shared environment
+  ansible.builtin.include_role:
+    name: datamonitor.platform.compose_app
+    tasks_from: cleanup.yaml
+  vars:
+    compose_app_dir: "{{ http_service_compose_dir }}"

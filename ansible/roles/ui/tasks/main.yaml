@@ -43,13 +43,14 @@
   - '{{ ui_nginx_dir }}'
   - '{{ ui_acme_webroot }}'
   - /etc/letsencrypt
-- name: Fetch the UI environment using the VM service account
+- name: Prepare the UI environment
   ansible.builtin.include_role:
     name: datamonitor.platform.secret_access
   vars:
     secret_access_project: "{{ project_id }}"
     secret_access_secret_id: "{{ secret_manager.services.ui.secret_id }}"
     secret_access_dest: '{{ ui_compose_dir }}/ui/.env'
+    secret_access_url_endpoints: "{{ [{'variable': 'REDIS_URL', 'schemes': ['redis', 'rediss'], 'host': compute.instances.postgres.network_ip, 'port': ports.redis}] if compute.application.app_backend == 'hybrid' else [] }}"
   when: not ansible_check_mode
 - name: Deploy UI and nginx
   block:

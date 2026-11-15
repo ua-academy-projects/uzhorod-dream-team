@@ -1,12 +1,22 @@
-variable "admin_ip_cidr" {
-  description = "Legacy administrator CIDR input; current IAP-only firewall does not use it."
+variable "config_file" {
+  description = "Nonsecret configuration JSON, relative to this root module or absolute."
   type        = string
-  sensitive   = true
-  default     = null
-
+  default     = "../config.json"
+  nullable    = false
   validation {
-    condition     = var.admin_ip_cidr == null ? true : can(cidrnetmask(var.admin_ip_cidr)) && endswith(var.admin_ip_cidr, "/32")
-    error_message = "Specify the administrator public IPv4 address with a /32 prefix."
+    condition     = can(jsondecode(file(startswith(var.config_file, "/") ? var.config_file : "${path.root}/${var.config_file}")))
+    error_message = "config_file must point to an existing valid JSON file."
+  }
+}
+
+variable "monitoring_file" {
+  description = "Nonsecret monitoring JSON, relative to this root module or absolute."
+  type        = string
+  default     = "../monitoring.json"
+  nullable    = false
+  validation {
+    condition     = can(jsondecode(file(startswith(var.monitoring_file, "/") ? var.monitoring_file : "${path.root}/${var.monitoring_file}")).monitoring)
+    error_message = "monitoring_file must point to valid JSON with a monitoring object."
   }
 }
 

@@ -167,6 +167,27 @@
     enabled: true
     state: started
 
+- name: Flush rotated fail2ban logs only when its server is available
+  ansible.builtin.replace:
+    path: /etc/logrotate.d/fail2ban
+    regexp: '(?m)^([ \t]*)(?:/usr/bin/)?fail2ban-client flushlogs[ \t]+1?>[ \t]*/dev/null[ \t]*$'
+    replace: '\1if /usr/bin/fail2ban-client ping >/dev/null 2>&1; then /usr/bin/fail2ban-client flushlogs >/dev/null; fi'
+  register: bastion_logrotate_config
+
+- name: Validate log rotation after updating the fail2ban hook
+  ansible.builtin.command:
+    argv: [/usr/sbin/logrotate, --debug, /etc/logrotate.conf]
+  changed_when: false
+  when: bastion_logrotate_config is changed
+
+- name: Retry log rotation after repairing the fail2ban startup race
+  ansible.builtin.systemd_service:
+    name: logrotate.service
+    state: started
+  when:
+    - bastion_logrotate_config is changed
+    - not ansible_check_mode
+
 - name: Apply validated SSH and fail2ban changes
   ansible.builtin.meta: flush_handlers
 

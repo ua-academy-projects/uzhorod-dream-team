@@ -1,18 +1,10 @@
 ---
-- name: Require the complete immutable release manifest
-  ansible.builtin.assert:
-    that:
-      - app_release_commit | default('') is match('^[0-9a-f]{40}$')
-      - app_images | default({}) is mapping
-      - (app_images | default({})).keys() | list | sort == ['fetcher', 'history', 'ui']
-    fail_msg: Build a release with playbooks/build.yaml and pass its JSON manifest using -e @/path/release.json.
-
-- name: Require images pinned to this repository by digest
-  ansible.builtin.assert:
-    that:
-      - app_images[item] is match('^' ~ ((region ~ '-docker.pkg.dev/' ~ project_id ~ '/' ~ registry.repository_id ~ '/' ~ item) | regex_escape) ~ '@sha256:[0-9a-f]{64}$')
-    fail_msg: Every application image must use its own Artifact Registry repository path and a sha256 digest.
-  loop: [fetcher, history, ui]
+- name: Validate the deployment release manifest
+  ansible.builtin.include_role:
+    name: release_manifest
+  vars:
+    release_manifest_commit: "{{ app_release_commit | default('') }}"
+    release_manifest_images: "{{ app_images | default({}) }}"
 
 - name: Authenticate the VM to Artifact Registry
   when: not ansible_check_mode

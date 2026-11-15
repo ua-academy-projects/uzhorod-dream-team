@@ -4,6 +4,7 @@ variable "config" {
     project_id = string
     zone       = string
     region     = string
+    network    = object({ subnet = object({ cidr = string }) })
     database   = object({ provider = string, name = string })
     compute = object({
       application = object({
@@ -35,10 +36,9 @@ variable "config" {
           type    = optional(string)
         }), {})
         startup = optional(object({
-          type         = string
-          service_role = optional(string)
-          ssh_port     = optional(number, 22)
-          ip_https     = optional(bool, false)
+          type     = string
+          ssh_port = optional(number, 22)
+          ip_https = optional(bool, false)
         }), { type = "none" })
       }))
     })
@@ -54,6 +54,41 @@ variable "config" {
   validation {
     condition     = contains(["cloud_sql", "container"], var.config.database.provider)
     error_message = "database.provider must be cloud_sql or container."
+  }
+  validation {
+    condition     = startswith(var.config.zone, "${var.config.region}-")
+    error_message = "The Compute zone must belong to the configured region."
+  }
+  validation {
+    condition     = length(distinct([for vm in values(var.config.compute.instances) : vm.name])) == length(var.config.compute.instances)
+    error_message = "Compute instance names must be unique."
+  }
+  validation {
+    condition     = length(distinct(compact([for vm in values(var.config.compute.instances) : vm.network_ip]))) == length(compact([for vm in values(var.config.compute.instances) : vm.network_ip]))
+    error_message = "Explicit Compute private IP addresses must be unique."
+  }
+  validation {
+    condition = alltrue([for vm in values(var.config.compute.instances) : vm.network_ip == null ? true : try(
+      cidrhost("${vm.network_ip}/${split("/", var.config.network.subnet.cidr)[1]}", 0) == cidrhost(var.config.network.subnet.cidr, 0), false
+    )])
+    error_message = "Every explicit Compute private IP must belong to network.subnet.cidr."
+  }
+  validation {
+    condition = alltrue([for vm in values(var.config.compute.instances) :
+      !vm.static_public_ip || coalesce(vm.public_ip, var.config.compute.defaults.public_ip)
+    ])
+    error_message = "A static public IP requires public_ip=true on the VM or in compute.defaults."
+  }
+  validation {
+    condition = alltrue([for vm in values(var.config.compute.instances) :
+      coalesce(vm.boot_disk.size_gb, var.config.compute.defaults.boot_disk.size_gb) >= 10 &&
+      floor(coalesce(vm.boot_disk.size_gb, var.config.compute.defaults.boot_disk.size_gb)) == coalesce(vm.boot_disk.size_gb, var.config.compute.defaults.boot_disk.size_gb)
+    ])
+    error_message = "Boot disk sizes must be integers of at least 10 GB."
+  }
+  validation {
+    condition     = alltrue([for vm in values(var.config.compute.instances) : vm.startup.ssh_port >= 1 && vm.startup.ssh_port <= 65535 && floor(vm.startup.ssh_port) == vm.startup.ssh_port])
+    error_message = "Bootstrap SSH ports must be integers between 1 and 65535."
   }
 }
 variable "subnet_id" { type = string }

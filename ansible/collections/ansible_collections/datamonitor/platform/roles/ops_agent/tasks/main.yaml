@@ -1,60 +1,17 @@
 ---
-- name: Require a supported Debian-family system
-  ansible.builtin.assert:
-    that: ansible_facts.os_family == 'Debian'
+- name: Configure the enabled Ops Agent
+  ansible.builtin.include_tasks: configure.yaml
+  when: ops_agent_enabled | bool
 
-- name: Install repository prerequisites
-  ansible.builtin.apt:
-    name: [ca-certificates, python3-apt]
-    state: present
+- name: Stop an installed Ops Agent when disabled
+  when: not (ops_agent_enabled | bool)
+  block:
+    - name: Discover installed services
+      ansible.builtin.service_facts:
 
-- name: Install Google's repository signing key
-  ansible.builtin.get_url:
-    url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
-    dest: /usr/share/keyrings/google-cloud-ops-agent.asc
-    owner: root
-    group: root
-    mode: '0644'
-
-- name: Configure the Ops Agent package repository
-  ansible.builtin.copy:
-    dest: /etc/apt/sources.list.d/google-cloud-ops-agent.list
-    content: "deb [signed-by=/usr/share/keyrings/google-cloud-ops-agent.asc] https://packages.cloud.google.com/apt google-cloud-ops-agent-{{ ansible_facts.distribution_release }}-all main\n"
-    owner: root
-    group: root
-    mode: '0644'
-  register: ops_agent_repository
-
-- name: Install the Ops Agent
-  ansible.builtin.apt:
-    name: google-cloud-ops-agent
-    state: present
-    update_cache: true
-    cache_valid_time: "{{ 0 if ops_agent_repository is changed else 3600 }}"
-
-- name: Configure metrics collection without system log ingestion
-  ansible.builtin.copy:
-    dest: /etc/google-cloud-ops-agent/config.yaml
-    owner: root
-    group: root
-    mode: '0644'
-    content: |
-      logging:
-        service:
-          pipelines:
-            default_pipeline:
-              receivers: []
-      metrics:
-        receivers:
-          hostmetrics:
-            type: hostmetrics
-            collection_interval: 60s
-      global:
-        default_self_log_file_collection: false
-  notify: Restart Ops Agent
-
-- name: Enable and start the Ops Agent
-  ansible.builtin.systemd_service:
-    name: google-cloud-ops-agent
-    state: started
-    enabled: true
+    - name: Stop and disable the Ops Agent
+      ansible.builtin.systemd_service:
+        name: google-cloud-ops-agent
+        state: stopped
+        enabled: false
+      when: "'google-cloud-ops-agent.service' in ansible_facts.services"

@@ -40,6 +40,26 @@ variable "config" {
     )
     error_message = "Managed Cloud SQL requires complete instance, backup and private service access settings."
   }
+  validation {
+    condition = !try(var.config.cloud_sql.managed, false) || try(
+      startswith(var.config.cloud_sql.zone, "${var.config.cloud_sql.region}-") &&
+      contains(["ZONAL", "REGIONAL"], var.config.cloud_sql.availability_type), false
+    )
+    error_message = "Managed Cloud SQL requires a zone in its region and ZONAL or REGIONAL availability."
+  }
+  validation {
+    condition = !try(var.config.cloud_sql.managed, false) || try(
+      !var.config.cloud_sql.backup.point_in_time_recovery_enabled || var.config.cloud_sql.backup.enabled, false
+    )
+    error_message = "Cloud SQL point-in-time recovery requires backups to be enabled."
+  }
+  validation {
+    condition = !try(var.config.cloud_sql.managed, false) || try(
+      length(var.config.cloud_sql.private_service_access.peering_ranges) > 0 &&
+      alltrue([for name in var.config.cloud_sql.private_service_access.peering_ranges : contains(keys(var.config.cloud_sql.private_service_access.ranges), name)]), false
+    )
+    error_message = "Cloud SQL peering_ranges must reference at least one declared private service access range."
+  }
 }
 variable "network_id" { type = string }
 variable "service_account_emails" { type = map(string) }

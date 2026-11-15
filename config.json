@@ -36,9 +36,9 @@
         "allowed": [
           {
             "protocol": "tcp",
-            "ports": [
-              "80",
-              "443"
+            "port_keys": [
+              "http",
+              "https"
             ]
           }
         ]
@@ -51,8 +51,8 @@
         "allowed": [
           {
             "protocol": "tcp",
-            "ports": [
-              "56789"
+            "port_keys": [
+              "bastion_ssh"
             ]
           }
         ],
@@ -71,8 +71,8 @@
         "allowed": [
           {
             "protocol": "tcp",
-            "ports": [
-              "22"
+            "port_keys": [
+              "ssh"
             ]
           }
         ],
@@ -88,8 +88,8 @@
         "allowed": [
           {
             "protocol": "tcp",
-            "ports": [
-              "8000"
+            "port_keys": [
+              "history"
             ]
           }
         ],
@@ -105,8 +105,8 @@
         "allowed": [
           {
             "protocol": "tcp",
-            "ports": [
-              "8000"
+            "port_keys": [
+              "fetcher"
             ]
           }
         ],
@@ -122,8 +122,8 @@
         "allowed": [
           {
             "protocol": "tcp",
-            "ports": [
-              "5432"
+            "port_keys": [
+              "postgres"
             ]
           }
         ],
@@ -140,8 +140,8 @@
         "allowed": [
           {
             "protocol": "tcp",
-            "ports": [
-              "5672"
+            "port_keys": [
+              "rabbitmq"
             ]
           }
         ],
@@ -158,8 +158,8 @@
         "allowed": [
           {
             "protocol": "tcp",
-            "ports": [
-              "6379"
+            "port_keys": [
+              "redis"
             ]
           }
         ],
@@ -331,15 +331,18 @@
   "registry": {
     "repository_id": "datamonitor"
   },
-  "ssh": {
-    "iap_enabled": true
+  "ports": {
+    "ssh": 22,
+    "fetcher": 8000,
+    "history": 8000,
+    "postgres": 5432,
+    "rabbitmq": 5672,
+    "redis": 6379,
+    "http": 80,
+    "https": 443,
+    "ui": 8080
   },
-  "monitoring": {
-    "enabled": true,
-    "notification_email": "d.nazaruk2006@gmail.com",
-    "cpu_threshold": 0.8,
-    "disk_threshold": 0.8,
-    "memory_threshold": 0.9,
-    "duration": "300s"
+  "deployment": {
+    "app_dir": "/opt/datamonitor"
   }
 }

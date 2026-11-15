@@ -1,0 +1,332 @@
+{
+  "monitoring": {
+    "enabled": true,
+    "notification": {
+      "display_name": "Data Monitor operator",
+      "email": "d.nazaruk2006@gmail.com",
+      "enabled": true
+    },
+    "agent": {
+      "enabled": true,
+      "write_logs": false,
+      "config": {
+        "logging": {
+          "service": {
+            "pipelines": {
+              "default_pipeline": {
+                "receivers": []
+              }
+            }
+          }
+        },
+        "metrics": {
+          "receivers": {
+            "hostmetrics": {
+              "type": "hostmetrics",
+              "collection_interval": "60s"
+            }
+          }
+        },
+        "global": {
+          "default_self_log_file_collection": false
+        }
+      }
+    },
+    "uptime_check": {
+      "display_name": "Data Monitor HTTPS",
+      "timeout": "10s",
+      "period": "60s",
+      "regions": [
+        "EUROPE",
+        "USA",
+        "ASIA_PACIFIC"
+      ],
+      "path": "/",
+      "port": 443,
+      "use_ssl": true,
+      "validate_ssl": true,
+      "status_class": "STATUS_CLASS_2XX",
+      "enabled": true
+    },
+    "metrics": {
+      "sql_cpu": {
+        "enabled": true,
+        "title": "Cloud SQL CPU",
+        "scope": "sql",
+        "filter": "metric.type = \"cloudsql.googleapis.com/database/cpu/utilization\"",
+        "threshold": 0.8,
+        "scale": 1,
+        "alert_enabled": true,
+        "alert_name": "Data Monitor: Cloud SQL CPU > 80%"
+      },
+      "sql_disk": {
+        "enabled": true,
+        "title": "Cloud SQL disk used",
+        "scope": "sql",
+        "filter": "metric.type = \"cloudsql.googleapis.com/database/disk/utilization\"",
+        "threshold": 0.8,
+        "scale": 1,
+        "alert_enabled": true,
+        "alert_name": "Data Monitor: Cloud SQL disk used > 80%"
+      },
+      "vm_cpu": {
+        "enabled": true,
+        "title": "VM CPU",
+        "scope": "vm",
+        "filter": "metric.type = \"compute.googleapis.com/instance/cpu/utilization\"",
+        "threshold": 0.8,
+        "scale": 1,
+        "alert_enabled": true,
+        "alert_name": "Data Monitor: VM CPU > 80%"
+      },
+      "vm_disk": {
+        "enabled": true,
+        "title": "VM disk used",
+        "scope": "agent",
+        "filter": "metric.type = \"agent.googleapis.com/disk/percent_used\" AND metric.labels.state = \"used\" AND metric.labels.device != starts_with(\"/dev/loop\")",
+        "threshold": 0.8,
+        "scale": 100,
+        "alert_enabled": true,
+        "alert_name": "Data Monitor: VM disk used > 80%"
+      },
+      "vm_memory": {
+        "enabled": true,
+        "title": "VM memory used",
+        "scope": "agent",
+        "filter": "metric.type = \"agent.googleapis.com/memory/percent_used\" AND metric.labels.state = \"used\"",
+        "threshold": 0.9,
+        "scale": 100,
+        "alert_enabled": true,
+        "alert_name": "Data Monitor: VM memory used > 90%"
+      }
+    },
+    "utilization_alert": {
+      "condition_name": "Sustained utilization",
+      "comparison": "COMPARISON_GT",
+      "duration": "300s",
+      "alignment_period": "60s",
+      "aligner": "ALIGN_MEAN",
+      "trigger_count": 1,
+      "auto_close": "1800s",
+      "documentation": "Inspect Data Monitor dashboard and the affected resource. CPU: check load; disk: check capacity and logs; memory: inspect processes. Do not remove database volumes.",
+      "enabled": true
+    },
+    "uptime_alert": {
+      "enabled": true,
+      "display_name": "Data Monitor: HTTPS unavailable",
+      "condition_name": "At least two failing checkers for 3 minutes",
+      "comparison": "COMPARISON_GT",
+      "threshold": 1,
+      "duration": "180s",
+      "alignment_period": "60s",
+      "aligner": "ALIGN_NEXT_OLDER",
+      "reducer": "REDUCE_COUNT_FALSE",
+      "group_by_fields": [
+        "resource.labels.host"
+      ],
+      "trigger_count": 1,
+      "auto_close": "1800s",
+      "documentation": "Check UI VM, nginx, certificate renewal, and History health. HTTPS checks validate the certificate and require a 2xx response at /."
+    },
+    "dashboard": {
+      "display_name": "Data Monitor overview",
+      "alignment_period": "60s",
+      "widgets": [
+        {
+          "metric": "vm_cpu",
+          "title": "Highest VM CPU usage",
+          "type": "scorecard",
+          "x": 0,
+          "y": 0,
+          "width": 12,
+          "height": 8,
+          "aligner": "ALIGN_MEAN",
+          "axis_label": "%",
+          "reducer": "REDUCE_MAX",
+          "unit": "10^2.%",
+          "upper_bound": 1
+        },
+        {
+          "metric": "vm_memory",
+          "title": "Highest VM RAM usage",
+          "type": "scorecard",
+          "x": 12,
+          "y": 0,
+          "width": 12,
+          "height": 8,
+          "aligner": "ALIGN_MEAN",
+          "axis_label": "%",
+          "reducer": "REDUCE_MAX",
+          "unit": "%",
+          "upper_bound": 100
+        },
+        {
+          "metric": "vm_disk",
+          "title": "Highest root disk usage",
+          "type": "scorecard",
+          "x": 24,
+          "y": 0,
+          "width": 12,
+          "height": 8,
+          "aligner": "ALIGN_MEAN",
+          "axis_label": "%",
+          "reducer": "REDUCE_MAX",
+          "unit": "%",
+          "upper_bound": 100,
+          "filter": "metric.type = \"agent.googleapis.com/disk/percent_used\" AND metric.labels.state = \"used\" AND metric.labels.device = \"/dev/sda1\""
+        },
+        {
+          "metric": "uptime",
+          "title": "HTTPS check success rate",
+          "type": "scorecard",
+          "x": 36,
+          "y": 0,
+          "width": 12,
+          "height": 8,
+          "aligner": "ALIGN_FRACTION_TRUE",
+          "axis_label": "%",
+          "reducer": "REDUCE_MEAN",
+          "unit": "10^2.%",
+          "upper_bound": 1,
+          "threshold": 0.99,
+          "threshold_direction": "BELOW"
+        },
+        {
+          "metric": "vm_cpu",
+          "title": "CPU usage by VM",
+          "type": "line",
+          "x": 0,
+          "y": 24,
+          "width": 24,
+          "height": 16,
+          "aligner": "ALIGN_MEAN",
+          "axis_label": "%",
+          "legend_template": "${vm_name}",
+          "unit": "10^2.%",
+          "upper_bound": 1
+        },
+        {
+          "metric": "vm_disk",
+          "title": "Root disk usage by VM",
+          "type": "line",
+          "x": 24,
+          "y": 24,
+          "width": 24,
+          "height": 16,
+          "aligner": "ALIGN_MEAN",
+          "axis_label": "%",
+          "legend_template": "${vm_name}",
+          "unit": "%",
+          "upper_bound": 100,
+          "filter": "metric.type = \"agent.googleapis.com/disk/percent_used\" AND metric.labels.state = \"used\" AND metric.labels.device = \"/dev/sda1\""
+        },
+        {
+          "metric": "vm_memory",
+          "title": "Fleet RAM breakdown — average over selected period",
+          "type": "donut",
+          "x": 24,
+          "y": 8,
+          "width": 24,
+          "height": 16,
+          "aligner": "ALIGN_MEAN",
+          "axis_label": "%",
+          "filter": "metric.type = \"agent.googleapis.com/memory/bytes_used\"",
+          "reducer": "REDUCE_SUM",
+          "group_by_fields": [
+            "metric.labels.state"
+          ],
+          "legend_template": "${metric.labels.state}",
+          "unit": "By"
+        },
+        {
+          "metric": "vm_disk",
+          "title": "Fleet root disk breakdown — average over selected period",
+          "type": "pie",
+          "x": 24,
+          "y": 40,
+          "width": 24,
+          "height": 16,
+          "aligner": "ALIGN_MEAN",
+          "axis_label": "%",
+          "filter": "metric.type = \"agent.googleapis.com/disk/bytes_used\" AND metric.labels.device = \"/dev/sda1\"",
+          "reducer": "REDUCE_SUM",
+          "group_by_fields": [
+            "metric.labels.state"
+          ],
+          "legend_template": "${metric.labels.state}",
+          "unit": "By"
+        },
+        {
+          "metric": "vm_memory",
+          "title": "fetcher-instance — Used RAM",
+          "type": "bar",
+          "x": 0,
+          "y": 8,
+          "width": 24,
+          "height": 16,
+          "aligner": "ALIGN_MEAN",
+          "axis_label": "Used RAM (%)",
+          "service": "fetcher",
+          "filter": "metric.type = \"agent.googleapis.com/memory/percent_used\" AND metric.labels.state = \"used\"",
+          "legend_template": "Used RAM",
+          "unit": "%",
+          "upper_bound": 100,
+          "show_threshold": false
+        },
+        {
+          "metric": "vm_memory",
+          "title": "history-instance — Used RAM",
+          "type": "bar",
+          "x": 24,
+          "y": 56,
+          "width": 24,
+          "height": 16,
+          "aligner": "ALIGN_MEAN",
+          "axis_label": "Used RAM (%)",
+          "service": "history",
+          "filter": "metric.type = \"agent.googleapis.com/memory/percent_used\" AND metric.labels.state = \"used\"",
+          "legend_template": "Used RAM",
+          "unit": "%",
+          "upper_bound": 100,
+          "show_threshold": false
+        },
+        {
+          "metric": "vm_memory",
+          "title": "postgres-instance — Used RAM",
+          "type": "bar",
+          "x": 0,
+          "y": 40,
+          "width": 24,
+          "height": 16,
+          "aligner": "ALIGN_MEAN",
+          "axis_label": "Used RAM (%)",
+          "service": "postgres",
+          "filter": "metric.type = \"agent.googleapis.com/memory/percent_used\" AND metric.labels.state = \"used\"",
+          "legend_template": "Used RAM",
+          "unit": "%",
+          "upper_bound": 100,
+          "show_threshold": false
+        },
+        {
+          "metric": "vm_memory",
+          "title": "ui-instance — Used RAM",
+          "type": "bar",
+          "x": 0,
+          "y": 56,
+          "width": 24,
+          "height": 16,
+          "aligner": "ALIGN_MEAN",
+          "axis_label": "Used RAM (%)",
+          "service": "ui",
+          "filter": "metric.type = \"agent.googleapis.com/memory/percent_used\" AND metric.labels.state = \"used\"",
+          "legend_template": "Used RAM",
+          "unit": "%",
+          "upper_bound": 100,
+          "show_threshold": false
+        }
+      ],
+      "enabled": true,
+      "columns": 48
+    }
+  }
+}

@@ -17,9 +17,9 @@ RELEASE ?= $(CURDIR)/.deploy/releases/$(shell git log -1 --format=%H -- DataFetc
 
 help:
 	@echo 'make setup      — install local Ansible dependencies once'
-	@echo 'make deploy     — start VMs, build/reuse the release, deploy all services'
-	@echo 'make deploy-ui  — start VMs, build/reuse the release, update UI only'
-	@echo 'make validate   — check config.json locally'
+	@echo 'make deploy     — build/reuse the release, start VMs, deploy all services'
+	@echo 'make deploy-ui  — build/reuse the release, start VMs, update UI only'
+	@echo 'make validate   — check config.json and monitoring.json locally'
 	@echo 'make configure  — validate config and generate the dynamic inventory source'
 	@echo 'make start      — start existing stopped VMs'
 	@echo 'make build      — build/reuse the application release'
@@ -28,7 +28,7 @@ help:
 
 setup:
 	python3 -m venv "$(VENV)"
-	"$(VENV)/bin/python" -m pip install -r ansible/requirements-controller.txt
+	"$(VENV)/bin/python" -m pip install 'ansible-core>=2.20,<2.21' 'jsonschema>=4.18,<5' 'google-auth>=2,<3' 'requests>=2.31,<3'
 	"$(VENV)/bin/ansible-galaxy" collection install -r ansible/requirements.yaml -p "$(VENV)/collections"
 
 validate:

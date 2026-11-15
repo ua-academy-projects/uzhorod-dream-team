@@ -36,7 +36,7 @@ authentication:
 
 ```bash
 make setup       # once per machine: local Python environment and Ansible collections
-make deploy      # start existing VMs, build/reuse a release, deploy all services
+make deploy      # validate/build a release, start existing VMs, deploy all services
 make deploy-ui   # update UI only, without system preparation
 ```
 
@@ -47,6 +47,68 @@ by these commands. Bootstrap instructions are in
 [gcp-terra/bootstrap/README.md](gcp-terra/bootstrap/README.md). For Ansible,
 authenticate with `gcloud auth login` and `gcloud auth application-default login`,
 then run `make setup`. SSH access also requires the configured key and trusted host keys.
+
+### GCP configuration and shared deployment roles
+
+`config.json` is the source for service addresses, host ports (`ports`) and the
+application checkout directory (`deployment.app_dir`). Bastion's SSH port stays
+in `compute.instances.bastion.startup.ssh_port`; firewall `port_keys` refers to it
+as `bastion_ssh`. Other named firewall ports refer directly to `ports` keys.
+Literal `ports` remain available for additional firewall rules. Set ports in the
+shared configuration rather than overriding individual Ansible role variables.
+Changing an SSH port also requires an explicit SSH configuration migration.
+
+The service environment in Secret Manager retains credentials and application
+settings. On GCP, Ansible replaces only the RabbitMQ/Redis URL host and port with
+configured endpoints, preserving credentials, scheme, database/vhost and query.
+The transformation happens in private memory before writing the root-owned
+`0600` env file. Each enabled hybrid service must have exactly one supported URL
+assignment. UI's History URL always comes from the shared configuration.
+Compose/Vagrant development settings remain independent.
+
+`http_service` shares the Fetcher/History deployment sequence; UI retains its
+HTTPS lifecycle and PostgreSQL retains separate render/stop/start steps.
+`release_manifest` validates both cached releases and VM deployment inputs.
+Release validation/build completes before `start.yaml` powers existing VMs;
+explicit rollback manifests may reference an older application commit.
+
+Terraform resource selection stays inside its modules. Monitoring's services,
+IAM, uptime, alerts and dashboard are separated into files within the same module,
+without changing resource addresses. Backup settings and dependency version
+ranges are unchanged by this refactor.
+
+Terraform requires CLI 1.9 or newer (below 2.0); the Google provider remains pinned
+to 6.8.0 for compatibility with the adopted Cloud SQL instance. Root files separate
+version/backend requirements (`versions.tf`), provider configuration (`providers.tf`),
+JSON loading (`locals.tf`) and module wiring (`main.tf`). To select another pair
+of configurations, pass `-var='config_file=/absolute/path/config.json'` and
+`-var='monitoring_file=/absolute/path/monitoring.json'`. Relative paths are resolved
+from `gcp-terra`, and defaults still use the repository's JSON files. These flags
+affect Terraform only; Ansible must use the corresponding configuration separately.
+
+Modules validate VM names/IPs, subnet/region placement, disk sizes, firewall rules
+and Cloud SQL peering/backup consistency before resource changes. VM resources,
+Secret Manager secrets and the image repository have `prevent_destroy`, alongside
+the existing SQL/PSA protection. A VM replacement or removing the postgres VM by
+switching backend mode therefore requires reviewing and deliberately changing
+the guard after preserving its data. This is a Terraform planning guard, not a
+backup or protection against deletion through the GCP console; removing the
+resource block also removes its guard. Resource addresses remain unchanged.
+
+Local checks: `terraform -chdir=gcp-terra fmt -check -recursive` and
+`terraform -chdir=gcp-terra validate`. Review an authenticated plan before apply;
+local validation alone does not prove that the live infrastructure has no drift.
+
+Review Cloud SQL plans while the existing instance is started (`ALWAYS`, with
+startup completed). With the pinned provider, a stopped instance can make the existing `history` database appear
+absent in a refreshed plan. Start the instance, wait for it to become runnable,
+and generate a fresh plan before considering database creation. Terraform's
+desired activation policy is `ALWAYS`; an intentional operational stop (`NEVER`)
+will therefore differ from that desired state. Stopping resources does not
+require destroying them or removing their Terraform configuration.
+The Admin API's `RUNNABLE` state also includes instances stopped by their owner;
+verify the activation policy and completed operation rather than this field alone
+([API state definitions](https://docs.cloud.google.com/sql/docs/postgres/admin-api/rest/v1beta4/instances#SqlInstanceState)).
 
 ## Quick start with Docker Compose
 
@@ -150,3 +212,64 @@ In Compose, Fetcher is published on port 8001, History on 8002, and UI on 8000. 
 Go · FastAPI · PostgreSQL 16 · PGMQ · HSTORE · RabbitMQ · Redis · Docker Compose · Vagrant · VirtualBox
 
 More: [backend modes](docs/BROKER_MODE.md), [Vagrant and mode switching](docs/VAGRANT_BROKER_MODE.md), and the [DataFetcher guide](DataFetcher/README.md).
+
+### Налаштування GCP monitoring
+
+Кореневий `monitoring.json` — спільний конфіг Terraform та Ansible для всього
+моніторингу. У `config.json` залишилися параметри самої інфраструктури.
+
+| Секція в `monitoring` | Що налаштовує |
+| --- | --- |
+| `enabled` | Створення ресурсів моніторингу та роботу агента |
+| `notification` | Увімкнення email-каналу, його назву й адресу |
+| `metrics` | Набір метрик, фільтри, scope, пороги, масштаб, назви й увімкнення алертів |
+| `utilization_alert` | Спільні умови алертів метрик: порівняння, тривалість, агрегацію, trigger, auto-close, текст інструкції |
+| `uptime_check` | Увімкнення HTTP/HTTPS перевірки, назву, шлях, порт, TLS, timeout, період, регіони й очікуваний клас статусу |
+| `uptime_alert` | Увімкнення й назву алерта доступності, кількість невдалих перевірок, тривалість, агрегацію й інструкцію |
+| `dashboard` | Увімкнення, назву, колонки, тип графіків, період агрегації, порядок widgets, підписи й HTTPS показники |
+| `agent` | Увімкнення Ops Agent, дозвіл запису логів та його повний конфіг метрик/логів |
+
+Наприклад, `metrics.vm_cpu.threshold: 0.7` задає поріг CPU 70%; при зміні порогу
+оновіть також `alert_name`, якщо в назві вказаний відсоток. `scale` перетворює поріг
+на одиниці метрики: CPU має `1`, agent disk/memory — `100`.
+`alert_enabled: false` прибирає лише відповідну policy, `enabled: false` у метриці
+прибирає також її графіки. Видалення widget з dashboard не вимикає alert.
+`widgets[].metric` посилається на ключ у `metrics` або `uptime` для HTTPS.
+`type` вибирає `line`, `bar` (стовпчики з накопиченням), `pie`, `donut` або
+`scorecard`. Поля `x`, `y`, `width`, `height` розташовують віджети в mosaic сітці
+із `dashboard.columns` колонок. `service` обмежує віджет конкретною VM.
+`filter` у widget перевизначає лише фільтр графіка, не alert policy;
+`reducer`/`group_by_fields` задають агрегацію, `unit` — одиниці показу.
+Scorecard має один результуючий ряд; `upper_bound` задає верхню межу gauge,
+`threshold` і `threshold_direction` — поріг індикації. Для стовпчикових графіків
+пам’яті `show_threshold: false`; вони показують лише `state="used"` у відсотках.
+Кругові діаграми використовують абсолютні bytes та сумують їх між VM за станом;
+вони показують середній розподіл за вибраний період. Не складайте відсотки
+зайнятості різних VM в одну кругову діаграму.
+`widgets[].legend_template` задає підпис серії; для VM використовується
+`${vm_name}`, щоб показувати лише назву VM без числового ID. Terraform формує окремий
+набір даних для кожної VM з її назвою з config.json та точним фільтром instance_id. Scopes `vm`, `agent`, `sql`
+автоматично обмежують фільтр VM проєкту, application VM або керованим Cloud SQL;
+SQL метрики автоматично пропускаються без managed SQL. `filter` містить решту
+Monitoring filter, зокрема тип метрики й фільтри labels.
+
+Поточний dashboard містить 4 числові gauge-картки, CPU/диск у часі, кругові
+діаграми RAM і основних дисків та 4 стовпчикові графіки використаної RAM. Основний диск
+обмежений `/dev/sda1`, щоб boot/loop розділи не спотворювали картину. Cloud SQL
+прибрано лише з dashboard; усі 6 alert policies та HTTPS check залишаються.
+Збір логів поки вимкнений. Для його ввімкнення задайте `agent.write_logs: true`
+(Terraform додасть Logging API та scoped `logWriter` для application accounts)
+і налаштуйте `agent.config.logging` receivers/pipelines. Наприклад, для системних
+логів задайте `agent.config.logging.service.pipelines.default_pipeline.receivers`
+як `["syslog"]`. Для Docker/app логів потрібні власні file receivers і processors.
+`agent.config` безпосередньо перетворюється в YAML Ops Agent; синтаксис receivers,
+processors та pipelines описаний в [офіційній документації Google](https://docs.cloud.google.com/monitoring/agent/ops-agent/configuration).
+Це налаштування збору логів; нові log-based alert policies тут не створюються.
+
+`make validate` локально перевіряє обидва JSON і посилання widgets.
+Перед застосуванням перегляньте Terraform plan. Зміни ресурсів, IAM та policies
+застосовуються Terraform; зміни `agent.config` — через Ansible prepare або
+`ansible/playbooks/monitoring.yaml`. Для ввімкнення логів спочатку застосуйте
+Terraform, потім конфіг агента. Вимкнення агента через JSON та Ansible зупиняє
+встановлений сервіс. Вимкнення компонентів у Terraform видаляє відповідні ресурси,
+тому такі зміни потрібно перевіряти в plan.

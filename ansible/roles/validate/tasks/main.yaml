@@ -15,6 +15,20 @@
         criteria: "{{ lookup('ansible.builtin.file', role_path ~ '/files/config.schema.json') | from_json }}"
         engine: ansible.utils.jsonschema
 
+    - name: Validate monitoring.json against its tracked schema
+      ansible.utils.validate:
+        data: "{{ lookup('ansible.builtin.file', deployment_root ~ '/monitoring.json') | from_json }}"
+        criteria: "{{ lookup('ansible.builtin.file', role_path ~ '/files/monitoring.schema.json') | from_json }}"
+        engine: ansible.utils.jsonschema
+
+    - name: Require dashboard widgets to reference configured metrics
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - monitoring_settings.dashboard.widgets | map(attribute='metric') | difference((monitoring_settings.metrics.keys() | list) + ['uptime']) | length == 0
+      vars:
+        monitoring_settings: "{{ (lookup('ansible.builtin.file', deployment_root ~ '/monitoring.json') | from_json).monitoring }}"
+
     - name: Check address, zone and firewall consistency
       ansible.builtin.assert:
         quiet: true
@@ -44,36 +58,59 @@
       loop_control:
         label: "{{ item.name }}"
 
-    - name: Require valid TCP ports in firewall rules
+    - name: Require valid effective ports in firewall rules
       ansible.builtin.assert:
         quiet: true
         that:
-          - item.1.ports | map('int') | min > 0
-          - item.1.ports | map('int') | max < 65536
+          - effective_ports | length > 0
+          - effective_ports | map('int') | min > 0
+          - effective_ports | map('int') | max < 65536
       loop: "{{ firewall.rules | subelements('allowed') }}"
       loop_control:
         label: "{{ item.0.name }}"
+      vars:
+        effective_ports: "{{ item.1.ports | default(item.1.port_keys | default([]) | map('extract', deployment_ports) | list) }}"
 
-    - name: Require firewall ports to match the selected Ansible ports
+    - name: Require essential firewall routes to use their configured service ports
       ansible.builtin.assert:
         quiet: true
         that:
-          - item.key in (firewall.rules | map(attribute='name') | list)
-          - (firewall.rules | selectattr('name', 'equalto', item.key) | first).allowed | map(attribute='ports') | flatten | sort == item.value | map('string') | sort
-        fail_msg: Update the matching firewall rule in config.json when changing a service port.
-      loop: "{{ validate_ports | dict2items }}"
+          - matching_rules | length == 1
+          - matching_rules[0].allowed | map(attribute='port_keys', default=[]) | flatten | sort == item.value | sort
+          - matching_rules[0].allowed | map(attribute='ports', default=[]) | flatten | length == 0
+        fail_msg: Keep the required firewall routes and reference the matching shared port keys.
+      loop: "{{ required_firewall_ports | dict2items }}"
       loop_control:
         label: "{{ item.key }}"
       vars:
-        validate_ports:
-          allow-iap-bastion: ["{{ compute.instances.bastion.startup.ssh_port }}"]
-          allow-bastion-ssh: [22]
-          allow-ui-web: ["{{ ui_http_port | default(80) }}", "{{ ui_https_port | default(443) }}"]
-          allow-ui-history: ["{{ history_port | default(8000) }}"]
-          allow-history-fetcher: ["{{ fetcher_port | default(8000) }}"]
-          allow-app-postgres: ["{{ postgres_port | default(5432) }}"]
-          allow-app-rabbitmq: ["{{ rabbitmq_port | default(5672) }}"]
-          allow-ui-redis: ["{{ redis_port | default(6379) }}"]
+        matching_rules: "{{ firewall.rules | selectattr('name', 'equalto', item.key) | list }}"
+        required_firewall_ports:
+          allow-iap-bastion: [bastion_ssh]
+          allow-bastion-ssh: [ssh]
+          allow-ui-web: [http, https]
+          allow-ui-history: [history]
+          allow-history-fetcher: [fetcher]
+          allow-app-postgres: [postgres]
+          allow-app-rabbitmq: [rabbitmq]
+          allow-ui-redis: [redis]
+
+    - name: Require application port overrides to agree with shared configuration
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - lookup('ansible.builtin.vars', item.key, default=item.value) | int == item.value | int
+        fail_msg: Configure service ports in config.json ports instead of overriding individual role ports.
+      loop: "{{ service_ports | dict2items }}"
+      vars:
+        service_ports:
+          fetcher_port: "{{ ports.fetcher }}"
+          history_port: "{{ ports.history }}"
+          postgres_port: "{{ ports.postgres }}"
+          rabbitmq_port: "{{ ports.rabbitmq }}"
+          redis_port: "{{ ports.redis }}"
+          ui_port: "{{ ports.ui }}"
+          ui_http_port: "{{ ports.http }}"
+          ui_https_port: "{{ ports.https }}"
 
     - name: Remember successful validation for this Ansible execution
       ansible.builtin.set_fact:

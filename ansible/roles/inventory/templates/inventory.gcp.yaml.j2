@@ -16,7 +16,7 @@ cache: false
 {% set bastion_args = '-o IdentitiesOnly=yes -o ProxyCommand=' ~ (iap | quote) %}
 {% set internal_args = '-o IdentitiesOnly=yes -o ProxyCommand=' ~ (jump | quote) %}
 compose:
-  ansible_port: {{ (compute.instances.bastion.startup.ssh_port ~ ' if name == ' ~ (compute.instances.bastion.name | to_json) ~ ' else 22') | to_json }}
+  ansible_port: {{ (compute.instances.bastion.startup.ssh_port ~ ' if name == ' ~ (compute.instances.bastion.name | to_json) ~ ' else ' ~ ports.ssh) | to_json }}
   ansible_ssh_common_args: {{ ((bastion_args | to_json) ~ ' if name == ' ~ (compute.instances.bastion.name | to_json) ~ ' else ' ~ (internal_args | to_json)) | to_json }}
   ansible_host: networkInterfaces[0].networkIP
 groups:

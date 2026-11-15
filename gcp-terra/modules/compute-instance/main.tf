@@ -68,6 +68,8 @@ resource "google_compute_instance" "instances" {
   } : {}
 
   lifecycle {
-    ignore_changes = [metadata["ssh-keys"]]
+    # Boot disks still contain application data; replacement needs explicit review.
+    prevent_destroy = true
+    ignore_changes  = [metadata["ssh-keys"]]
   }
 }

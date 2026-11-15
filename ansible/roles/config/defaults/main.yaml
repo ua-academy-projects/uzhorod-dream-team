@@ -5,3 +5,7 @@ deployment_instances: >-
   {{ compute.instances | dict2items | rejectattr('key', 'equalto', 'postgres') | items2dict
      if database.provider == 'cloud_sql' and compute.application.app_backend == 'postgres'
      else compute.instances }}
+deployment_app_dir: "{{ deployment.app_dir }}"
+deployment_compose_dir: "{{ deployment_app_dir }}/DataFetcher"
+deployment_ports: "{{ ports | combine({'bastion_ssh': compute.instances.bastion.startup.ssh_port}) }}"
+deployment_history_url: "http://{{ compute.instances.history.network_ip }}:{{ ports.history }}"

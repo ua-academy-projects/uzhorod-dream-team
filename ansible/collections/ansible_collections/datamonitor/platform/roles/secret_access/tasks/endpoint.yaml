@@ -1,0 +1,18 @@
+---
+# Preserve scheme, encoded credentials, path/vhost, query, quotes and comments.
+- name: Apply a configured endpoint to the private environment
+  no_log: true
+  vars:
+    secret_access_endpoint_pattern: '(?m)^({{ secret_access_endpoint.variable }}=["'']?(?:{{ secret_access_endpoint.schemes | join("|") }})://)([^/?#"''\s]*@)?[^/?#"''\s]+(.*)$'
+    secret_access_endpoint_replacement: '\g<1>\g<2>{{ secret_access_endpoint.host }}:{{ secret_access_endpoint.port }}\g<3>'
+  block:
+    - name: Require one supported URL before replacing its network authority
+      ansible.builtin.assert:
+        that:
+          - secret_access_endpoint.variable is match('^[A-Z][A-Z0-9_]*$')
+          - secret_access_environment | regex_findall(secret_access_endpoint_pattern) | length == 1
+        fail_msg: The environment must contain exactly one supported URL for the configured endpoint.
+
+    - name: Replace only the URL host and port in private memory
+      ansible.builtin.set_fact:
+        secret_access_environment: "{{ secret_access_environment | regex_replace(secret_access_endpoint_pattern, secret_access_endpoint_replacement) }}"
