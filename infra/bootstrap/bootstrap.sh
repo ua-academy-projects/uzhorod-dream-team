@@ -43,8 +43,8 @@ load_config() {
   done
 
   command -v jq >/dev/null || { echo "jq is missing: sudo apt install jq" >&2; exit 1; }
-  REGION=$(jq -er .location.region ../config.json)      
-  ZONE=$(jq -er .location.zone ../config.json)         
+  REGION=$(jq -er .clouds.gcp.region ../config.json)
+  ZONE=$(jq -er '.clouds.gcp.zones[0]' ../config.json)    
 
   ME=$(gcloud config get-value account 2>/dev/null)
   BUCKET="${PROJECT_ID}-tfstate"

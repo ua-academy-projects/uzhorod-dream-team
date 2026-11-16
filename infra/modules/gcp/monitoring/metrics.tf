@@ -30,7 +30,7 @@ resource "google_monitoring_uptime_check_config" "site" {
     type = "uptime_url"
     labels = {
       project_id = var.project_id
-      host       = var.config.tls.domain
+      host       = var.config.clouds.gcp.domain
     }
   }
 

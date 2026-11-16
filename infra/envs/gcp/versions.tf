@@ -10,10 +10,11 @@ terraform {
 
   #   terraform init -backend-config="bucket=$TF_STATE_BUCKET"
   backend "gcs" {
-    prefix = "citybikes/dev"
+    prefix = "citybikes/gcp"
   }
 }
 
 provider "google" {
   project = var.project_id
+  region  = jsondecode(file("${path.module}/../../config.json")).clouds.gcp.region
 }

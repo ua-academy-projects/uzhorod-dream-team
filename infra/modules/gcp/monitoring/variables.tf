@@ -1,8 +1,8 @@
 variable "config" {
-  description = "infra/config.json as a whole; this module uses prefix, tls.domain and monitoring"
+  description = "infra/config.json as a whole; this module uses prefix, clouds.gcp.domain and monitoring"
   type = object({
     prefix = string
-    tls    = object({ domain = string })
+    clouds = object({ gcp = object({ domain = string }) })
 
     monitoring = object({
       email = string

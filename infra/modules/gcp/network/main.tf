@@ -1,6 +1,6 @@
 locals {
   name        = "${var.config.prefix}-vpc"
-  region      = var.config.location.region
+  region      = var.config.clouds.gcp.region
   network     = var.config.network
   bastion_tag = "bastion"
 

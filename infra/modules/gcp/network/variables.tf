@@ -1,9 +1,9 @@
 variable "config" {
-  description = "infra/config.json as a whole; this module uses prefix, location.region, network and ssh.bastion_port"
+  description = "infra/config.json as a whole; this module uses prefix, clouds.gcp.region, network, ssh.bastion_port and database.type"
   type = object({
     database = object({ type = string })
     prefix   = string
-    location = object({ region = string })
+    clouds   = object({ gcp = object({ region = string }) })
     network = object({
       subnet_cidr    = string
       internal_ports = list(string)

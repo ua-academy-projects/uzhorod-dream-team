@@ -1,17 +1,17 @@
 locals {
-  vm = merge(var.config.vms.defaults, { for key, value in var.config.vms.instances[var.name] : key => value if value != null })
+  gcp    = var.config.clouds.gcp
+  vm     = var.vm
+  ssh    = var.config.ssh
+  name   = "${var.config.prefix}-${var.name}"
+  labels = { app = var.config.prefix, vm = var.name, managed-by = "terraform" }
 
-  location = var.config.location
-  ssh      = var.config.ssh
-  name     = "${var.config.prefix}-${var.name}"
-  labels   = { app = var.config.prefix, vm = var.name, managed-by = "terraform" }
-
+  zone        = local.gcp.zones[0]
   internal_ip = cidrhost(var.config.network.subnet_cidr, local.vm.host)
 
   bastion_user_data = templatefile("${path.module}/bastion.cloud-init.yaml.tftpl", {
     prefix          = var.config.prefix
     name            = local.name
-    zone            = local.location.zone
+    zone            = local.zone
     ssh_port        = local.ssh.bastion_port
     host_key_secret = "${var.config.prefix}-ssh-host-key"
   })
@@ -19,7 +19,7 @@ locals {
 
 resource "google_compute_address" "internal" {
   name         = "${local.name}-internal"
-  region       = local.location.region
+  region       = local.gcp.region
   subnetwork   = var.subnetwork_id
   address_type = "INTERNAL"
   address      = local.internal_ip
@@ -28,7 +28,7 @@ resource "google_compute_address" "internal" {
 resource "google_compute_address" "external" {
   count  = local.vm.bastion ? 1 : 0
   name   = "${local.name}-external"
-  region = local.location.region
+  region = local.gcp.region
 }
 
 resource "terraform_data" "bastion_user_data" {
@@ -37,15 +37,15 @@ resource "terraform_data" "bastion_user_data" {
 
 resource "google_compute_instance" "vm" {
   name         = local.name
-  zone         = local.location.zone
-  machine_type = local.vm.machine_type
+  zone         = local.zone
+  machine_type = local.gcp.sizes[local.vm.size]
   tags         = local.vm.bastion ? [var.bastion_tag] : []
   labels       = local.labels
 
   boot_disk {
     initialize_params {
-      image = local.vm.image
-      size  = local.vm.disk_size_gb
+      image = local.gcp.os[local.vm.os]
+      size  = local.vm.disk_gb
       type  = "pd-balanced"
     }
   }
@@ -82,7 +82,7 @@ resource "google_compute_instance" "vm" {
   allow_stopping_for_update = true
 
   lifecycle {
-    ignore_changes       = [metadata["ssh-keys"]] # the keys belong to Ansible
+    ignore_changes       = [metadata["ssh-keys"]]
     replace_triggered_by = [terraform_data.bastion_user_data]
   }
 }

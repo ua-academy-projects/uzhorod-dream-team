@@ -1,5 +1,5 @@
 variable "project_id" {
-  description = "The GCP project (made by infra/bootstrap)"
+  description = "The GCP project (made by infra/bootstrap; terraform.env sets it)"
   type        = string
 }
 
