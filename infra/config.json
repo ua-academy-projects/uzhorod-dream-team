@@ -28,7 +28,7 @@
     }
   },
   "database": {
-    "type": "cloudsql",
+    "type": "vm",
     "vm": "db",
     "cloudsql": {
       "version": "POSTGRES_16",
@@ -40,8 +40,8 @@
   },
   "tls": { "vm": "ui", "domain": "citybikes-tracker.pp.ua", "email": "fikusivan777@gmail.com", "staging": false },
   "app": {
-    "queue_backend": "postgres",
-    "cache_backend": "postgres",
+    "queue_backend": "rabbitmq",
+    "cache_backend": "redis",
     "citybikes_network": "pittsburgh",
     "poll_interval": 60,
     "db_name": "citybikes",

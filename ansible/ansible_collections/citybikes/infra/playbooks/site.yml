@@ -34,7 +34,7 @@
     - citybikes.infra.tls
 
 - name: The monitoring agent on every VM (disk, memory and CPU from inside, for Cloud Monitoring)
-  hosts: all
+  hosts: all:!bastion
   gather_facts: false
   become: true
   roles:

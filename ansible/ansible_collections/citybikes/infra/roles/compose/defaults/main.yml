@@ -10,7 +10,7 @@ compose_db_env:
   DB_NAME: "{{ config_json.app.db_name }}"
   DB_USER: "{{ config_json.app.db_user }}"
   DB_PASSWORD: "${DB_PASSWORD}"
-  PGSSLMODE: require 
+  PGSSLMODE: "{{ citybikes_db_sslmode }}" 
 compose_rabbitmq_env:
   RABBITMQ_HOST: "{{ compose_service_ip.rabbitmq | default('') }}"
   RABBITMQ_PORT: "5672"
