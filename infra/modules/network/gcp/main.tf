@@ -1,0 +1,72 @@
+locals {
+  name        = "${var.config.prefix}-vpc"
+  bastion_tag = "bastion"
+
+  internal_ports = distinct(concat(var.config.network.internal_ports, var.config.database.type == "vm" ? ["5432"] : []))
+}
+
+resource "google_compute_network" "vpc" {
+  name                    = local.name
+  auto_create_subnetworks = false
+}
+
+resource "google_compute_subnetwork" "private" {
+  name                     = "${local.name}-private"
+  region                   = var.region
+  network                  = google_compute_network.vpc.id
+  ip_cidr_range            = var.subnet_cidr
+  private_ip_google_access = true
+}
+
+resource "google_compute_router" "router" {
+  name    = "${local.name}-router"
+  region  = var.region
+  network = google_compute_network.vpc.id
+}
+
+resource "google_compute_router_nat" "nat" {
+  name                               = "${local.name}-nat"
+  router                             = google_compute_router.router.name
+  region                             = var.region
+  nat_ip_allocate_option             = "AUTO_ONLY"
+  source_subnetwork_ip_ranges_to_nat = "ALL_SUBNETWORKS_ALL_IP_RANGES"
+}
+
+# firewall
+resource "google_compute_firewall" "ssh_to_bastion" {
+  name          = "${local.name}-ssh-to-bastion"
+  network       = google_compute_network.vpc.id
+  source_ranges = var.ssh_allowed_cidrs
+  target_tags   = [local.bastion_tag]
+
+  allow {
+    protocol = "tcp"
+    ports    = [tostring(var.config.ssh.bastion_port)]
+  }
+}
+
+resource "google_compute_firewall" "ssh_from_bastion" {
+  name        = "${local.name}-ssh-from-bastion"
+  network     = google_compute_network.vpc.id
+  source_tags = [local.bastion_tag]
+
+  allow {
+    protocol = "tcp"
+    ports    = ["22"]
+  }
+}
+
+# VM <-> VM: only the services' ports
+resource "google_compute_firewall" "internal" {
+  name          = "${local.name}-internal"
+  network       = google_compute_network.vpc.id
+  source_ranges = [var.subnet_cidr]
+
+  allow {
+    protocol = "tcp"
+    ports    = local.internal_ports
+  }
+  allow {
+    protocol = "icmp"
+  }
+}

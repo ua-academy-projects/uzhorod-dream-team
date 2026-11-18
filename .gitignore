@@ -20,3 +20,6 @@ infra/**/terraform-key.json
 infra/**/backend.hcl
 
 ansible/.pytest_cache
+
+infra/config.json
+infra/config.schema.json
