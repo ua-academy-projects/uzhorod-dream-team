@@ -46,6 +46,14 @@ load_config() {
   REGION=$(jq -er '.clouds.gcp.location.regions[.region]' ../config.json)
   ZONE=$(jq -er '.clouds.gcp.location.zones[.zone]' ../config.json)
 
+  if [ -n "${AWS_ADMIN_PROFILE:-}" ]; then
+    command -v aws >/dev/null || { echo "the AWS CLI is missing: https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html" >&2; exit 1; }
+    PREFIX=$(jq -er .prefix ../config.json)
+    REGION_AWS=$(jq -er '.clouds.aws.location.regions[.region]' ../config.json)
+    AWS_USER="${PREFIX}-terraform"      
+    A=(--profile "$AWS_ADMIN_PROFILE")
+  fi
+
   ME=$(gcloud config get-value account 2>/dev/null)
   BUCKET="${PROJECT_ID}-tfstate"
   SA="terraform@${PROJECT_ID}.iam.gserviceaccount.com"
@@ -139,8 +147,54 @@ create_key() {
 }
 
 
+aws_check_identity() {
+  local arn
+  arn=$(aws sts get-caller-identity "${A[@]}" --query Arn --output text)
+  AWS_ACCOUNT=$(aws sts get-caller-identity "${A[@]}" --query Account --output text)
+  step "6. AWS account ${AWS_ACCOUNT} (as ${arn})"
+  case "$arn" in
+    *:root) echo "    that is root: make an admin IAM user and put its profile in AWS_ADMIN_PROFILE" >&2; exit 1 ;;
+  esac
+}
+
+
+aws_create_terraform_user() {
+  step "7. AWS IAM user ${AWS_USER} (AdministratorAccess), CLI profile ${AWS_USER}"
+  aws iam get-user --user-name "$AWS_USER" "${A[@]}" >/dev/null 2>&1 \
+    || aws iam create-user --user-name "$AWS_USER" "${A[@]}" --tags Key=app,Value="$PREFIX" Key=managed-by,Value=bootstrap >/dev/null
+  aws iam attach-user-policy --user-name "$AWS_USER" "${A[@]}" --policy-arn arn:aws:iam::aws:policy/AdministratorAccess
+
+  if aws configure get aws_access_key_id --profile "$AWS_USER" >/dev/null 2>&1; then
+    echo "    key: profile ${AWS_USER} exists, kept"
+  else
+    echo "    key: profile ${AWS_USER} in ~/.aws/credentials"
+    local key_id secret
+
+    read -r key_id secret < <(aws iam create-access-key --user-name "$AWS_USER" "${A[@]}" \
+      --query 'AccessKey.[AccessKeyId,SecretAccessKey]' --output text)
+    [ -n "${secret:-}" ] || { echo "    could not create the key (an IAM user has at most 2: aws iam list-access-keys --user-name ${AWS_USER})" >&2; exit 1; }
+    aws configure set aws_access_key_id "$key_id" --profile "$AWS_USER"
+    aws configure set aws_secret_access_key "$secret" --profile "$AWS_USER"
+  fi
+  aws configure set region "$REGION_AWS" --profile "$AWS_USER"
+
+  local account
+  account=$(retry aws sts get-caller-identity --profile "$AWS_USER" --query Account --output text)
+  [ "$account" = "$AWS_ACCOUNT" ] || { echo "    profile ${AWS_USER} is in account ${account}, not ${AWS_ACCOUNT}" >&2; exit 1; }
+}
+
+
+aws_setup() {
+  if [ -z "${AWS_ADMIN_PROFILE:-}" ]; then
+    step "6-7. AWS: skipped (AWS_ADMIN_PROFILE in bootstrap.env is empty)"; return
+  fi
+  aws_check_identity
+  aws_create_terraform_user
+}
+
+
 write_terraform_env() {
-  step "6. infra/bootstrap/terraform.env"
+  step "8. infra/bootstrap/terraform.env"
   install -m 600 /dev/null terraform.env
   cat > terraform.env <<EOF
 #   source infra/bootstrap/terraform.env
@@ -152,11 +206,18 @@ export TF_STATE_BUCKET="${BUCKET}"                     # terraform init -backend
 export TF_VAR_project_id="${PROJECT_ID}"
 export TF_VAR_my_ip="${MY_IP}"
 EOF
+  [ -n "${AWS_ADMIN_PROFILE:-}" ] || return 0
+  cat >> terraform.env <<EOF
+# AWS: Terraform acts AS IAM user ${AWS_USER} (its key: profile ${AWS_USER} in ~/.aws/credentials), and only in this account
+export AWS_PROFILE="${AWS_USER}"
+export AWS_REGION="${REGION_AWS}"
+export TF_VAR_aws_account_id="${AWS_ACCOUNT}"
+EOF
 }
 
 
 write_ansible_inventory() {
-  step "7. infra/bootstrap/inventory.gcp.yml"
+  step "9. infra/bootstrap/inventory.gcp.yml"
   cat > inventory.gcp.yml <<EOF
 plugin: google.cloud.gcp_compute
 projects: [${PROJECT_ID}]
@@ -188,6 +249,7 @@ main() {
   grant_roles
   allow_keys_in_project
   create_key
+  aws_setup
   write_terraform_env
   write_ansible_inventory
 
