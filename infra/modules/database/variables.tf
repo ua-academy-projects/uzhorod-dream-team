@@ -26,11 +26,6 @@ variable "config" {
   })
 
   validation {
-    condition     = var.config.database.type != "managed" || var.config.default_cloud == "gcp"
-    error_message = "config.json: a managed database is built only in \"gcp\" so far (default_cloud); database.type \"vm\" works anywhere."
-  }
-
-  validation {
     condition     = contains(["managed", "vm"], var.config.database.type)
     error_message = "config.json: database.type must be \"managed\" or \"vm\"."
   }
@@ -43,6 +38,11 @@ variable "config" {
   validation {
     condition     = var.config.database.type != "managed" || can(var.config.clouds[var.config.default_cloud].database.sizes[var.config.database.managed.size])
     error_message = "config.json: database.managed.size is not in clouds.${var.config.default_cloud}.database.sizes."
+  }
+
+  validation {
+    condition     = var.config.database.type != "managed" || var.config.default_cloud != "aws" || try(var.config.database.managed.disk_gb >= 20, false)
+    error_message = "config.json: database.managed.disk_gb must be at least 20 in AWS (the RDS minimum)."
   }
 }
 
