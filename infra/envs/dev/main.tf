@@ -4,18 +4,18 @@ module "network" {
   ssh_allowed_cidrs = ["${var.my_ip}/32"]
 }
 
+module "secrets" {
+  source = "../../modules/secrets"
+  config = jsondecode(file("${path.module}/../../config.json"))
+}
+
 module "vm" {
   source   = "../../modules/vm"
   config   = jsondecode(file("${path.module}/../../config.json"))
   networks = module.network.by_cloud
+  secrets  = module.secrets.by_cloud
 
   depends_on = [module.network]
-}
-
-module "secrets" {
-  source = "../../modules/secrets"
-  config = jsondecode(file("${path.module}/../../config.json"))
-  vms    = module.vm.vms
 }
 
 module "database" {

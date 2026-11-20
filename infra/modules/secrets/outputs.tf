@@ -1,5 +1,15 @@
+output "by_cloud" {
+  description = "cloud => { secret (its config.json name) => its id in that cloud }: for modules/vm, where each VM grants itself access"
+  value       = { for secrets in module.gcp : "gcp" => secrets.ids } # with ./aws: merge() of the two
+}
 
 output "readers" {
-  description = "cloud => { secret name => the VMs that may read it }"
-  value       = { for secrets in module.gcp : "gcp" => secrets.readers } 
+  description = "cloud => { secret name in the cloud => the VMs that read it }: what to fill in after apply"
+  value = {
+    for cloud, secrets in local.by_cloud : cloud => {
+      for secret in secrets : "${var.config.prefix}-${secret}" => sort([
+        for name, vm in local.readers : name if vm.cloud == cloud && contains(vm.secrets, secret)
+      ])
+    }
+  }
 }

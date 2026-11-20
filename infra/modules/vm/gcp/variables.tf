@@ -45,3 +45,8 @@ variable "firewall" {
   description = "The network tags the firewall rules match (modules/network)"
   type        = list(string)
 }
+
+variable "secret_ids" {
+  description = "The secrets this VM reads: config.json name => id in Secret Manager (modules/secrets)"
+  type        = map(string)
+}

@@ -105,6 +105,11 @@ variable "config" {
   }
 }
 
+variable "secrets" {
+  description = "cloud => { secret (its config.json name) => its id there } (modules/secrets): each VM grants itself access to its own"
+  type        = map(map(string))
+}
+
 variable "networks" {
   description = "cloud => { subnet_id, firewall = { bastion = [...], vm = [...] } } (modules/network)"
   type = map(object({

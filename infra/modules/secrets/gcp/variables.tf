@@ -5,10 +5,7 @@ variable "config" {
   })
 }
 
-variable "vms" {
-  description = "name => { identity (its service account e-mail), secrets }"
-  type = map(object({
-    identity = string
-    secrets  = list(string)
-  }))
+variable "secrets" {
+  description = "The secrets to make in GCP, by their config.json names (e.g. db-password)"
+  type        = list(string)
 }

@@ -26,6 +26,13 @@ resource "google_project_iam_member" "role" {
   member   = "serviceAccount:${google_service_account.vm.email}"
 }
 
+resource "google_secret_manager_secret_iam_member" "reader" {
+  for_each  = var.secret_ids
+  secret_id = each.value
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.vm.email}"
+}
+
 resource "google_compute_address" "internal" {
   name         = "${local.name}-internal"
   region       = var.region
@@ -40,6 +47,7 @@ resource "google_compute_address" "external" {
   region = var.region
 }
 
+# The bastion is immutable: a new cloud-init means a new bastion
 resource "terraform_data" "bastion_user_data" {
   input = var.vm.bastion ? local.bastion_user_data : null
 }
@@ -90,8 +98,10 @@ resource "google_compute_instance" "vm" {
 
   allow_stopping_for_update = true
 
+  depends_on = [google_secret_manager_secret_iam_member.reader]
+
   lifecycle {
-    ignore_changes       = [metadata["ssh-keys"]] 
+    ignore_changes       = [metadata["ssh-keys"]]
     replace_triggered_by = [terraform_data.bastion_user_data]
   }
 }

@@ -74,9 +74,9 @@ resource "google_logging_metric" "latency" {
 
   bucket_options {
     exponential_buckets {
-      scale              = 0.001 
-      growth_factor      = 1.15 
-      num_finite_buckets = 80   
+      scale              = 0.001
+      growth_factor      = 1.15
+      num_finite_buckets = 80
     }
   }
 }
@@ -108,7 +108,7 @@ resource "google_logging_metric" "free_bikes" {
   bucket_options {
     linear_buckets {
       offset             = 0
-      width              = 10  
+      width              = 10
       num_finite_buckets = 150
     }
   }

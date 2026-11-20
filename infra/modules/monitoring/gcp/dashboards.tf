@@ -38,7 +38,7 @@ locals {
 
 
 
-    alert_line = { label = "alert" }
+  alert_line = { label = "alert" }
 
   widget = {
     rps_now        = { title = "Requests/s", scorecard = { timeSeriesQuery = local.tsq.rps, sparkChartView = { sparkChartType = "SPARK_LINE" } } }

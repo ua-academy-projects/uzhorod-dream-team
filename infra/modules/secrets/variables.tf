@@ -1,15 +1,17 @@
 variable "config" {
-  description = "infra/config.json as a whole; this module uses prefix"
+  description = "infra/config.json as a whole; this module uses prefix, default_cloud, vms.instances (cloud, secrets) and database (type, vm)"
   type = object({
-    prefix = string
+    prefix        = string
+    default_cloud = string
+    vms = object({
+      instances = map(object({
+        cloud   = optional(string)
+        secrets = optional(list(string), [])
+      }))
+    })
+    database = object({
+      type = string
+      vm   = string
+    })
   })
-}
-
-variable "vms" {
-  description = "name => { cloud, identity, secrets }: where each VM is, who it is there and which secrets it reads (modules/vm)"
-  type = map(object({
-    cloud    = string
-    identity = string
-    secrets  = list(string)
-  }))
 }

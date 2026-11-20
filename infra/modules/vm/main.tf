@@ -4,10 +4,8 @@ locals {
 
   postgres_vm = var.config.database.type == "vm" ? var.config.database.vm : ""
 
-  # Every VM with its cloud
   placed = { for name, vm in var.config.vms.instances : name => merge(vm, { cloud = coalesce(vm.cloud, var.config.default_cloud) }) }
 
-  # Every VM: vms.defaults filled in, the words turned into its cloud's names ("small" -> "e2-small")
   vms = {
     for name, vm in local.placed : name => {
       cloud     = vm.cloud
@@ -19,7 +17,6 @@ locals {
       image     = local.clouds[vm.cloud].vms.os[coalesce(vm.os, local.defaults.os)]
       roles     = distinct([for permission in concat(local.defaults.permissions, vm.permissions) : local.clouds[vm.cloud].iam.permissions[permission]])
 
-      # The VM that runs PostgreSQL (database.type = vm) reads its password too
       secrets = distinct(concat(vm.secrets, name == local.postgres_vm ? ["db-password"] : []))
     }
   }
@@ -37,4 +34,5 @@ module "gcp" {
   subnet_cidr = local.clouds.gcp.network.subnet_cidr
   subnet_id   = var.networks.gcp.subnet_id
   firewall    = var.networks.gcp.firewall[each.value.bastion ? "bastion" : "vm"]
+  secret_ids  = { for secret in each.value.secrets : secret => var.secrets.gcp[secret] }
 }
