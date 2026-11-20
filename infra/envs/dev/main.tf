@@ -2,6 +2,7 @@ module "network" {
   source            = "../../modules/network"
   config            = jsondecode(file("${path.module}/../../config.json"))
   ssh_allowed_cidrs = ["${var.my_ip}/32"]
+  aws_account_id    = var.aws_account_id
 }
 
 module "secrets" {

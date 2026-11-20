@@ -5,7 +5,7 @@ variable "config" {
     default_cloud = string
     region        = string
     zone          = string
-    clouds        = any
+    clouds        = any 
     vms = object({
       instances = map(object({
         host  = number
@@ -26,6 +26,11 @@ variable "config" {
   })
 
   validation {
+    condition     = var.config.database.type != "managed" || var.config.default_cloud == "gcp"
+    error_message = "config.json: a managed database is built only in \"gcp\" so far (default_cloud); database.type \"vm\" works anywhere."
+  }
+
+  validation {
     condition     = contains(["managed", "vm"], var.config.database.type)
     error_message = "config.json: database.type must be \"managed\" or \"vm\"."
   }
@@ -42,6 +47,6 @@ variable "config" {
 }
 
 variable "networks" {
-  description = "cloud => { network_id }: the VPC is the only place the managed database can be reached from (modules/network)"
-  type        = map(object({ network_id = string }))
+  description = "cloud => { network_id, ... }: the VPC is the only place the managed database can be reached from (modules/network)"
+  type        = any
 }

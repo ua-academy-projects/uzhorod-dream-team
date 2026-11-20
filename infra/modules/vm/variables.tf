@@ -5,7 +5,7 @@ variable "config" {
     default_cloud = string
     region        = string
     zone          = string
-    clouds        = any
+    clouds        = any # each cloud's tables have their own shape (an image is a name in GCP, an owner and a name in AWS)
     ssh = object({
       user         = string
       bastion_port = number
@@ -38,6 +38,11 @@ variable "config" {
     })
   })
 
+  validation {
+    condition     = alltrue([for vm in values(var.config.vms.instances) : coalesce(vm.cloud, var.config.default_cloud) == "gcp"])
+    error_message = "config.json: VMs are built only in \"gcp\" so far (default_cloud and every VM's \"cloud\")."
+  }
+
   # The VMs together
 
   validation {
@@ -68,7 +73,6 @@ variable "config" {
     error_message = "config.json: a VM with cloud_logging needs the permission \"write_logs\" (in its permissions or in vms.defaults.permissions)."
   }
 
-  # The words of every VM must be in the tables of its cloud
 
   validation {
     condition = alltrue([
@@ -111,12 +115,6 @@ variable "secrets" {
 }
 
 variable "networks" {
-  description = "cloud => { subnet_id, firewall = { bastion = [...], vm = [...] } } (modules/network)"
-  type = map(object({
-    subnet_id = string
-    firewall = object({
-      bastion = list(string)
-      vm      = list(string)
-    })
-  }))
+  description = "cloud => { subnet_id, firewall = { bastion = [...], vm = [...] }, ... } (modules/network; each cloud has its own extras)"
+  type        = any
 }

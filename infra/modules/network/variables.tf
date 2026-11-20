@@ -5,25 +5,14 @@ variable "config" {
     default_cloud = string
     region        = string
     zone          = string
-    clouds = map(object({
-      location = object({
-        regions = map(string)
-        zones   = map(string)
-      })
-      network = object({ subnet_cidr = string })
-    }))
-    network = object({ internal_ports = list(string) })
-    ssh     = object({ bastion_port = number })
+    clouds        = any
+    network       = object({ internal_ports = list(string) })
+    ssh           = object({ bastion_port = number })
     vms = object({
       instances = map(object({ cloud = optional(string) }))
     })
     database = object({ type = string })
   })
-
-  validation {
-    condition     = var.config.default_cloud == "gcp" && alltrue([for vm in values(var.config.vms.instances) : coalesce(vm.cloud, "gcp") == "gcp"])
-    error_message = "config.json: only \"gcp\" is built so far (default_cloud and every VM's \"cloud\")."
-  }
 
   validation {
     condition = alltrue([
@@ -47,4 +36,9 @@ variable "ssh_allowed_cidrs" {
     condition     = length(var.ssh_allowed_cidrs) > 0 && !contains(var.ssh_allowed_cidrs, "0.0.0.0/0")
     error_message = "ssh_allowed_cidrs: list your own address(es), never 0.0.0.0/0."
   }
+}
+
+variable "aws_account_id" {
+  description = "The AWS account bootstrap.sh set up (TF_VAR_aws_account_id); empty = AWS not set up"
+  type        = string
 }
