@@ -1,6 +1,9 @@
 output "by_cloud" {
   description = "cloud => { secret (its config.json name) => its id in that cloud }: for modules/vm, where each VM grants itself access"
-  value       = { for secrets in module.gcp : "gcp" => secrets.ids } # with ./aws: merge() of the two
+  value = merge(
+    { for secrets in module.gcp : "gcp" => secrets.ids },
+    { for secrets in module.aws : "aws" => secrets.ids },
+  )
 }
 
 output "readers" {

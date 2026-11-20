@@ -21,3 +21,11 @@ module "gcp" {
   config  = var.config
   secrets = local.by_cloud.gcp
 }
+
+module "aws" {
+  source = "./aws"
+  count  = length(lookup(local.by_cloud, "aws", [])) > 0 ? 1 : 0
+
+  config  = var.config
+  secrets = local.by_cloud.aws
+}
