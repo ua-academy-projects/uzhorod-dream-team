@@ -36,3 +36,23 @@ module "gcp" {
   firewall    = var.networks.gcp.firewall[each.value.bastion ? "bastion" : "vm"]
   secret_ids  = { for secret in each.value.secrets : secret => var.secrets.gcp[secret] }
 }
+
+module "aws" {
+  source   = "./aws"
+  for_each = { for name, vm in local.vms : name => vm if vm.cloud == "aws" }
+
+  config                 = var.config
+  name                   = each.key
+  vm                     = each.value
+  region                 = local.clouds.aws.location.regions[var.config.region]
+  network                = local.clouds.aws.network
+  subnets                = { private = var.networks.aws.subnet_id, public = var.networks.aws.public_subnet_id }
+  private_route_table_id = var.networks.aws.private_route_table_id
+  firewall               = var.networks.aws.firewall[each.value.bastion ? "bastion" : "vm"]
+  secret_ids             = { for secret in each.value.secrets : secret => var.secrets.aws[secret] }
+}
+
+locals {
+  built      = merge(module.gcp, module.aws)
+  bastion_ip = one([for vm in local.built : vm.external_ip if vm.external_ip != null])
+}

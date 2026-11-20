@@ -1,0 +1,95 @@
+#cloud-config
+
+package_update: true
+package_upgrade: true
+packages: [iptables]
+
+ssh_deletekeys: true
+ssh_genkeytypes: []
+
+
+write_files:
+  - path: /etc/ssh/sshd_config.d/10-port.conf
+    content: |
+      Port ${ssh_port}
+
+  - path: /etc/ssh/sshd_config.d/20-jump-only.conf
+    content: |
+      # Jumps only (ssh -W, ProxyJump): no shell, no commands, no file copies.
+      HostKey /etc/ssh/ssh_host_ed25519_key
+      ForceCommand echo "${prefix} bastion: jump host only"
+      PermitTTY no
+      AllowTcpForwarding local
+      PermitOpen *:22
+      AllowAgentForwarding no
+      AllowStreamLocalForwarding no
+      X11Forwarding no
+      PermitTunnel no
+      GatewayPorts no
+      PermitUserRC no
+
+  - path: /etc/apt/apt.conf.d/52${prefix}-reboot
+    content: |
+      Unattended-Upgrade::Automatic-Reboot "true";
+      Unattended-Upgrade::Automatic-Reboot-Time "03:00";
+
+  - path: /usr/local/sbin/${prefix}-nat
+    permissions: "0755"
+    content: |
+      #!/bin/sh
+
+      set -eu
+      iface=$(ip -o route show default | awk '{print $5; exit}')
+
+      sysctl -q -w net.ipv4.ip_forward=1
+      iptables -P FORWARD DROP
+      iptables -C FORWARD -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT 2>/dev/null \
+        || iptables -A FORWARD -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+      iptables -C FORWARD -s ${private_subnet} -o "$iface" -j ACCEPT 2>/dev/null \
+        || iptables -A FORWARD -s ${private_subnet} -o "$iface" -j ACCEPT
+      iptables -t nat -C POSTROUTING -s ${private_subnet} -o "$iface" -j MASQUERADE 2>/dev/null \
+        || iptables -t nat -A POSTROUTING -s ${private_subnet} -o "$iface" -j MASQUERADE
+
+  - path: /etc/systemd/system/${prefix}-nat.service
+    content: |
+      [Unit]
+      Description=${prefix}: the bastion as the NAT of the private subnet
+      Wants=network-online.target
+      After=network-online.target
+
+      [Service]
+      Type=oneshot
+      RemainAfterExit=yes
+      ExecStart=/usr/local/sbin/${prefix}-nat
+
+      [Install]
+      WantedBy=multi-user.target
+
+  - path: /usr/local/sbin/${prefix}-bastion-setup
+    permissions: "0755"
+    content: |
+      #!/bin/sh
+
+      set -eu
+      export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin
+
+      # 1. The host key, from Secrets Manager (this VM's role may read its own secrets only).
+      snap wait system seed.loaded   # the AWS CLI comes as a snap: wait until snaps are ready
+      snap install aws-cli --classic
+      umask 077
+      aws secretsmanager get-secret-value --region ${region} --secret-id ${host_key_secret} \
+        --query SecretString --output text > /etc/ssh/ssh_host_ed25519_key
+      ssh-keygen -y -f /etc/ssh/ssh_host_ed25519_key > /etc/ssh/ssh_host_ed25519_key.pub
+      umask 022
+
+      # 2. sshd: the port and jump-only (files above), applied only if the configuration is valid.
+      install -d -m 0755 /run/sshd   # sshd -t needs it; sshd has not run yet at first boot
+      sshd -t
+      systemctl daemon-reload
+      systemctl restart ssh.socket
+
+runcmd:
+  - systemctl daemon-reload
+  - systemctl enable --now ${prefix}-nat.service
+  - /usr/local/sbin/${prefix}-bastion-setup
+  

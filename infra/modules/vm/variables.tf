@@ -5,7 +5,7 @@ variable "config" {
     default_cloud = string
     region        = string
     zone          = string
-    clouds        = any # each cloud's tables have their own shape (an image is a name in GCP, an owner and a name in AWS)
+    clouds        = any
     ssh = object({
       user         = string
       bastion_port = number
@@ -38,12 +38,6 @@ variable "config" {
     })
   })
 
-  validation {
-    condition     = alltrue([for vm in values(var.config.vms.instances) : coalesce(vm.cloud, var.config.default_cloud) == "gcp"])
-    error_message = "config.json: VMs are built only in \"gcp\" so far (default_cloud and every VM's \"cloud\")."
-  }
-
-  # The VMs together
 
   validation {
     condition     = length([for vm in values(var.config.vms.instances) : vm if vm.bastion]) == 1
@@ -72,7 +66,6 @@ variable "config" {
     ])
     error_message = "config.json: a VM with cloud_logging needs the permission \"write_logs\" (in its permissions or in vms.defaults.permissions)."
   }
-
 
   validation {
     condition = alltrue([
