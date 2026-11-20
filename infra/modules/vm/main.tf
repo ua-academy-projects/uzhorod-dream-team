@@ -4,8 +4,10 @@ locals {
 
   postgres_vm = var.config.database.type == "vm" ? var.config.database.vm : ""
 
-  placed = { for name, vm in var.config.vms.instances : name => merge(vm, { cloud = coalesce(vm.cloud, var.config.default_cloud) }) }
+  placed = { for name, vm in var.instances : name => merge(vm, { cloud = coalesce(vm.cloud, var.config.default_cloud) }) }
 
+  built = merge(module.gcp, module.aws)
+  
   vms = {
     for name, vm in local.placed : name => {
       cloud     = vm.cloud
@@ -50,9 +52,4 @@ module "aws" {
   private_route_table_id = var.networks.aws.private_route_table_id
   firewall               = var.networks.aws.firewall[each.value.bastion ? "bastion" : "vm"]
   secret_ids             = { for secret in each.value.secrets : secret => var.secrets.aws[secret] }
-}
-
-locals {
-  built      = merge(module.gcp, module.aws)
-  bastion_ip = one([for vm in local.built : vm.external_ip if vm.external_ip != null])
 }

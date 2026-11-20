@@ -1,5 +1,5 @@
 variable "config" {
-  description = "infra/config.json as a whole; this module uses prefix, default_cloud, region, zone, clouds.<cloud> (location, network, vms, iam), ssh, vms and database (type, vm)"
+  description = "infra/config.json as a whole; this module uses prefix, default_cloud, region, zone, clouds.<cloud> (location, network, vms, iam), ssh, vms (defaults; instances for the checks) and database (type, vm)"
   type = object({
     prefix        = string
     default_cloud = string
@@ -38,10 +38,11 @@ variable "config" {
     })
   })
 
+  # The VMs together
 
   validation {
-    condition     = length([for vm in values(var.config.vms.instances) : vm if vm.bastion]) == 1
-    error_message = "config.json: exactly one VM of vms.instances must have \"bastion\": true."
+    condition     = !anytrue([for vm in values(var.config.vms.instances) : vm.bastion])
+    error_message = "config.json: the bastion is built by default in every cloud now: remove it from vms.instances (its settings: vms.bastion)."
   }
 
   validation {
@@ -50,13 +51,8 @@ variable "config" {
   }
 
   validation {
-    condition     = try(!var.config.vms.instances[var.config.database.vm].bastion, false)
-    error_message = "config.json: database.vm must be one of vms.instances, and not the bastion."
-  }
-
-  validation {
-    condition     = alltrue([for vm in values(var.config.vms.instances) : !vm.bastion || contains(vm.secrets, "ssh-host-key")])
-    error_message = "config.json: the bastion needs \"ssh-host-key\" in its \"secrets\" (it reads its SSH host key from there at boot)."
+    condition     = contains(keys(var.config.vms.instances), var.config.database.vm)
+    error_message = "config.json: database.vm must be one of vms.instances."
   }
 
   validation {
@@ -66,6 +62,8 @@ variable "config" {
     ])
     error_message = "config.json: a VM with cloud_logging needs the permission \"write_logs\" (in its permissions or in vms.defaults.permissions)."
   }
+
+  # The words of every VM must be in the tables of its cloud
 
   validation {
     condition = alltrue([
@@ -100,6 +98,28 @@ variable "config" {
     ])
     error_message = "config.json: a permission of vms is not in clouds.<its cloud>.iam.permissions."
   }
+}
+
+variable "instances" {
+  description = "The VMs to build: config.json vms.instances (envs/dev), or the bastion of one cloud (modules/bastion)"
+  type = map(object({
+    host          = number
+    cloud         = optional(string)
+    bastion       = optional(bool, false)
+    size          = optional(string)
+    disk_type     = optional(string)
+    disk_gb       = optional(number)
+    os            = optional(string)
+    cloud_logging = optional(bool)
+    permissions   = optional(list(string), [])
+    secrets       = optional(list(string), [])
+  }))
+}
+
+variable "bastions" {
+  description = "cloud => { external_ip, ... }: the bastion each VM is reached through (modules/bastion; {} when building the bastions themselves)"
+  type        = any
+  default     = {}
 }
 
 variable "secrets" {

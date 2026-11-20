@@ -1,16 +1,24 @@
 locals {
   postgres_vm = var.config.database.type == "vm" ? var.config.database.vm : ""
 
-  readers = {
-    for name, vm in var.config.vms.instances : name => {
-      cloud   = coalesce(vm.cloud, var.config.default_cloud)
-      secrets = distinct(concat(vm.secrets, name == local.postgres_vm ? ["db-password"] : []))
-    }
-  }
+
+  bastion_secrets = ["ssh-host-key"]
+  clouds          = distinct(concat([var.config.default_cloud], [for vm in values(var.config.vms.instances) : coalesce(vm.cloud, var.config.default_cloud)]))
+
+  readers = concat(
+    [
+      for name, vm in var.config.vms.instances : {
+        name    = name
+        cloud   = coalesce(vm.cloud, var.config.default_cloud)
+        secrets = distinct(concat(vm.secrets, name == local.postgres_vm ? ["db-password"] : []))
+      }
+    ],
+    [for cloud in local.clouds : { name = "bastion", cloud = cloud, secrets = local.bastion_secrets }],
+  )
 
   by_cloud = {
-    for cloud in distinct([for vm in values(local.readers) : vm.cloud]) :
-    cloud => sort(distinct(flatten([for vm in values(local.readers) : vm.secrets if vm.cloud == cloud])))
+    for cloud in local.clouds :
+    cloud => sort(distinct(flatten([for reader in local.readers : reader.secrets if reader.cloud == cloud])))
   }
 }
 

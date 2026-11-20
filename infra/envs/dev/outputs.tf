@@ -1,6 +1,6 @@
-output "bastion_ip" {
-  description = "The only public address"
-  value       = module.vm.bastion_ip
+output "bastion_ips" {
+  description = "cloud => its bastion's public address: the only public addresses"
+  value       = module.bastion.public_ips
 }
 
 output "ssh" {

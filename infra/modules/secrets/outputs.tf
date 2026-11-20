@@ -11,7 +11,7 @@ output "readers" {
   value = {
     for cloud, secrets in local.by_cloud : cloud => {
       for secret in secrets : "${var.config.prefix}-${secret}" => sort([
-        for name, vm in local.readers : name if vm.cloud == cloud && contains(vm.secrets, secret)
+        for reader in local.readers : reader.name if reader.cloud == cloud && contains(reader.secrets, secret)
       ])
     }
   }
