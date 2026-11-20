@@ -124,9 +124,7 @@ def cloudflared_containers
       context: "services/cloudflared",
       run_args: READ_ONLY,
       env: {
-        "TUNNEL_TOKEN" => CLOUDFLARE_TUNNEL_TOKEN,
-        # auto = QUIC (UDP 7844) with fallback; set http2 (TCP 443) if your network blocks UDP
-        "TUNNEL_TRANSPORT_PROTOCOL" => get_env("CLOUDFLARE_TUNNEL_PROTOCOL", "auto").to_s,
+        "TUNNEL_TOKEN" => CLOUDFLARE_TUNNEL_TOKEN
       },
     },
   ]
