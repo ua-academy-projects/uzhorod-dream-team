@@ -1,5 +1,5 @@
 variable "config" {
-  description = "infra/config.json as a whole; this module uses prefix, default_cloud, region, zone, clouds.<cloud> (location, network, vms, iam), ssh, vms (defaults; instances for the checks) and database (type, vm)"
+  description = "infra/config.json as a whole; this module uses prefix, default_cloud, region, zone, clouds.<cloud> (location, network, vms, iam), ssh, vms (defaults, bastion, instances) and database (type, vm)"
   type = object({
     prefix        = string
     default_cloud = string
@@ -19,10 +19,16 @@ variable "config" {
         cloud_logging = bool
         permissions   = list(string)
       })
+      bastion = object({
+        host      = number
+        size      = optional(string)
+        disk_type = optional(string)
+        disk_gb   = optional(number)
+        os        = optional(string)
+      })
       instances = map(object({
         host          = number
         cloud         = optional(string)
-        bastion       = optional(bool, false)
         size          = optional(string)
         disk_type     = optional(string)
         disk_gb       = optional(number)
@@ -41,8 +47,13 @@ variable "config" {
   # The VMs together
 
   validation {
-    condition     = !anytrue([for vm in values(var.config.vms.instances) : vm.bastion])
-    error_message = "config.json: the bastion is built by default in every cloud now: remove it from vms.instances (its settings: vms.bastion)."
+    condition     = !contains(keys(var.config.vms.instances), "bastion")
+    error_message = "config.json: the bastion is built by default in every cloud: remove it from vms.instances (its settings: vms.bastion)."
+  }
+
+  validation {
+    condition     = !contains([for vm in values(var.config.vms.instances) : vm.host], var.config.vms.bastion.host)
+    error_message = "config.json: vms.bastion.host is the host of a VM of vms.instances: give the bastion its own."
   }
 
   validation {
@@ -75,6 +86,14 @@ variable "config" {
 
   validation {
     condition = alltrue([
+      for cloud in distinct(concat([var.config.default_cloud], [for vm in values(var.config.vms.instances) : coalesce(vm.cloud, var.config.default_cloud)])) :
+      can(var.config.clouds[cloud].vms.sizes[coalesce(var.config.vms.bastion.size, var.config.vms.defaults.size)])
+    ])
+    error_message = "config.json: vms.bastion.size is not in clouds.<cloud>.vms.sizes of a cloud in use (every cloud in use gets a bastion)."
+  }
+
+  validation {
+    condition = alltrue([
       for vm in values(var.config.vms.instances) :
       can(var.config.clouds[coalesce(vm.cloud, var.config.default_cloud)].vms.disk_types[coalesce(vm.disk_type, var.config.vms.defaults.disk_type)])
     ])
@@ -100,34 +119,12 @@ variable "config" {
   }
 }
 
-variable "instances" {
-  description = "The VMs to build: config.json vms.instances (envs/dev), or the bastion of one cloud (modules/bastion)"
-  type = map(object({
-    host          = number
-    cloud         = optional(string)
-    bastion       = optional(bool, false)
-    size          = optional(string)
-    disk_type     = optional(string)
-    disk_gb       = optional(number)
-    os            = optional(string)
-    cloud_logging = optional(bool)
-    permissions   = optional(list(string), [])
-    secrets       = optional(list(string), [])
-  }))
-}
-
-variable "bastions" {
-  description = "cloud => { external_ip, ... }: the bastion each VM is reached through (modules/bastion; {} when building the bastions themselves)"
-  type        = any
-  default     = {}
-}
-
 variable "secrets" {
   description = "cloud => { secret (its config.json name) => its id there } (modules/secrets): each VM grants itself access to its own"
   type        = map(map(string))
 }
 
 variable "networks" {
-  description = "cloud => { subnet_id, firewall = { bastion = [...], vm = [...] }, ... } (modules/network; each cloud has its own extras)"
+  description = "cloud => { network_id, subnet_id, firewall = { bastion = [...], vm = [...] }, ... } for every cloud with a network (modules/network; each cloud has its own extras): a bastion goes into each"
   type        = any
 }

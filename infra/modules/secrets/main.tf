@@ -2,8 +2,8 @@ locals {
   postgres_vm = var.config.database.type == "vm" ? var.config.database.vm : ""
 
 
-  bastion_secrets = ["ssh-host-key"]
   clouds          = distinct(concat([var.config.default_cloud], [for vm in values(var.config.vms.instances) : coalesce(vm.cloud, var.config.default_cloud)]))
+  bastion_secrets = concat(["ssh-host-key"], length(local.clouds) > 1 ? ["tailscale-auth-key"] : [])
 
   readers = concat(
     [

@@ -14,7 +14,7 @@ COPY src ./src
 RUN npm run build
 
 
-FROM nginxinc/nginx-unprivileged:1.27-alpine
+FROM nginxinc/nginx-unprivileged:1.39.1-alpine
 
 COPY nginx.conf.template /etc/nginx/templates/default.conf.template
 

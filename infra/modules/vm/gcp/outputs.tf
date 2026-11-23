@@ -10,4 +10,3 @@ output "internal_ip" {
 output "external_ip" {
   value = var.vm.bastion ? google_compute_address.external[0].address : null
 }
-

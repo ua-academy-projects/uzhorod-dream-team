@@ -16,6 +16,7 @@ variable "vm" {
   type = object({
     host      = number
     bastion   = bool
+    tailscale = bool
     size      = string
     disk_type = string
     disk_gb   = number
@@ -58,4 +59,9 @@ variable "firewall" {
 variable "secret_ids" {
   description = "The secrets this VM reads: config.json name => ARN in Secrets Manager (modules/secrets)"
   type        = map(string)
+}
+
+variable "peer_cidrs" {
+  description = "The subnets of the other clouds in use: the bastion routes them through itself (Tailscale)"
+  type        = list(string)
 }

@@ -6,11 +6,14 @@ locals {
   internal_ip = cidrhost(local.subnet_cidr, var.vm.host)
 
   bastion_user_data = templatefile("${path.module}/bastion.cloud-init.yaml.tftpl", {
-    prefix          = var.config.prefix
-    ssh_port        = var.config.ssh.bastion_port
-    host_key_secret = "${var.config.prefix}-ssh-host-key"
-    region          = var.region
-    private_subnet  = var.network.subnet_cidr
+    prefix           = var.config.prefix
+    ssh_port         = var.config.ssh.bastion_port
+    host_key_secret  = "${var.config.prefix}-ssh-host-key"
+    region           = var.region
+    private_subnet   = var.network.subnet_cidr
+    tailscale        = var.vm.tailscale
+    tailscale_secret = "${var.config.prefix}-tailscale-auth-key"
+    hostname         = "${var.config.prefix}-bastion-aws"
   })
 }
 
@@ -102,5 +105,13 @@ resource "aws_route" "nat" {
   count                  = var.vm.bastion ? 1 : 0
   route_table_id         = var.private_route_table_id
   destination_cidr_block = "0.0.0.0/0"
+  network_interface_id   = aws_instance.vm.primary_network_interface_id
+}
+
+# with two clouds or more: the other clouds' subnets too, through the bastion (Tailscale)
+resource "aws_route" "to_peer" {
+  for_each               = var.vm.bastion ? toset(var.peer_cidrs) : toset([])
+  route_table_id         = var.private_route_table_id
+  destination_cidr_block = each.key
   network_interface_id   = aws_instance.vm.primary_network_interface_id
 }

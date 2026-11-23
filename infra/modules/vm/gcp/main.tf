@@ -5,14 +5,17 @@ locals {
   internal_ip = cidrhost(var.subnet_cidr, var.vm.host)
 
   bastion_user_data = templatefile("${path.module}/bastion.cloud-init.yaml.tftpl", {
-    prefix          = var.config.prefix
-    ssh_port        = var.config.ssh.bastion_port
-    host_key_secret = "${var.config.prefix}-ssh-host-key"
+    prefix           = var.config.prefix
+    ssh_port         = var.config.ssh.bastion_port
+    host_key_secret  = "${var.config.prefix}-ssh-host-key"
+    tailscale        = var.vm.tailscale
+    tailscale_secret = "${var.config.prefix}-tailscale-auth-key"
+    subnet           = var.subnet_cidr
+    hostname         = "${var.config.prefix}-bastion-gcp"
   })
 }
 
 data "google_client_config" "current" {}
-
 
 resource "google_service_account" "vm" {
   account_id   = local.name
@@ -47,7 +50,6 @@ resource "google_compute_address" "external" {
   region = var.region
 }
 
-# The bastion is immutable: a new cloud-init means a new bastion
 resource "terraform_data" "bastion_user_data" {
   input = var.vm.bastion ? local.bastion_user_data : null
 }
@@ -96,6 +98,8 @@ resource "google_compute_instance" "vm" {
     enable_secure_boot = true
   }
 
+  can_ip_forward = var.vm.tailscale
+
   allow_stopping_for_update = true
 
   depends_on = [google_secret_manager_secret_iam_member.reader]
@@ -104,4 +108,14 @@ resource "google_compute_instance" "vm" {
     ignore_changes       = [metadata["ssh-keys"]]
     replace_triggered_by = [terraform_data.bastion_user_data]
   }
+}
+
+# The bastion only, with two clouds or more: our VPC reaches the other clouds' subnets through it (Tailscale)
+resource "google_compute_route" "to_peer" {
+  for_each          = var.vm.bastion ? toset(var.peer_cidrs) : toset([])
+  name              = "${var.config.prefix}-to-${replace(replace(each.key, ".", "-"), "/", "-")}" # citybikes-to-10-30-0-0-24
+  network           = var.network_id
+  dest_range        = each.key
+  next_hop_instance = google_compute_instance.vm.self_link
+  priority          = 1000
 }

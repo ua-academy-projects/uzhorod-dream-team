@@ -7,7 +7,7 @@ APIS=(
   cloudresourcemanager.googleapis.com serviceusage.googleapis.com orgpolicy.googleapis.com
   iam.googleapis.com iamcredentials.googleapis.com
   compute.googleapis.com storage.googleapis.com secretmanager.googleapis.com logging.googleapis.com
-  sqladmin.googleapis.com servicenetworking.googleapis.com monitoring.googleapis.com
+  sqladmin.googleapis.com servicenetworking.googleapis.com monitoring.googleapis.com artifactregistry.googleapis.com
 )
 
 

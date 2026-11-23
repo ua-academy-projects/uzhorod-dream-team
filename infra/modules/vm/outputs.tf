@@ -1,16 +1,24 @@
-output "addresses" {
-  description = "name => { cloud, internal_ip, external_ip (the bastion only) }"
-  value = {
-    for name, vm in local.built : name => { cloud = local.vms[name].cloud, internal_ip = vm.internal_ip, external_ip = vm.external_ip }
-  }
+locals {
+  built = merge(
+    { for name, vm in module.gcp : "gcp/${name}" => vm },
+    { for name, vm in module.aws : "aws/${name}" => vm },
+  )
+
+  bastion_ips = { for key, vm in local.built : local.vms[key].cloud => vm.external_ip if local.vms[key].bastion }
+}
+
+output "bastion_ips" {
+  description = "cloud => its bastion's public address: the only public addresses"
+  value       = local.bastion_ips
 }
 
 output "ssh" {
   description = "Log in to a VM through the bastion of its cloud"
   value = {
-    for name, vm in local.built : name => format("ssh -J %s@%s:%d %s@%s",
-      var.config.ssh.user, var.bastions[local.vms[name].cloud].external_ip, var.config.ssh.bastion_port,
-      var.config.ssh.user, vm.internal_ip)
-    if !local.vms[name].bastion
+    for key, vm in local.built : local.vms[key].name => format(
+      "ssh -J %s@%s:%d %s@%s",
+      var.config.ssh.user, local.bastion_ips[local.vms[key].cloud], var.config.ssh.bastion_port,
+      var.config.ssh.user, vm.internal_ip,
+    ) if !local.vms[key].bastion
   }
 }
