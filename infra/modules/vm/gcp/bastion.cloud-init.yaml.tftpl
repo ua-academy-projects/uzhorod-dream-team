@@ -2,6 +2,7 @@
 
 package_update: true
 package_upgrade: true
+packages: [jq]
 
 ssh_deletekeys: true
 ssh_genkeytypes: []
@@ -32,18 +33,49 @@ write_files:
       Unattended-Upgrade::Automatic-Reboot "true";
       Unattended-Upgrade::Automatic-Reboot-Time "03:00";
 
+  - path: /usr/local/sbin/${prefix}-secret
+    permissions: "0755"
+    content: |
+      #!/bin/sh
+
+      set -u
+      name="$1"
+      metadata=http://metadata.google.internal/computeMetadata/v1
+
+      tries=0
+      while :; do
+        project=$(curl -fsS -H "Metadata-Flavor: Google" "$metadata/project/project-id")
+        token=$(curl -fsS -H "Metadata-Flavor: Google" "$metadata/instance/service-accounts/default/token" | jq -r .access_token)
+
+        # the token goes to curl through its config on stdin, never as an argument (those are visible in ps)
+        if answer=$(printf 'header = "Authorization: Bearer %s"\n' "$token" | curl -sS --fail-with-body -K - \
+            "https://secretmanager.googleapis.com/v1/projects/$project/secrets/$name/versions/latest:access"); then
+          printf '%s' "$answer" | jq -r .payload.data | base64 -d
+          exit 0
+        fi
+
+        # no version yet (or no network yet): wait; anything else (e.g. permission denied): fail now
+        case "$answer" in
+          ""|*NOT_FOUND*) ;;
+          *) echo "$name: $answer" >&2; exit 1 ;;
+        esac
+        tries=$((tries + 1))
+        if [ "$tries" -ge 60 ]; then echo "$name: still no value after 30 minutes" >&2; exit 1; fi
+        echo "$name: no value yet, waiting" >&2
+        sleep 30
+      done
+
   - path: /usr/local/sbin/${prefix}-bastion-setup
     permissions: "0755"
     content: |
       #!/bin/sh
 
       set -eu
-      export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin
+      export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
-      # 1. The host key, from Secret Manager (this VM's service account may read this one secret).
-      snap wait system seed.loaded   # gcloud comes as a snap: wait until snaps are ready
+      # 1. The host key, from Secret Manager (this VM's service account may read its own secrets only).
       umask 077
-      gcloud secrets versions access latest --secret="${host_key_secret}" > /etc/ssh/ssh_host_ed25519_key
+      ${prefix}-secret ${host_key_secret} > /etc/ssh/ssh_host_ed25519_key
       ssh-keygen -y -f /etc/ssh/ssh_host_ed25519_key > /etc/ssh/ssh_host_ed25519_key.pub
       umask 022
 
@@ -69,14 +101,13 @@ write_files:
       #!/bin/sh
 
       set -eu
-      export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin
+      export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
       sysctl -q --system
       curl -fsSL https://tailscale.com/install.sh | sh
-      snap wait system seed.loaded   
 
       umask 077
-      gcloud secrets versions access latest --secret="${tailscale_secret}" > /run/${prefix}-tailscale-key
+      ${prefix}-secret ${tailscale_secret} > /run/${prefix}-tailscale-key
       tailscale up --auth-key="file:/run/${prefix}-tailscale-key" --hostname="${hostname}" \
         --advertise-tags="tag:${prefix}-router" --advertise-routes="${subnet}" \
         --accept-routes --snat-subnet-routes=false

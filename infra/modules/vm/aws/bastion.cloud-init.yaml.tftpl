@@ -2,9 +2,11 @@
 
 package_update: true
 package_upgrade: true
-packages: [iptables]
+packages: [iptables, jq] # jq: the answers of the metadata and secrets APIs
 
 ssh_deletekeys: true
+# no host keys of its own: sshd waits for ours, from the secret store (a random key would only
+# confuse known_hosts). cloud-init's schema wants a non-empty list and warns about [], it works as meant.
 ssh_genkeytypes: []
 
 
@@ -33,6 +35,8 @@ write_files:
       Unattended-Upgrade::Automatic-Reboot "true";
       Unattended-Upgrade::Automatic-Reboot-Time "03:00";
 
+  # The NAT of the private subnet (${private_subnet}) and of it only: anything else is not forwarded.
+  # Applied at every boot (the bastion reboots at night).
   - path: /usr/local/sbin/${prefix}-nat
     permissions: "0755"
     content: |
@@ -65,20 +69,53 @@ write_files:
       [Install]
       WantedBy=multi-user.target
 
+  - path: /usr/local/sbin/${prefix}-secret
+    permissions: "0755"
+    content: |
+      #!/bin/sh
+
+      set -u
+      name="$1"
+      imds=http://169.254.169.254/latest
+      api=https://secretsmanager.${region}.amazonaws.com/
+
+      tries=0
+      while :; do
+        token=$(curl -fsS -X PUT -H "X-aws-ec2-metadata-token-ttl-seconds: 300" "$imds/api/token")
+        role=$(curl -fsS -H "X-aws-ec2-metadata-token: $token" "$imds/meta-data/iam/security-credentials/")
+        keys=$(curl -fsS -H "X-aws-ec2-metadata-token: $token" "$imds/meta-data/iam/security-credentials/$role")
+
+        if answer=$(printf '%s' "$keys" \
+            | jq -r '"user = \"" + .AccessKeyId + ":" + .SecretAccessKey + "\"\nheader = \"x-amz-security-token: " + .Token + "\""' \
+            | curl -sS --fail-with-body -K - --aws-sigv4 "aws:amz:${region}:secretsmanager" \
+                -H "X-Amz-Target: secretsmanager.GetSecretValue" -H "Content-Type: application/x-amz-json-1.1" \
+                -d "{\"SecretId\": \"$name\"}" "$api"); then
+          printf '%s' "$answer" | jq -j .SecretString
+          exit 0
+        fi
+
+        # no value yet (or no network yet): wait; anything else (e.g. access denied): fail now
+        case "$answer" in
+          ""|*ResourceNotFoundException*) ;;
+          *) echo "$name: $answer" >&2; exit 1 ;;
+        esac
+        tries=$((tries + 1))
+        if [ "$tries" -ge 60 ]; then echo "$name: still no value after 30 minutes" >&2; exit 1; fi
+        echo "$name: no value yet, waiting" >&2
+        sleep 30
+      done
+
   - path: /usr/local/sbin/${prefix}-bastion-setup
     permissions: "0755"
     content: |
       #!/bin/sh
 
       set -eu
-      export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin
+      export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
       # 1. The host key, from Secrets Manager (this VM's role may read its own secrets only).
-      snap wait system seed.loaded   # the AWS CLI comes as a snap: wait until snaps are ready
-      snap install aws-cli --classic
       umask 077
-      aws secretsmanager get-secret-value --region ${region} --secret-id ${host_key_secret} \
-        --query SecretString --output text > /etc/ssh/ssh_host_ed25519_key
+      ${prefix}-secret ${host_key_secret} > /etc/ssh/ssh_host_ed25519_key
       ssh-keygen -y -f /etc/ssh/ssh_host_ed25519_key > /etc/ssh/ssh_host_ed25519_key.pub
       umask 022
 
@@ -100,15 +137,13 @@ write_files:
       #!/bin/sh
 
       set -eu
-      export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin
+      export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
       sysctl -q --system
       curl -fsSL https://tailscale.com/install.sh | sh
-      snap wait system seed.loaded
-      snap install aws-cli --classic   
+
       umask 077
-      aws secretsmanager get-secret-value --region ${region} --secret-id ${tailscale_secret} \
-        --query SecretString --output text > /run/${prefix}-tailscale-key
+      ${prefix}-secret ${tailscale_secret} > /run/${prefix}-tailscale-key
       tailscale up --auth-key="file:/run/${prefix}-tailscale-key" --hostname="${hostname}" \
         --advertise-tags="tag:${prefix}-router" --advertise-routes="${private_subnet}" \
         --accept-routes --snat-subnet-routes=false
