@@ -8,5 +8,5 @@ output "internal_ip" {
 }
 
 output "external_ip" {
-  value = var.vm.bastion ? aws_eip.external[0].public_ip : null
+  value = var.vm.bastion ? aws_instance.vm.public_ip : null
 }

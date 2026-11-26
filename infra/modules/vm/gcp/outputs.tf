@@ -8,5 +8,5 @@ output "internal_ip" {
 }
 
 output "external_ip" {
-  value = var.vm.bastion ? google_compute_address.external[0].address : null
+  value = one(google_compute_instance.vm.network_interface[0].access_config[*].nat_ip)
 }

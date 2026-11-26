@@ -6,15 +6,17 @@ config_validate_hosts: "{{ groups['all'] | map('extract', hostvars) | selectattr
 config_validate_vms: "{{ dict(config_validate_hosts | map(attribute='vm') | zip(config_validate_hosts | map(attribute='citybikes_vm'))) }}"
 config_validate_missing: "{{ citybikes_vms_expected | reject('in', config_validate_vms) | list }}"
 
-config_validate_bastions: "{{ config_validate_vms | dict2items | selectattr('value.bastion') | map(attribute='key') | list }}"
-config_validate_services: "{{ config_validate_vms.values() | map(attribute='services') | flatten }}"
-config_validate_tls_vm: "{{ config_validate_vms[config_json.tls.vm] | default({'services': [], 'secrets': []}) }}"
+config_validate_instances: "{{ config_json.vms.instances }}"
+config_validate_services: "{{ config_validate_instances.values() | map(attribute='services', default=[]) | flatten }}"
+config_validate_tls_vm: "{{ config_validate_instances[config_json.tls.vm] | default({}) }}"
 
 config_validate_checks:
-  - msg: 'exactly one VM must have "bastion": true'
-    ok: "{{ config_validate_bastions | length == 1 }}"
-  - msg: 'a VM with "cloud_logging" needs "roles/logging.logWriter" (in its "roles" or in vm_defaults.roles)'
-    ok: "{{ config_validate_vms.values() | selectattr('cloud_logging') | rejectattr('roles', 'contains', 'roles/logging.logWriter') | list | length == 0 }}"
+  - msg: 'vms.instances has no VM "bastion": Terraform builds the bastion in every cloud in use, from vms.bastion'
+    ok: "{{ 'bastion' not in config_validate_instances }}"
+  - msg: 'vms.bastion.host must differ from the host of every VM'
+    ok: "{{ config_json.vms.bastion.host not in (config_validate_instances.values() | map(attribute='host') | list) }}"
+  - msg: 'a VM with "cloud_logging" needs the permission "write_logs" (in its "permissions" or in vms.defaults.permissions)'
+    ok: "{{ config_validate_vms.values() | selectattr('cloud_logging') | rejectattr('permissions', 'contains', 'write_logs') | list | length == 0 }}"
   - msg: 'a service may run on one VM only'
     ok: "{{ config_validate_services | length == config_validate_services | unique | length }}"
   - msg: 'queue_backend rabbitmq needs a VM with the "rabbitmq" service'
@@ -22,6 +24,6 @@ config_validate_checks:
   - msg: 'cache_backend redis needs a VM with the "redis" service'
     ok: "{{ config_json.app.cache_backend != 'redis' or 'redis' in config_validate_services }}"
   - msg: 'tls.vm must run "ui" and have "cloudflare-api-token" in its "secrets"'
-    ok: "{{ config_json.tls.domain == '' or ('ui' in config_validate_tls_vm.services and 'cloudflare-api-token' in config_validate_tls_vm.secrets) }}"
-  - msg: 'database.vm must be a VM of vms.instances, and not the bastion'
-    ok: "{{ config_json.database.vm in config_json.vms.instances and not (config_json.vms.instances[config_json.database.vm].bastion | default(false)) }}"
+    ok: "{{ config_json.tls.domain == '' or ('ui' in config_validate_tls_vm.services | default([]) and 'cloudflare-api-token' in config_validate_tls_vm.secrets | default([])) }}"
+  - msg: 'database.vm must be a VM of vms.instances'
+    ok: "{{ config_json.database.vm in config_validate_instances }}"

@@ -107,11 +107,11 @@ write_files:
       curl -fsSL https://tailscale.com/install.sh | sh
 
       umask 077
+      trap 'rm -f /run/${prefix}-tailscale-key' EXIT
       ${prefix}-secret ${tailscale_secret} > /run/${prefix}-tailscale-key
       tailscale up --auth-key="file:/run/${prefix}-tailscale-key" --hostname="${hostname}" \
         --advertise-tags="tag:${prefix}-router" --advertise-routes="${subnet}" \
         --accept-routes --snat-subnet-routes=false
-      rm -f /run/${prefix}-tailscale-key
 %{ endif ~}
 
 runcmd:

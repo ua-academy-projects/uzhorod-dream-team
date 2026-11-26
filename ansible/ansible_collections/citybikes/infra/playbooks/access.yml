@@ -1,6 +1,6 @@
 ---
 
-- name: Validate the configuration (config.json), then an SSH key for the next minutes
+- name: Validate the configuration (config.json), then an SSH key for the next minutes and your SSH config
   hosts: localhost
   gather_facts: false
   any_errors_fatal: true
@@ -8,3 +8,4 @@
     - citybikes.infra.config
     - citybikes.infra.config_validate
     - citybikes.infra.ssh_access
+    - citybikes.infra.ssh_config

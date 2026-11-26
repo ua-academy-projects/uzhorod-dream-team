@@ -5,7 +5,7 @@ variable "config" {
     default_cloud = string
     region        = string
     zone          = string
-    clouds        = any 
+    clouds        = any
     vms = object({
       instances = map(object({
         host  = number

@@ -4,8 +4,8 @@ locals {
 
   postgres_vm = var.config.database.type == "vm" ? var.config.database.vm : ""
 
-  bastion_clouds = keys(var.networks)
-  tailscale      = length(local.bastion_clouds) > 1
+  bastion_clouds  = keys(var.networks)
+  tailscale       = length(local.bastion_clouds) > 1
   bastion_secrets = concat(["ssh-host-key"], local.tailscale ? ["tailscale-auth-key"] : [])
 
   peers = {
@@ -24,8 +24,7 @@ locals {
         disk_gb     = vm.disk_gb
         os          = vm.os
         permissions = vm.permissions
-
-        secrets = distinct(concat(vm.secrets, name == local.postgres_vm ? ["db-password"] : []))
+        secrets     = distinct(concat(vm.secrets, name == local.postgres_vm ? ["db-password"] : []))
       }
     },
     {

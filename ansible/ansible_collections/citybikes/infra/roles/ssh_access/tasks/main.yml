@@ -35,7 +35,7 @@
 - name: The public key on every VM, until it expires (the guest agent on the VM takes it out then)
   citybikes.infra.gcp_ssh_key:
     instance: "{{ item }}"
-    zone: "{{ config_json.location.zone }}"
+    zone: "{{ hostvars[item].gcp_zone }}"
     user: "{{ config_json.ssh.user }}"
     public_key: "{{ lookup('ansible.builtin.file', ssh_access_public_key_file) }}"
     ttl_minutes: "{{ ssh_access_ttl_minutes | int }}"

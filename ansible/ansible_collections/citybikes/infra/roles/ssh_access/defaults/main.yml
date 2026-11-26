@@ -3,4 +3,4 @@
 ssh_access_public_key_file: "{{ config_json.ssh.access_public_key_file | expanduser }}"
 ssh_access_ttl_minutes: "{{ config_json.ssh.key_ttl_minutes }}"
 
-ssh_access_vms: "{{ groups['all'] }}"
+ssh_access_vms: "{{ groups['all'] | map('extract', hostvars) | selectattr('citybikes_vm', 'defined') | map(attribute='inventory_hostname') | list }}"

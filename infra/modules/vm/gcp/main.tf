@@ -44,12 +44,6 @@ resource "google_compute_address" "internal" {
   address      = local.internal_ip
 }
 
-resource "google_compute_address" "external" {
-  count  = var.vm.bastion ? 1 : 0
-  name   = "${local.name}-external"
-  region = var.region
-}
-
 resource "terraform_data" "bastion_user_data" {
   input = var.vm.bastion ? local.bastion_user_data : null
 }
@@ -75,9 +69,7 @@ resource "google_compute_instance" "vm" {
 
     dynamic "access_config" {
       for_each = var.vm.bastion ? [1] : []
-      content {
-        nat_ip = google_compute_address.external[0].address
-      }
+      content {}
     }
   }
 

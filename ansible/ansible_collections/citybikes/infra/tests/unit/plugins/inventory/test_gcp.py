@@ -16,16 +16,18 @@ spec.loader.exec_module(gcp)
 
 CONFIG = {
     "prefix": "citybikes",
-     "ssh": {"user": "citybikes", "bastion_port": 505, "access_public_key_file": "~/.ssh/access.pub", "key_ttl_minutes": 15},
+    "default_cloud": "gcp",
+    "ssh": {"user": "citybikes", "bastion_port": 505, "access_public_key_file": "~/.ssh/access.pub", "key_ttl_minutes": 15},
     "tls": {"vm": "ui", "domain": "example.org"},
     "app": {"queue_backend": "rabbitmq", "cache_backend": "redis"},
-    "database": {"type": "cloudsql", "vm": "db"},
+    "database": {"type": "managed", "vm": "db"},
     "vms": {
-        "defaults": {"machine_type": "e2-small", "disk_size_gb": 10, "cloud_logging": True, "roles": ["roles/logging.logWriter"]},
+        "defaults": {"size": "small", "disk_gb": 10, "cloud_logging": True, "permissions": ["write_logs"]},
+        "bastion": {"host": 201, "size": "micro"},
         "instances": {
-            "db": {"host": 50, "disk_size_gb": 20, "services": ["redis"], "roles": ["roles/extra"]},
+            "db": {"host": 50, "disk_gb": 20, "services": ["redis"], "permissions": ["read_images"]},
             "ui": {"host": 53, "services": ["ui", "cloudflared"], "cloud_logging": False},
-            "bastion": {"host": 54, "services": [], "bastion": True, "secrets": ["internal-ssh-key"]},
+            "fetcher": {"host": 51, "cloud": "aws", "services": ["fetcher"]},
         },
     },
 }
@@ -63,6 +65,10 @@ def listed(vm, private_ip, public_ip=""):
     """A host as gcp_compute adds it (the variables of our "compose")."""
     return {"vm": vm, "private_ip": private_ip, "public_ip": public_ip}
 
+class DocumentationTests(unittest.TestCase):
+    def test_the_documentation_is_yaml(self):
+        for doc in (gcp.DOCUMENTATION, gcp.EXAMPLES):
+            yaml.safe_load(doc)
 
 class SettingsTests(unittest.TestCase):
     def test_gcp_compute_lists_only_our_vms_with_the_key(self):
@@ -72,18 +78,30 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(s["filters"], ["labels.vm:*"])
         self.assertEqual(s["compose"]["vm"], "labels.vm")
 
-    def test_own_values_replace_the_defaults_roles_are_added(self):
+    def test_own_values_replace_the_defaults_permissions_are_added(self):
         db = gcp.vm_settings(CONFIG, "db")
-        self.assertEqual((db["machine_type"], db["disk_size_gb"]), ("e2-small", 20))
-        self.assertEqual(db["roles"], ["roles/logging.logWriter", "roles/extra"])
+        self.assertEqual((db["size"], db["disk_gb"]), ("small", 20))
+        self.assertEqual(db["permissions"], ["write_logs", "read_images"])
         self.assertFalse(gcp.vm_settings(CONFIG, "ui")["cloud_logging"])
         self.assertEqual(gcp.vm_settings(CONFIG, "ui")["secrets"], [])
 
+    def test_the_cloud_of_a_vm_its_own_else_the_default_cloud(self):
+        self.assertEqual(gcp.vm_settings(CONFIG, "db")["cloud"], "gcp")
+        self.assertEqual(gcp.vm_settings(CONFIG, "fetcher")["cloud"], "aws")
+        self.assertEqual(gcp.clouds_in_use(CONFIG), ["aws", "gcp"])
+
+    def test_the_bastion_from_vms_bastion_in_this_cloud(self):
+        bastion = gcp.vm_settings(CONFIG, "bastion")
+        self.assertTrue(bastion["bastion"])
+        self.assertEqual((bastion["host"], bastion["size"], bastion["cloud"]), (201, "micro", "gcp"))
+        self.assertEqual((bastion["services"], bastion["permissions"]), ([], ["write_logs"]))
+
     def test_groups_by_what_runs(self):
-        settings = {name: gcp.vm_settings(CONFIG, name) for name in CONFIG["vms"]["instances"]}
+        settings = {name: gcp.vm_settings(CONFIG, name) for name in ["bastion", "db", "ui"]}
         self.assertEqual(gcp.groups_of(CONFIG, "bastion", settings["bastion"]), ["bastion"])
         self.assertEqual(gcp.groups_of(CONFIG, "db", settings["db"]), ["app"])
         self.assertEqual(gcp.groups_of(CONFIG, "ui", settings["ui"]), ["app", "frontend"])
+
 
 class SwitchTests(unittest.TestCase):
     def config(self, queue, cache, database):
@@ -92,12 +110,12 @@ class SwitchTests(unittest.TestCase):
         return config
 
     def test_now_everything_runs(self):
-        config = self.config("rabbitmq", "redis", "cloudsql")
+        config = self.config("rabbitmq", "redis", "managed")
         self.assertEqual(gcp.vm_settings(config, "db")["services"], ["redis", "rabbitmq"])
         self.assertEqual(gcp.expected_vms(config), ["bastion", "db", "ui"])
 
-    def test_postgres_for_queue_and_cache_and_cloudsql_no_db_vm(self):
-        config = self.config("postgres", "postgres", "cloudsql")
+    def test_postgres_for_queue_and_cache_and_managed_no_db_vm(self):
+        config = self.config("postgres", "postgres", "managed")
         self.assertEqual(gcp.vm_settings(config, "db")["services"], [])
         self.assertEqual(gcp.expected_vms(config), ["bastion", "ui"])
 
@@ -105,6 +123,11 @@ class SwitchTests(unittest.TestCase):
         db = gcp.vm_settings(self.config("postgres", "postgres", "vm"), "db")
         self.assertEqual(db["services"], ["postgres"])
         self.assertIn("db-password", db["secrets"])
+
+    def test_no_bastion_in_a_cloud_nobody_uses(self):
+        config = dict(CONFIG, default_cloud="aws")
+        config["vms"] = dict(CONFIG["vms"], instances={"fetcher": CONFIG["vms"]["instances"]["fetcher"]})
+        self.assertEqual(gcp.expected_vms(config), [])
 
 class ConnectionTests(unittest.TestCase):
     KEY = "-o IdentityFile=" + os.path.expanduser("~/.ssh/access.pub")
@@ -153,15 +176,28 @@ class PluginTests(unittest.TestCase):
         plugin = self.plugin({
             "citybikes-db": listed("db", "10.20.0.50"),
             "citybikes-ui": listed("ui", "10.20.0.53"),
-            "citybikes-bastion": listed("bastion", "10.20.0.54", "34.1.2.3"),
+            "citybikes-bastion": listed("bastion", "10.20.0.201", "34.1.2.3"),
         })
         plugin._describe_vms(CONFIG)
         inv = plugin.inventory
         self.assertEqual(inv.groups, {"app": ["citybikes-db", "citybikes-ui"], "frontend": ["citybikes-ui"], "bastion": ["citybikes-bastion"]})
         db = inv.hosts["citybikes-db"].vars
-        self.assertEqual(db["citybikes_vm"]["disk_size_gb"], 20)
+        self.assertEqual((db["citybikes_vm"]["disk_gb"], db["citybikes_vm"]["cloud"]), (20, "gcp"))
         self.assertEqual(db["ansible_host"], "10.20.0.50")
         self.assertIn("citybikes@34.1.2.3", db["ansible_ssh_common_args"])
+        bastion = inv.hosts["citybikes-bastion"].vars
+        self.assertEqual((bastion["ansible_host"], bastion["ansible_port"]), ("34.1.2.3", 505))
+        self.assertTrue(bastion["citybikes_vm"]["bastion"])
+
+    def test_a_vm_that_config_puts_in_another_cloud_is_left_out(self):
+        plugin = self.plugin({
+            "citybikes-fetcher": listed("fetcher", "10.20.0.51"),
+            "citybikes-bastion": listed("bastion", "10.20.0.201", "34.1.2.3"),
+        })
+        with mock.patch.object(gcp.display, "warning") as warning:
+            plugin._describe_vms(CONFIG)
+        self.assertNotIn("citybikes_vm", plugin.inventory.hosts["citybikes-fetcher"].vars)
+        self.assertIn("vm=fetcher", warning.call_args[0][0])
 
     def test_no_bastion_in_gcp_no_connection(self):
         plugin = self.plugin({"citybikes-db": listed("db", "10.20.0.50")})

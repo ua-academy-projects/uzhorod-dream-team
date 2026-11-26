@@ -8,14 +8,17 @@ description:
   - A wrapper around C(google.cloud.gcp_compute). The inventory file names only this plugin; the plugin sets
     gcp_compute up by itself (the project and the key of the service account, only the VMs with the label
     C(vm)) and lets it list the VMs.
-  - Its settings with vms.defaults filled in go to C(citybikes_vm), and how to reach it to the connection
-    variables. The keys come from your ssh-agent (only the public key files are named), the bastion directly
-    on ssh.bastion_port, every other VM through the bastion (ssh -W, the bastion holds no key).
+  - Only the VMs that config.json puts in GCP (a VM's C(cloud), else C(default_cloud)), and the bastion of GCP.
+    Terraform builds a bastion in every cloud in use from C(vms.bastion); in GCP it has the label C(vm=bastion).
+  - Its settings with vms.defaults filled in go to C(citybikes_vm) (with its C(cloud)), and how to reach it to
+    the connection variables. The keys come from your ssh-agent (only the public key files are named), the
+    bastion directly on ssh.bastion_port (its public address is ephemeral, so it is read anew at every run), every other
+    VM through the bastion (ssh -W, the bastion holds no key).
   - For every host and for localhost it sets C(citybikes_config_file), the path of config.json. The role
     config_validate loads it with include_vars. 
   - C(citybikes_vm) has the switches applied (only the services that run, postgres on database.vm while
-    database.type is vm). And C(citybikes_vms_expected) lists the VMs that must exist (the bastion, and every
-    VM that runs something).
+    database.type is vm). And C(citybikes_vms_expected) lists the VMs that must exist in GCP (its bastion, and
+    every VM there that runs something).
   - The name of the inventory file must end with C(citybikes.yml).
 options:
   plugin:
@@ -72,6 +75,16 @@ def gcp_compute_settings(project, credentials_file):
     }
 
 
+CLOUD = "gcp"  # the cloud whose VMs this plugin lists
+
+
+def clouds_in_use(config):
+    """The clouds where something is built: default_cloud and the cloud of every VM. Terraform's rule: each gets a
+    network, and so a bastion."""
+    default = config["default_cloud"]
+    return sorted({default} | {vm.get("cloud", default) for vm in config["vms"]["instances"].values()})
+
+
 def running_services(config, name, services):
     """The services that run on this VM: the switches turn rabbitmq (app.queue_backend) and redis
     (app.cache_backend) off, and put postgres on database.vm while database.type is vm."""
@@ -83,27 +96,32 @@ def running_services(config, name, services):
     return kept
 
 
-def vm_settings(config, name):
-    """A VM of config.json with vms.defaults filled in (its own values replace the defaults, its roles are added)
-    and the switches applied (only the services that run; the VM with postgres reads db-password)."""
+def vm_settings(config, name, cloud=CLOUD):
+    """A VM of config.json with vms.defaults filled in (its own values replace the defaults, its permissions are
+    added) and the switches applied (only the services that run; the VM with postgres reads db-password).
+    "bastion" is the bastion of the given cloud, from vms.bastion (it is not one of vms.instances)."""
     defaults = config["vms"]["defaults"]
-    vm = config["vms"]["instances"][name]
-    settings = {"bastion": False, "services": [], "secrets": []}
+    if name == "bastion":
+        vm = dict(config["vms"]["bastion"], bastion=True, cloud=cloud)
+    else:
+        vm = config["vms"]["instances"][name]
+    settings = {"bastion": False, "services": [], "secrets": [], "cloud": config["default_cloud"]}
     settings.update(defaults)
     settings.update(vm)
-    settings["roles"] = list(dict.fromkeys(defaults.get("roles", []) + vm.get("roles", [])))
+    settings["permissions"] = list(dict.fromkeys(defaults.get("permissions", []) + vm.get("permissions", [])))
     settings["services"] = running_services(config, name, settings["services"])
     if "postgres" in settings["services"]:
         settings["secrets"] = list(dict.fromkeys(settings["secrets"] + ["db-password"]))
     return settings
 
 
-def expected_vms(config):
-    """The VMs that must exist: the bastion, and every VM that runs something (the same rule as Terraform's)."""
-    expected = []
+def expected_vms(config, cloud=CLOUD):
+    """The VMs that must exist in the cloud: its bastion (when the cloud is in use), and every VM there that runs
+    something."""
+    expected = ["bastion"] if cloud in clouds_in_use(config) else []
     for name in config["vms"]["instances"]:
-        vm = vm_settings(config, name)
-        if vm["bastion"] or vm["services"]:
+        vm = vm_settings(config, name, cloud)
+        if vm["cloud"] == cloud and vm["services"]:
             expected.append(name)
     return sorted(expected)
 
@@ -143,7 +161,8 @@ def connection(ssh, vm, private_ip, bastion_ip):
         args.append('-o ProxyCommand="{}"'.format(jump))
     settings["ansible_ssh_common_args"] = " ".join(args)
     return settings
-# VMs
+
+
 def read_json(path):
     with open(path, encoding="utf-8") as f:
         return json.load(f)
@@ -184,18 +203,21 @@ class InventoryModule(BaseInventoryPlugin):
             gcp_compute.parse(self.inventory, self.loader, settings.name, cache=False)
 
     def _describe_vms(self, config):
-        """Groups, settings and connection of every VM of config.json that exists in GCP."""
+        """Groups, settings and connection of every VM that config.json puts in GCP and that exists there."""
+        ours = [name for name in config["vms"]["instances"] if vm_settings(config, name)["cloud"] == CLOUD]
+        if CLOUD in clouds_in_use(config):
+            ours.append("bastion")
+
         host_of = {}
         for host in self.inventory.hosts:
             vm = self.inventory.get_host(host).get_vars().get("vm")
-            if vm in config["vms"]["instances"]:
+            if vm in ours:
                 host_of[vm] = host
             elif vm:
-                display.warning("%s has the label vm=%s, which is not in config.json: left out" % (host, vm))
+                display.warning("%s has the label vm=%s, which config.json does not put in %s: left out" % (host, vm, CLOUD))
 
-        vms = {name: vm_settings(config, name) for name in config["vms"]["instances"]}
-        bastions = [name for name, vm in vms.items() if vm["bastion"] and name in host_of]
-        bastion_ip = self.inventory.get_host(host_of[bastions[0]]).get_vars()["public_ip"] if len(bastions) == 1 else None
+        vms = {name: vm_settings(config, name) for name in host_of}
+        bastion_ip = self.inventory.get_host(host_of["bastion"]).get_vars()["public_ip"] if "bastion" in host_of else None
 
         for name, host in host_of.items():
             for group in groups_of(config, name, vms[name]):

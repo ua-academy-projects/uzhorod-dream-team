@@ -2,11 +2,10 @@
 
 package_update: true
 package_upgrade: true
-packages: [iptables, jq] # jq: the answers of the metadata and secrets APIs
+packages: [iptables, jq]
 
 ssh_deletekeys: true
-# no host keys of its own: sshd waits for ours, from the secret store (a random key would only
-# confuse known_hosts). cloud-init's schema wants a non-empty list and warns about [], it works as meant.
+
 ssh_genkeytypes: []
 
 
@@ -35,8 +34,6 @@ write_files:
       Unattended-Upgrade::Automatic-Reboot "true";
       Unattended-Upgrade::Automatic-Reboot-Time "03:00";
 
-  # The NAT of the private subnet (${private_subnet}) and of it only: anything else is not forwarded.
-  # Applied at every boot (the bastion reboots at night).
   - path: /usr/local/sbin/${prefix}-nat
     permissions: "0755"
     content: |
@@ -69,7 +66,6 @@ write_files:
       [Install]
       WantedBy=multi-user.target
 
-  - path: /usr/local/sbin/${prefix}-secret
     permissions: "0755"
     content: |
       #!/bin/sh
@@ -143,11 +139,11 @@ write_files:
       curl -fsSL https://tailscale.com/install.sh | sh
 
       umask 077
+      trap 'rm -f /run/${prefix}-tailscale-key' EXIT 
       ${prefix}-secret ${tailscale_secret} > /run/${prefix}-tailscale-key
       tailscale up --auth-key="file:/run/${prefix}-tailscale-key" --hostname="${hostname}" \
         --advertise-tags="tag:${prefix}-router" --advertise-routes="${private_subnet}" \
         --accept-routes --snat-subnet-routes=false
-      rm -f /run/${prefix}-tailscale-key
 %{ endif ~}
 
 runcmd:

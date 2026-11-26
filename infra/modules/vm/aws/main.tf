@@ -68,6 +68,8 @@ resource "aws_instance" "vm" {
   vpc_security_group_ids = var.firewall
   iam_instance_profile   = aws_iam_instance_profile.vm.name
 
+  associate_public_ip_address = var.vm.bastion
+
   source_dest_check = !var.vm.bastion
 
   user_data                   = var.vm.bastion ? local.bastion_user_data : null
@@ -92,13 +94,6 @@ resource "aws_instance" "vm" {
   lifecycle {
     ignore_changes = [ami]
   }
-}
-
-resource "aws_eip" "external" {
-  count    = var.vm.bastion ? 1 : 0
-  domain   = "vpc"
-  instance = aws_instance.vm.id
-  tags     = merge(local.tags, { Name = "${local.name}-external" })
 }
 
 resource "aws_route" "nat" {

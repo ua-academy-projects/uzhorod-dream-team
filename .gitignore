@@ -3,10 +3,11 @@
 *.log
 .vagrant/
 __pycache__/
+.pytest_cache
 node_modules/
 dist/
-ssh_config
-.ssh_known_hosts
+/ssh_config
+/.ssh_known_hosts
 
 infra/**/.terraform/
 *.tfstate
