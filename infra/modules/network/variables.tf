@@ -5,7 +5,7 @@ variable "config" {
     default_cloud = string
     region        = string
     zone          = string
-    clouds        = any
+    clouds        = any # each cloud's tables have their own shape (AWS has more subnets than GCP)
     network       = object({ internal_ports = list(string) })
     ssh           = object({ bastion_port = number })
     vms = object({

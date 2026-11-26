@@ -28,6 +28,11 @@ variable "database_zone" {
   type        = string
 }
 
+variable "peer_cidrs" {
+  description = "The subnets of the other clouds in use: their VMs reach ours through the bastions (Tailscale)"
+  type        = list(string)
+}
+
 variable "ssh_allowed_cidrs" {
   description = "Who may SSH to the bastion"
   type        = list(string)

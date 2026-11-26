@@ -1,7 +1,6 @@
 #cloud-config
 
 package_update: true
-package_upgrade: true
 packages: [iptables, jq]
 
 ssh_deletekeys: true
@@ -66,6 +65,7 @@ write_files:
       [Install]
       WantedBy=multi-user.target
 
+  - path: /usr/local/sbin/${prefix}-secret
     permissions: "0755"
     content: |
       #!/bin/sh

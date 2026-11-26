@@ -56,11 +56,11 @@ resource "google_compute_firewall" "ssh_from_bastion" {
   }
 }
 
-# VM <-> VM: only the services' ports
+# VM <-> VM, in this cloud and from the other clouds (through the bastions): only the services' ports
 resource "google_compute_firewall" "internal" {
   name          = "${local.name}-internal"
   network       = google_compute_network.vpc.id
-  source_ranges = [var.subnet_cidr]
+  source_ranges = concat([var.subnet_cidr], var.peer_cidrs)
 
   allow {
     protocol = "tcp"
@@ -68,5 +68,17 @@ resource "google_compute_firewall" "internal" {
   }
   allow {
     protocol = "icmp"
+  }
+}
+
+resource "google_compute_firewall" "to_other_clouds" {
+  count         = length(var.peer_cidrs) > 0 ? 1 : 0
+  name          = "${local.name}-to-other-clouds"
+  network       = google_compute_network.vpc.id
+  source_ranges = [var.subnet_cidr]
+  target_tags   = [local.bastion_tag]
+
+  allow {
+    protocol = "all"
   }
 }
