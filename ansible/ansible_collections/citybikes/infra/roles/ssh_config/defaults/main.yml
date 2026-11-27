@@ -1,0 +1,14 @@
+---
+
+ssh_config_repo: "{{ citybikes_config_file | dirname | dirname }}"
+ssh_config_file: "{{ ssh_config_repo }}/ssh_config"
+ssh_config_known_hosts_file: "{{ ssh_config_repo }}/.ssh_known_hosts"
+ssh_config_user_config: "{{ '~/.ssh/config' | expanduser }}"
+
+ssh_config_prefix: "{{ config_json.prefix }}"
+
+ssh_config_bastion_host_key: "{{ lookup('ansible.builtin.file', config_json.ssh.bastion_host_key_file | expanduser) }}"
+
+ssh_config_hosts: "{{ groups['all'] | map('extract', hostvars) | selectattr('citybikes_vm', 'defined') | list }}"
+ssh_config_bastions: "{{ ssh_config_hosts | selectattr('citybikes_vm.bastion') | list }}"
+ssh_config_vms: "{{ ssh_config_hosts | rejectattr('citybikes_vm.bastion') | list }}"

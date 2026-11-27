@@ -1,0 +1,25 @@
+{% for host in ssh_config_bastions %}
+
+Host {{ ssh_config_prefix }}-bastion-{{ host.citybikes_vm.cloud }}
+  HostName {{ host.public_ip }}
+  Port {{ config_json.ssh.bastion_port }}
+
+  HostKeyAlias {{ ssh_config_prefix }}-bastion
+  UserKnownHostsFile {{ ssh_config_known_hosts_file }}
+  StrictHostKeyChecking yes
+
+{% endfor %}
+{% for host in ssh_config_vms %}
+Host {{ host.inventory_hostname }}
+  HostName {{ host.private_ip }}
+  ProxyJump {{ ssh_config_prefix }}-bastion-{{ host.citybikes_vm.cloud }}
+
+  StrictHostKeyChecking no
+  UserKnownHostsFile /dev/null
+  LogLevel ERROR
+
+{% endfor %}
+Host {{ ssh_config_prefix }}-*
+  User {{ config_json.ssh.user }}
+  IdentityFile {{ config_json.ssh.access_public_key_file }}
+  IdentitiesOnly yes

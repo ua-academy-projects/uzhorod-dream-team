@@ -1,0 +1,29 @@
+---
+
+- name: Your SSH config of the VMs (ssh_config of the repository), with the addresses of now
+  ansible.builtin.template:
+    src: ssh_config.j2
+    dest: "{{ ssh_config_file }}"
+    mode: "0644"
+
+- name: The bastions' host key under one name (HostKeyAlias), whatever their address; the VMs' keys stay as ssh wrote them
+  ansible.builtin.lineinfile:
+    path: "{{ ssh_config_known_hosts_file }}"
+    regexp: "^{{ ssh_config_prefix }}-bastion "
+    line: "{{ ssh_config_prefix }}-bastion {{ ssh_config_bastion_host_key }}"
+    create: true
+    mode: "0644"
+
+- name: Your ~/.ssh folder
+  ansible.builtin.file:
+    path: "{{ ssh_config_user_config | dirname }}"
+    state: directory
+    mode: "0700"
+
+- name: Your ~/.ssh/config includes it, at the very top (below a Host line it would belong to that host)
+  ansible.builtin.lineinfile:
+    path: "{{ ssh_config_user_config }}"
+    line: "Include {{ ssh_config_file }}"
+    insertbefore: BOF
+    create: true
+    mode: "0600"
