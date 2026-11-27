@@ -1,0 +1,9 @@
+
+{% if k3s_join %}
+
+server: https://{{ hostvars[k3s_join].private_ip }}:6443
+token-file: {{ k3s_token_file }}
+{% else %}
+
+cluster-init: true
+{% endif %}

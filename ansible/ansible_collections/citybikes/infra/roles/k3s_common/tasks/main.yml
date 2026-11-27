@@ -1,0 +1,34 @@
+---
+
+- name: The folders of the k3s configuration
+  ansible.builtin.file:
+    path: "{{ k3s_config_dir }}/config.yaml.d"
+    state: directory
+    mode: "0755"
+
+- name: The install script of k3s {{ k3s_version }} (of that very version)
+  ansible.builtin.get_url:
+    url: "{{ k3s_install_url }}"
+    dest: "{{ k3s_install_script }}"
+    mode: "0755"
+
+- name: The k3s version that is installed here
+  ansible.builtin.command:
+    argv: [/usr/local/bin/k3s, --version]
+  register: k3s_installed
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Which control plane nodes hold the cluster's token (they are in the cluster)
+  ansible.builtin.stat:
+    path: "{{ k3s_server_token_file }}"
+  delegate_to: "{{ item }}"
+  loop: "{{ k3s_control_plane_nodes }}"
+  register: k3s_token_holders_found
+  run_once: true
+  ignore_unreachable: true
+
+- name: The token holders, control-1 first
+  ansible.builtin.set_fact:
+    k3s_token_holders: "{{ k3s_token_holders_found.results | selectattr('stat', 'defined') | selectattr('stat.exists') | map(attribute='item') | list }}"

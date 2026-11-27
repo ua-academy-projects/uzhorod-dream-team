@@ -1,0 +1,20 @@
+---
+
+
+- name: Validate the configuration (config.json), then an SSH key for the next minutes and your SSH config
+  hosts: localhost
+  gather_facts: false
+  any_errors_fatal: true
+  roles:
+    - citybikes.infra.config
+    - citybikes.infra.config_validate
+    - citybikes.infra.ssh_access
+    - citybikes.infra.ssh_config
+
+- name: The workers (the token from control-1; the control plane through the load balancer)
+  hosts: workers
+  gather_facts: false
+  become: true
+  roles:
+    - citybikes.infra.config
+    - citybikes.infra.k3s_worker

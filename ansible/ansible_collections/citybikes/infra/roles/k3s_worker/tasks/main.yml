@@ -1,0 +1,53 @@
+---
+
+- name: Some control plane node is in the cluster (the worker needs its token)
+  ansible.builtin.assert:
+    that: k3s_token_holders | length > 0
+    fail_msg: "No control plane node is in the cluster yet: run the control plane first (playbook k3s_control_plane)"
+    quiet: true
+
+
+- name: The cluster's token, from the first control plane node in the cluster
+  ansible.builtin.include_role:
+    name: citybikes.infra.k3s_common
+    tasks_from: token
+  vars:
+    k3s_token_source: "{{ k3s_token_holders | first }}"
+
+
+- name: The token in this worker's own file
+  ansible.builtin.copy:
+    content: "{{ k3s_cluster_token }}\n"
+    dest: "{{ k3s_token_file }}"
+    mode: "0600"
+  no_log: true
+  notify: Restart k3s-agent
+
+- name: The worker's configuration
+  ansible.builtin.template:
+    src: config.yaml.j2
+    dest: "{{ k3s_config_dir }}/config.yaml"
+    mode: "0600"
+  notify: Restart k3s-agent
+
+- name: k3s {{ k3s_version }} as an agent (the binary and its systemd unit; started below)
+  ansible.builtin.command:
+    argv: [sh, "{{ k3s_install_script }}"]
+  environment:
+    INSTALL_K3S_VERSION: "{{ k3s_version }}"
+    INSTALL_K3S_EXEC: agent
+    INSTALL_K3S_SKIP_START: "true"
+    K3S_URL: "https://{{ k3s_api_address }}:6443"
+    K3S_TOKEN_FILE: "{{ k3s_token_file }}"
+  when: k3s_version not in (k3s_installed.stdout | default(''))
+  changed_when: true
+  notify: Restart k3s-agent
+
+- name: Restarted now if anything above changed
+  ansible.builtin.meta: flush_handlers
+
+- name: k3s-agent runs and starts at boot (started again if it was stopped)
+  ansible.builtin.systemd_service:
+    name: k3s-agent
+    state: started
+    enabled: true

@@ -8,6 +8,7 @@ from unittest import mock
 
 import yaml
 
+# the plugin under test, loaded straight from its file (no package lookup: works with any sys.path)
 PLUGIN_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), *[".."] * 4, "plugins", "inventory", "gcp.py")
 spec = importlib.util.spec_from_file_location("gcp", PLUGIN_FILE)
 gcp = importlib.util.module_from_spec(spec)
@@ -22,11 +23,11 @@ CONFIG = {
     "database": {"type": "managed", "vm": "db"},
     "vms": {
         "defaults": {"size": "small", "disk_gb": 10, "cloud_logging": True, "permissions": ["write_logs"]},
-        "bastion": {"host": 201, "size": "micro"},
+        "bastion": {"ip_index": 201, "size": "micro"},
         "instances": {
-            "db": {"host": 50, "disk_gb": 20, "services": ["redis"], "permissions": ["read_images"]},
-            "ui": {"host": 53, "services": ["ui", "cloudflared"], "cloud_logging": False},
-            "fetcher": {"host": 51, "cloud": "aws", "services": ["fetcher"]},
+            "db": {"ip_index": 50, "disk_gb": 20, "services": ["redis"], "permissions": ["read_images"]},
+            "ui": {"ip_index": 53, "services": ["ui", "cloudflared"], "cloud_logging": False},
+            "fetcher": {"ip_index": 51, "cloud": "aws", "services": ["fetcher"]},
         },
     },
 }
@@ -67,6 +68,7 @@ def listed(vm, private_ip, public_ip=""):
 
 class DocumentationTests(unittest.TestCase):
     def test_the_documentation_is_yaml(self):
+        # Ansible parses it before it runs the plugin: broken YAML here means no inventory at all
         for doc in (gcp.DOCUMENTATION, gcp.EXAMPLES):
             yaml.safe_load(doc)
 
@@ -94,7 +96,7 @@ class SettingsTests(unittest.TestCase):
     def test_the_bastion_from_vms_bastion_in_this_cloud(self):
         bastion = gcp.vm_settings(CONFIG, "bastion")
         self.assertTrue(bastion["bastion"])
-        self.assertEqual((bastion["host"], bastion["size"], bastion["cloud"]), (201, "micro", "gcp"))
+        self.assertEqual((bastion["ip_index"], bastion["size"], bastion["cloud"]), (201, "micro", "gcp"))
         self.assertEqual((bastion["services"], bastion["permissions"]), ([], ["write_logs"]))
 
     def test_groups_by_what_runs(self):
@@ -104,10 +106,44 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(gcp.groups_of(CONFIG, "ui", settings["ui"]), ["app", "frontend"])
 
 
+class K3sTests(unittest.TestCase):
+    K3S = {"version": "v1", "api_nlb_ip_index": 60, "nginx_image": "nginx",
+           "nodes": {"control-1": {"role": "control_plane", "ip_index": 61, "size": "medium"}, "worker-1": {"role": "worker", "ip_index": 71}}}
+
+    def config(self, **k3s):
+        return dict(CONFIG, k3s=dict(self.K3S, **k3s))
+
+    def test_a_node_is_a_vm_with_its_role_the_k3s_cloud_and_no_secrets(self):
+        node = gcp.vm_settings(self.config(), "control-1")
+        self.assertEqual((node["k3s"], node["cloud"], node["size"], node["secrets"]), ("control_plane", "gcp", "medium", []))
+        self.assertEqual(gcp.vm_settings(self.config(), "worker-1")["size"], "small")   # vms.defaults
+
+    def test_control_plane_and_workers_apart_all_in_k3s(self):
+        config = self.config()
+        self.assertEqual(gcp.groups_of(config, "control-1", gcp.vm_settings(config, "control-1")), ["k3s", "control_plane"])
+        self.assertEqual(gcp.groups_of(config, "worker-1", gcp.vm_settings(config, "worker-1")), ["k3s", "workers"])
+
+    def test_the_nodes_are_expected_in_their_cloud(self):
+        self.assertIn("control-1", gcp.expected_vms(self.config()))
+        self.assertNotIn("control-1", gcp.expected_vms(self.config(cloud="aws")))
+        self.assertEqual(gcp.clouds_in_use(self.config(cloud="aws")), ["aws", "gcp"])
+
+    def test_the_nodes_are_listed_with_their_groups(self):
+        plugin = PluginTests().plugin({
+            "citybikes-control-1": listed("control-1", "10.20.0.61"),
+            "citybikes-worker-1": listed("worker-1", "10.20.0.71"),
+            "citybikes-bastion": listed("bastion", "10.20.0.201", "34.1.2.3"),
+        })
+        plugin._describe_vms(self.config(), "/repo/.ssh_known_hosts")
+        self.assertEqual(plugin.inventory.groups["control_plane"], ["citybikes-control-1"])
+        self.assertEqual(plugin.inventory.groups["workers"], ["citybikes-worker-1"])
+        self.assertEqual(plugin.inventory.hosts["citybikes-worker-1"].vars["ansible_host"], "10.20.0.71")
+
+
 class SwitchTests(unittest.TestCase):
     def config(self, queue, cache, database):
         config = dict(CONFIG, app={"queue_backend": queue, "cache_backend": cache}, database={"type": database, "vm": "db"})
-        config["vms"] = dict(CONFIG["vms"], instances=dict(CONFIG["vms"]["instances"], db={"host": 50, "services": ["redis", "rabbitmq"]}))
+        config["vms"] = dict(CONFIG["vms"], instances=dict(CONFIG["vms"]["instances"], db={"ip_index": 50, "services": ["redis", "rabbitmq"]}))
         return config
 
     def test_now_everything_runs(self):

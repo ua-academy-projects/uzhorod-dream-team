@@ -1,0 +1,12 @@
+node-ip: {{ private_ip }}
+tls-san:
+  - {{ k3s_api_address }}
+node-label:
+  - citybikes.io/role=control-plane
+# control plane only: no workload here (the cluster's own add-ons tolerate this taint)
+node-taint:
+  - CriticalAddonsOnly=true:NoExecute
+disable:
+  - traefik
+  - servicelb
+write-kubeconfig-mode: "0600"

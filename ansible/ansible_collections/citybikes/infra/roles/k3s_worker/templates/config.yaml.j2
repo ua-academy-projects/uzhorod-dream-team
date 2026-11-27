@@ -1,0 +1,6 @@
+
+token-file: {{ k3s_token_file }}
+server: https://{{ k3s_api_address }}:6443
+node-ip: {{ private_ip }}
+node-label:
+  - citybikes.io/role=worker

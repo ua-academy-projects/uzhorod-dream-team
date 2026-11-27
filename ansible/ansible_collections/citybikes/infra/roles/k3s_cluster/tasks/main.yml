@@ -1,0 +1,60 @@
+---
+
+
+- name: Every node of the inventory is Ready in the cluster
+  ansible.builtin.command:
+    argv: "{{ k3s_cluster_kubectl + ['get', 'node', item, '-o', 'jsonpath={.status.conditions[?(@.type==\"Ready\")].status}'] }}"
+  loop: "{{ k3s_cluster_nodes }}"
+  register: k3s_cluster_ready
+  until: k3s_cluster_ready.stdout == 'True'
+  retries: 30
+  delay: 10
+  changed_when: false
+  run_once: true
+
+- name: The workers show their role (node-role.kubernetes.io/worker; a node may not set it on itself)
+  ansible.builtin.command:
+    argv: "{{ k3s_cluster_kubectl + ['label', 'node', item, 'node-role.kubernetes.io/worker=true', '--overwrite'] }}"
+  loop: "{{ k3s_cluster_workers }}"
+  register: k3s_cluster_label
+  changed_when: "'not labeled' not in k3s_cluster_label.stdout"
+  run_once: true
+
+- name: The folder of our manifests
+  ansible.builtin.file:
+    path: "{{ k3s_cluster_manifests }}"
+    state: directory
+    mode: "0700"
+  run_once: true
+
+- name: The manifest of nginx on every worker
+  ansible.builtin.template:
+    src: nginx.yaml.j2
+    dest: "{{ k3s_cluster_manifests }}/nginx.yaml"
+    mode: "0600"
+  run_once: true
+
+- name: nginx in the cluster (applied every time, so whatever changed in the cluster comes back to the manifest)
+  ansible.builtin.command:
+    argv: "{{ k3s_cluster_kubectl + ['apply', '-f', k3s_cluster_manifests ~ '/nginx.yaml'] }}"
+  register: k3s_cluster_nginx
+  changed_when: k3s_cluster_nginx.stdout is search('created|configured')
+  run_once: true
+
+- name: nginx runs on every worker
+  ansible.builtin.command:
+    argv: "{{ k3s_cluster_kubectl + ['-n', 'edge', 'rollout', 'status', 'daemonset/nginx', '--timeout=300s'] }}"
+  changed_when: false
+  run_once: true
+
+- name: The cluster
+  ansible.builtin.command:
+    argv: "{{ k3s_cluster_kubectl + ['get', 'nodes,daemonsets,pods', '-A', '-o', 'wide'] }}"
+  register: k3s_cluster_state
+  changed_when: false
+  run_once: true
+
+- name: The cluster, as it is now
+  ansible.builtin.debug:
+    msg: "{{ k3s_cluster_state.stdout_lines }}"
+  run_once: true

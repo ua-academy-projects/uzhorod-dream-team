@@ -1,0 +1,23 @@
+---
+
+
+- name: Validate the configuration (config.json), then an SSH key for the next minutes and your SSH config
+  hosts: localhost
+  gather_facts: false
+  any_errors_fatal: true
+  roles:
+    - citybikes.infra.config
+    - citybikes.infra.config_validate
+    - citybikes.infra.ssh_access
+    - citybikes.infra.ssh_config
+
+- name: The control plane, one node after the other (control-1 starts the cluster, the others join it)
+  hosts: control_plane
+  serial: 1
+  order: sorted
+  gather_facts: false
+  become: true
+  any_errors_fatal: true
+  roles:
+    - citybikes.infra.config
+    - citybikes.infra.k3s_control_plane

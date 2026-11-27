@@ -1,0 +1,4 @@
+---
+
+dependencies:
+  - role: citybikes.infra.k3s_common

@@ -1,0 +1,91 @@
+---
+
+- name: This node holds the cluster's data already (a member needs no one to join)
+  ansible.builtin.stat:
+    path: /var/lib/rancher/k3s/server/db/etcd
+  register: k3s_member
+
+- name: The control plane node to join ("" = none is in the cluster yet)
+  ansible.builtin.set_fact:
+    k3s_join: "{{ (k3s_token_holders | reject('eq', inventory_hostname) | list + [''])[0] }}"
+  when: not k3s_member.stat.exists
+
+- name: Only control-1 may start a new cluster, and only while no control plane node is in one
+  ansible.builtin.assert:
+    that: k3s_member.stat.exists or k3s_join != '' or inventory_hostname == k3s_first_control_plane
+    fail_msg: >-
+      No control plane node is in the cluster yet: {{ k3s_first_control_plane }} starts it.
+      Run the control plane in order (playbook k3s_control_plane).
+    quiet: true
+
+- name: Joining the cluster
+  when: not k3s_member.stat.exists and k3s_join != ''
+  block:
+    - name: The node to join answers (its API, directly)
+      ansible.builtin.uri:
+        url: "https://{{ hostvars[k3s_join].private_ip }}:6443/cacerts"
+        validate_certs: false
+        timeout: 5
+      register: k3s_join_answers
+      until: k3s_join_answers.status == 200
+      retries: 12
+      delay: 5
+
+    - name: The cluster's token, from the node to join
+      ansible.builtin.include_role:
+        name: citybikes.infra.k3s_common
+        tasks_from: token
+      vars:
+        k3s_token_source: "{{ k3s_join }}"
+
+    - name: The token in this node's own file (read once, when it joins)
+      ansible.builtin.copy:
+        content: "{{ k3s_cluster_token }}\n"
+        dest: "{{ k3s_token_file }}"
+        mode: "0600"
+      no_log: true
+      notify: Restart k3s
+
+- name: How this node gets into the cluster (only before it is a member)
+  ansible.builtin.template:
+    src: join.yaml.j2
+    dest: "{{ k3s_config_dir }}/config.yaml.d/10-join.yaml"
+    mode: "0600"
+  when: not k3s_member.stat.exists
+  notify: Restart k3s
+
+- name: The control plane node's configuration
+  ansible.builtin.template:
+    src: config.yaml.j2
+    dest: "{{ k3s_config_dir }}/config.yaml"
+    mode: "0600"
+  notify: Restart k3s
+
+- name: k3s {{ k3s_version }} as a server (the binary and its systemd unit; started below)
+  ansible.builtin.command:
+    argv: [sh, "{{ k3s_install_script }}"]
+  environment:
+    INSTALL_K3S_VERSION: "{{ k3s_version }}"
+    INSTALL_K3S_EXEC: server
+    INSTALL_K3S_SKIP_START: "true"
+  when: k3s_version not in (k3s_installed.stdout | default(''))
+  changed_when: true
+  notify: Restart k3s
+
+- name: Restarted now if anything above changed
+  ansible.builtin.meta: flush_handlers
+
+- name: k3s runs and starts at boot (started again if it was stopped)
+  ansible.builtin.systemd_service:
+    name: k3s
+    state: started
+    enabled: true
+
+- name: This node is Ready in the cluster
+  ansible.builtin.command:
+    argv: [/usr/local/bin/k3s, kubectl, get, node, "{{ inventory_hostname }}", -o, 'jsonpath={.status.conditions[?(@.type=="Ready")].status}']
+  register: k3s_ready
+  until: k3s_ready.stdout == 'True'
+  retries: 30
+  delay: 10
+  changed_when: false

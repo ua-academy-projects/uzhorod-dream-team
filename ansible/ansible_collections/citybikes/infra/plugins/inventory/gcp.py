@@ -19,6 +19,8 @@ description:
     only through the checked bastion, over the cloud's private network, and change with every new VM.
   - For every host and for localhost it sets C(citybikes_config_file), the path of config.json. The role
     config_validate loads it with include_vars. 
+  - The nodes of the k3s cluster (C(k3s.nodes), in C(k3s.cloud) or C(default_cloud)) are in the group C(k3s), and
+    by their role also in C(control_plane) or C(workers).
   - C(citybikes_vm) has the switches applied (only the services that run, postgres on database.vm while
     database.type is vm). And C(citybikes_vms_expected) lists the VMs that must exist in GCP (its bastion, and
     every VM there that runs something).
@@ -81,11 +83,24 @@ def gcp_compute_settings(project, credentials_file):
 CLOUD = "gcp"  # the cloud whose VMs this plugin lists
 
 
+def k3s_nodes(config):
+    """The nodes of the k3s cluster (config.json k3s.nodes): name => node."""
+    return (config.get("k3s") or {}).get("nodes", {})
+
+
+def k3s_cloud(config):
+    """The cloud of the k3s nodes: k3s.cloud, else default_cloud."""
+    return (config.get("k3s") or {}).get("cloud") or config["default_cloud"]
+
+
 def clouds_in_use(config):
-    """The clouds where something is built: default_cloud and the cloud of every VM. Terraform's rule: each gets a
-    network, and so a bastion."""
+    """The clouds where something is built: default_cloud, the cloud of every VM and the cloud of the k3s nodes.
+    Terraform's rule: each gets a network, and so a bastion."""
     default = config["default_cloud"]
-    return sorted({default} | {vm.get("cloud", default) for vm in config["vms"]["instances"].values()})
+    clouds = {default} | {vm.get("cloud", default) for vm in config["vms"]["instances"].values()}
+    if k3s_nodes(config):
+        clouds.add(k3s_cloud(config))
+    return sorted(clouds)
 
 
 def running_services(config, name, services):
@@ -102,10 +117,15 @@ def running_services(config, name, services):
 def vm_settings(config, name, cloud=CLOUD):
     """A VM of config.json with vms.defaults filled in (its own values replace the defaults, its permissions are
     added) and the switches applied (only the services that run; the VM with postgres reads db-password).
-    "bastion" is the bastion of the given cloud, from vms.bastion (it is not one of vms.instances)."""
+    "bastion" is the bastion of the given cloud, from vms.bastion (it is not one of vms.instances). A k3s node
+    (k3s.nodes) is a VM too: its role in k3s (control_plane or worker), its cloud the k3s cloud, no secrets (the
+    cluster's token comes from the first control plane node)."""
     defaults = config["vms"]["defaults"]
     if name == "bastion":
         vm = dict(config["vms"]["bastion"], bastion=True, cloud=cloud)
+    elif name in k3s_nodes(config):
+        node = dict(k3s_nodes(config)[name])
+        vm = dict(node, k3s=node.pop("role"), cloud=k3s_cloud(config), secrets=[])
     else:
         vm = config["vms"]["instances"][name]
     settings = {"bastion": False, "services": [], "secrets": [], "cloud": config["default_cloud"]}
@@ -126,6 +146,8 @@ def expected_vms(config, cloud=CLOUD):
         vm = vm_settings(config, name, cloud)
         if vm["cloud"] == cloud and vm["services"]:
             expected.append(name)
+    if k3s_cloud(config) == cloud:
+        expected += list(k3s_nodes(config))
     return sorted(expected)
 
 
@@ -139,6 +161,9 @@ def groups_of(config, name, vm):
     tls = config.get("tls", {})
     if tls.get("domain") and name == tls.get("vm"):
         groups.append("frontend") 
+    # the k3s cluster: every node, and its control plane apart from its workers
+    if vm.get("k3s"):
+        groups += ["k3s", {"control_plane": "control_plane", "worker": "workers"}[vm["k3s"]]]
     return groups
 
 
@@ -211,6 +236,8 @@ class InventoryModule(BaseInventoryPlugin):
     def _describe_vms(self, config, known_hosts):
         """Groups, settings and connection of every VM that config.json puts in GCP and that exists there."""
         ours = [name for name in config["vms"]["instances"] if vm_settings(config, name)["cloud"] == CLOUD]
+        if k3s_cloud(config) == CLOUD:
+            ours += list(k3s_nodes(config))
         if CLOUD in clouds_in_use(config):
             ours.append("bastion")
 

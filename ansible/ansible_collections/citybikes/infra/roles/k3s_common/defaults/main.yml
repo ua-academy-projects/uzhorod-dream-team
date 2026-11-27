@@ -1,0 +1,15 @@
+---
+
+k3s_version: "{{ config_json.k3s.version }}"
+k3s_subnet: "{{ config_json.clouds[citybikes_vm.cloud].network.subnet_cidr }}"
+k3s_api_address: "{{ k3s_subnet | ansible.utils.nthhost(config_json.k3s.api_nlb_ip_index) }}"
+
+k3s_config_dir: /etc/rancher/k3s
+k3s_install_script: /usr/local/bin/k3s-install.sh
+k3s_install_url: "https://raw.githubusercontent.com/k3s-io/k3s/{{ k3s_version | urlencode }}/install.sh"
+
+k3s_server_token_file: /var/lib/rancher/k3s/server/token
+k3s_token_file: "{{ k3s_config_dir }}/token"
+
+k3s_control_plane_nodes: "{{ groups['control_plane'] | default([]) | sort }}"
+k3s_first_control_plane: "{{ k3s_control_plane_nodes | first }}"

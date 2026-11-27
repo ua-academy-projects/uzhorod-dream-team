@@ -1,0 +1,13 @@
+---
+
+- name: The cluster's token, from a control plane node in the cluster
+  ansible.builtin.slurp:
+    src: "{{ k3s_server_token_file }}"
+  delegate_to: "{{ k3s_token_source }}"
+  register: k3s_token_read
+  no_log: true
+
+- name: The cluster's token, kept for this node
+  ansible.builtin.set_fact:
+    k3s_cluster_token: "{{ k3s_token_read.content | b64decode | trim }}"
+  no_log: true
