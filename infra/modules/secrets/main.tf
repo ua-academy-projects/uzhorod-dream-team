@@ -15,7 +15,6 @@ locals {
       }
     ],
     [for cloud in local.clouds : { name = "bastion", cloud = cloud, secrets = local.bastion_secrets }],
-    [for name in keys(local.k3s_nodes) : { name = name, cloud = local.k3s_cloud, secrets = ["k3s-token"] }],
   )
 
   by_cloud = {

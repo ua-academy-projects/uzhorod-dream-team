@@ -16,9 +16,9 @@ variable "config" {
   })
 
   validation {
-    # the control plane: 1, 3, 5... servers (etcd keeps a majority)
-    condition     = length(try(var.config.k3s.nodes, {})) == 0 ? true : length([for node in values(var.config.k3s.nodes) : node if node.role == "server"]) % 2 == 1
-    error_message = "config.json: k3s.nodes needs an odd number of servers (1, 3, 5: etcd keeps a majority)."
+    # the control plane: 1, 3, 5... nodes (etcd keeps a majority)
+    condition     = length(try(var.config.k3s.nodes, {})) == 0 ? true : length([for node in values(var.config.k3s.nodes) : node if node.role == "control_plane"]) % 2 == 1
+    error_message = "config.json: k3s.nodes needs an odd number of control_plane nodes (1, 3, 5: etcd keeps a majority)."
   }
 
   validation {

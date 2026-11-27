@@ -1,6 +1,6 @@
 locals {
   name = "${var.config.prefix}-k3s"
-  tag  = "k3s"
+  tag  = "k3s" 
 }
 
 resource "google_compute_address" "api" {
@@ -11,11 +11,11 @@ resource "google_compute_address" "api" {
   address      = cidrhost(var.subnet_cidr, var.api_nlb_ip_index)
 }
 
-resource "google_compute_instance_group" "servers" {
-  name      = "${local.name}-servers"
+resource "google_compute_instance_group" "control_plane" {
+  name      = "${local.name}-control-plane"
   zone      = var.zone
   network   = var.network_id
-  instances = values(var.servers)
+  instances = values(var.control_plane)
 }
 
 resource "google_compute_region_health_check" "api" {
@@ -35,7 +35,7 @@ resource "google_compute_region_backend_service" "api" {
   health_checks         = [google_compute_region_health_check.api.id]
 
   backend {
-    group          = google_compute_instance_group.servers.id
+    group          = google_compute_instance_group.control_plane.id
     balancing_mode = "CONNECTION"
   }
 }

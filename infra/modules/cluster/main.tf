@@ -1,8 +1,9 @@
+
 locals {
-  nodes   = try(var.config.k3s.nodes, {})
-  servers = sort([for name, node in local.nodes : name if node.role == "server"])
-  cloud   = length(local.nodes) > 0 ? coalesce(var.config.k3s.cloud, var.config.default_cloud) : null
-  clouds  = var.config.clouds
+  nodes         = try(var.config.k3s.nodes, {})
+  control_plane = sort([for name, node in local.nodes : name if node.role == "control_plane"])
+  cloud         = length(local.nodes) > 0 ? coalesce(var.config.k3s.cloud, var.config.default_cloud) : null
+  clouds        = var.config.clouds
 }
 
 module "gcp" {
@@ -16,6 +17,5 @@ module "gcp" {
   network_id       = var.networks.gcp.network_id
   subnet_id        = var.networks.gcp.subnet_id
   api_nlb_ip_index = var.config.k3s.api_nlb_ip_index
-  servers          = { for name in local.servers : name => var.instances[name].id }
+  control_plane    = { for name in local.control_plane : name => var.instances[name].id }
 }
-

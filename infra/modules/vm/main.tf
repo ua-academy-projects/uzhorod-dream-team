@@ -46,7 +46,7 @@ locals {
         os          = node.os
         permissions = tolist([])
         k3s         = node.role
-        secrets     = ["k3s-token"]
+        secrets     = tolist([])
       }
     },
     {

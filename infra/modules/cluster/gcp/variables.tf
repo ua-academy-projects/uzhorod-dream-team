@@ -31,7 +31,7 @@ variable "api_nlb_ip_index" {
   type        = number
 }
 
-variable "servers" {
-  description = "server name => its instance (self link)"
+variable "control_plane" {
+  description = "control plane node name => its instance (self link)"
   type        = map(string)
 }

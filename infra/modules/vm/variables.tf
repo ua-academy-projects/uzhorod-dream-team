@@ -87,8 +87,8 @@ variable "config" {
   }
 
   validation {
-    condition     = alltrue([for node in values(try(var.config.k3s.nodes, {})) : contains(["server", "agent"], node.role)])
-    error_message = "config.json: a k3s node's role is \"server\" (control plane) or \"agent\" (worker)."
+    condition     = alltrue([for node in values(try(var.config.k3s.nodes, {})) : contains(["control_plane", "worker"], node.role)])
+    error_message = "config.json: a k3s node's role is \"control_plane\" or \"worker\"."
   }
 
   validation {
