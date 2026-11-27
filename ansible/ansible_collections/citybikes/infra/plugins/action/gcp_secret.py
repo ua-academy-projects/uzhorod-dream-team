@@ -1,16 +1,17 @@
 # -*- coding: utf-8 -*-
 """Action plugin citybikes.infra.gcp_secret: the value of a secret in Secret Manager.
-A wrapper around google.cloud.gcp_secret_manager (it compares with the latest version and adds a new one only
-when the value differs); this plugin adds who we are (the key, its project) and refuses to CREATE a secret:
-the secrets themselves are made elsewhere, only their values are ours."""
+Straight from the Secret Manager API (google-auth + requests), with the key of infra/bootstrap: it compares the
+value with the latest version and adds a new version only when it differs. It never CREATES a secret: Terraform
+makes them (empty), only their values are ours. A secret with no version yet simply has no value yet."""
 
+import base64
 import json
 import os
 
 from ansible.errors import AnsibleActionFail
 from ansible.plugins.action import ActionBase
 
-SECRET_URL = "https://secretmanager.googleapis.com/v1/projects/{project}/secrets/{name}"
+API = "https://secretmanager.googleapis.com/v1/projects/{project}/secrets/{name}"
 
 
 def credentials_file():
@@ -27,17 +28,45 @@ def project_of(credentials):
         return json.load(f)["project_id"]
 
 
-def secret_exists(project, name, credentials):
+def session_for(credentials):
     from google.auth.transport.requests import AuthorizedSession
     from google.oauth2 import service_account
 
-    session = AuthorizedSession(service_account.Credentials.from_service_account_file(
+    return AuthorizedSession(service_account.Credentials.from_service_account_file(
         credentials, scopes=["https://www.googleapis.com/auth/cloud-platform"]))
-    response = session.get(SECRET_URL.format(project=project, name=name))
+
+
+def error_of(response):
+    """GCP's own message, never the request (it may hold the value)."""
+    try:
+        return response.json()["error"]["message"]
+    except (ValueError, KeyError, TypeError):
+        return "HTTP %s" % response.status_code
+
+
+def latest_value(session, secret_url):
+    """The value of the latest version, or None when there is none yet (no version, or the latest one disabled
+    or destroyed). A missing secret is an error: Terraform makes the secrets."""
+    response = session.get(secret_url)
     if response.status_code == 404:
-        return False
-    response.raise_for_status()
-    return True
+        raise AnsibleActionFail("The secret %s does not exist: make it with the infrastructure first (terraform apply)"
+                                % secret_url.rsplit("/", 1)[1])
+    if not response.ok:
+        raise AnsibleActionFail(error_of(response))
+
+    response = session.get(secret_url + "/versions/latest:access")
+    if response.status_code in (404, 400):  # 404: no version yet; 400 FAILED_PRECONDITION: latest disabled/destroyed
+        return None
+    if not response.ok:
+        raise AnsibleActionFail(error_of(response))
+    return base64.b64decode(response.json()["payload"]["data"]).decode("utf-8")
+
+
+def add_version(session, secret_url, value):
+    payload = {"payload": {"data": base64.b64encode(value.encode("utf-8")).decode("ascii")}}
+    response = session.post(secret_url + ":addVersion", json=payload)
+    if not response.ok:
+        raise AnsibleActionFail(error_of(response))
 
 
 class ActionModule(ActionBase):
@@ -51,26 +80,13 @@ class ActionModule(ActionBase):
         ))
 
         credentials = credentials_file()
-        project = project_of(credentials)
-        if not secret_exists(project, args["name"], credentials):
-            raise AnsibleActionFail("the secret %s does not exist in the project %s" % (args["name"], project))
+        secret_url = API.format(project=project_of(credentials), name=args["name"])
+        session = session_for(credentials)
 
-        module_result = self._execute_module(
-            module_name="google.cloud.gcp_secret_manager",
-            module_args=dict(
-                name=args["name"],
-                value=args["value"],
-                state="present",
-                return_value=False,  # the value never comes back
-                project=project,
-                auth_kind="serviceaccount",
-                service_account_file=credentials,
-            ),
-            task_vars=task_vars,
-        )
-        # only what says what happened: never the value, never the module's arguments
-        for key in ("changed", "failed", "skipped", "msg"):
-            if key in module_result:
-                result[key] = module_result[key]
-        result["name"] = args["name"]
+        changed = latest_value(session, secret_url) != args["value"]
+        if changed and not self._play_context.check_mode:
+            add_version(session, secret_url, args["value"])
+
+        # only what says what happened: never the value
+        result.update(changed=changed, name=args["name"])
         return result

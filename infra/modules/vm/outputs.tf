@@ -22,3 +22,11 @@ output "ssh" {
     ) if !local.vms[key].bastion
   }
 }
+
+output "instances" {
+  description = "VM name => { cloud, id, internal_ip }, the bastions left out: for the layers built on the VMs (the k3s cluster)"
+  value = {
+    for key, vm in local.built : local.vms[key].name => { cloud = local.vms[key].cloud, id = vm.id, internal_ip = vm.internal_ip }
+    if !local.vms[key].bastion
+  }
+}

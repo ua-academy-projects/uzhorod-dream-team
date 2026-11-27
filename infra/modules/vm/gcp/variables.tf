@@ -14,7 +14,7 @@ variable "name" {
 variable "vm" {
   description = "This VM in GCP's names (modules/vm): machine type, disk, image, project roles"
   type = object({
-    host      = number
+    ip_index  = number
     bastion   = bool
     tailscale = bool
     size      = string
@@ -34,7 +34,7 @@ variable "zone" {
 }
 
 variable "subnet_cidr" {
-  description = "The VMs' subnet in GCP: the VM's IP is it + vm.host"
+  description = "The VMs' subnet in GCP: the VM's IP is it + vm.ip_index"
   type        = string
 }
 

@@ -3,6 +3,11 @@ output "identity" {
   value       = google_service_account.vm.email
 }
 
+output "id" {
+  description = "The instance, for the layers built on it (its self link)"
+  value       = google_compute_instance.vm.self_link
+}
+
 output "internal_ip" {
   value = google_compute_address.internal.address
 }

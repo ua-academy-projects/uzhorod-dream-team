@@ -1,5 +1,11 @@
 ---
 
+- name: Every service of this VM has its image tag (images.<service> in config.json)
+  ansible.builtin.assert:
+    that: compose_images_missing | length == 0
+    fail_msg: "config.json: images needs a tag for {{ compose_images_missing | join(', ') }}"
+    quiet: true
+
 - name: The containers' secrets may be read by this VM (vms.<name>.secrets in config.json)
   ansible.builtin.assert:
     that: compose_secrets_missing | length == 0
@@ -12,16 +18,10 @@
     state: directory
     mode: "0755"
 
-- name: The code of this VM's services (services/<name>/ of the repository; nothing else)
-  ansible.posix.synchronize:
-    src: "{{ compose_repo }}/services/"
-    dest: "{{ compose_dir }}/services/"
-    delete: true
-    owner: false
-    group: false
-    use_ssh_args: true
-    rsync_opts: "{{ compose_sync_filters }}"
-  register: compose_code
+- name: No code on the VM any more (the images come built from the registry)
+  ansible.builtin.file:
+    path: "{{ compose_dir }}/services"
+    state: absent
 
 - name: The compose file of this VM (compose.yaml)
   ansible.builtin.template:
@@ -53,15 +53,26 @@
     path: "{{ compose_dir }}/.env"
     state: absent
 
-- name: The images of the code that changed
-  ansible.builtin.command:
-    cmd: docker compose build
-    chdir: "{{ compose_dir }}"
-  when: compose_code is changed
-  changed_when: true
+- name: The images of this VM, from the registry of its cloud
+  block:
+    - name: Docker logged in to the registry, for the moment of the pull
+      ansible.builtin.include_tasks: "registry_login_{{ compose_cloud }}.yml"
+
+    - name: The images that are not here yet (a tag never changes its image, so a present one is the right one)
+      ansible.builtin.command:
+        cmd: docker compose pull --policy missing
+        chdir: "{{ compose_dir }}"
+      register: compose_pull
+      changed_when: compose_pull.stderr is search('Pulled')
+
+  always:
+    - name: Docker logged out again
+      ansible.builtin.command:
+        argv: [docker, logout, "{{ compose_registry_host }}"]
+      changed_when: false
+      failed_when: false
 
 - name: The containers (the secrets are read now; a container is recreated only when its image or settings changed)
   ansible.builtin.command: "{{ compose_dir }}/up.sh"
   register: compose_up
   changed_when: compose_up.stderr is search('Recreated|Created|Started|Removed')
-  

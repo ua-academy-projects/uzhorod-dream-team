@@ -1,8 +1,9 @@
 locals {
   postgres_vm = var.config.database.type == "vm" ? var.config.database.vm : ""
 
-
-  clouds          = distinct(concat([var.config.default_cloud], [for vm in values(var.config.vms.instances) : coalesce(vm.cloud, var.config.default_cloud)]))
+  k3s_nodes       = try(var.config.k3s.nodes, {})
+  k3s_cloud       = length(local.k3s_nodes) > 0 ? coalesce(var.config.k3s.cloud, var.config.default_cloud) : null
+  clouds          = distinct(concat([var.config.default_cloud], [for vm in values(var.config.vms.instances) : coalesce(vm.cloud, var.config.default_cloud)], local.k3s_cloud == null ? [] : [local.k3s_cloud]))
   bastion_secrets = concat(["ssh-host-key"], length(local.clouds) > 1 ? ["tailscale-auth-key"] : [])
 
   readers = concat(
@@ -14,6 +15,7 @@ locals {
       }
     ],
     [for cloud in local.clouds : { name = "bastion", cloud = cloud, secrets = local.bastion_secrets }],
+    [for name in keys(local.k3s_nodes) : { name = name, cloud = local.k3s_cloud, secrets = ["k3s-token"] }],
   )
 
   by_cloud = {

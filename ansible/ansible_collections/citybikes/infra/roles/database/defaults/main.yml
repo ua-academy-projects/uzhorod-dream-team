@@ -1,11 +1,14 @@
 ---
 
 database_type: "{{ config_json.database.type }}"
+database_managed_cloud: "{{ config_json.default_cloud }}"
+database_cloudsql: "{{ database_type == 'managed' and database_managed_cloud == 'gcp' }}"
 database_cloudsql_instance: "{{ config_json.prefix }}-pg"
 
-database_vms: "{{ groups['all'] | map('extract', hostvars) | selectattr('citybikes_vm.services', 'contains', 'postgres') | list }}"
+database_vms: "{{ groups['all'] | map('extract', hostvars) | selectattr('citybikes_vm', 'defined') | selectattr('citybikes_vm.services', 'contains', 'postgres') | list }}"
 
 database_host: >-
-  {{ database_cloudsql.private_ip if database_type == 'cloudsql'
-     else database_vms | map(attribute='private_ip') | first | default('') }}
-database_sslmode: "{{ 'require' if database_type == 'cloudsql' else 'disable' }}"
+  {{ database_cloudsql_found.private_ip if database_cloudsql | bool
+     else database_vms | map(attribute='private_ip') | first | default('') if database_type == 'vm'
+     else '' }}
+database_sslmode: "{{ 'require' if database_type == 'managed' else 'disable' }}"

@@ -8,7 +8,6 @@ from unittest import mock
 
 import yaml
 
-# the plugin under test, loaded straight from its file (no package lookup: works with any sys.path)
 PLUGIN_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), *[".."] * 4, "plugins", "inventory", "gcp.py")
 spec = importlib.util.spec_from_file_location("gcp", PLUGIN_FILE)
 gcp = importlib.util.module_from_spec(spec)
@@ -65,10 +64,12 @@ def listed(vm, private_ip, public_ip=""):
     """A host as gcp_compute adds it (the variables of our "compose")."""
     return {"vm": vm, "private_ip": private_ip, "public_ip": public_ip}
 
+
 class DocumentationTests(unittest.TestCase):
     def test_the_documentation_is_yaml(self):
         for doc in (gcp.DOCUMENTATION, gcp.EXAMPLES):
             yaml.safe_load(doc)
+
 
 class SettingsTests(unittest.TestCase):
     def test_gcp_compute_lists_only_our_vms_with_the_key(self):
@@ -131,25 +132,34 @@ class SwitchTests(unittest.TestCase):
 
 class ConnectionTests(unittest.TestCase):
     KEY = "-o IdentityFile=" + os.path.expanduser("~/.ssh/access.pub")
+    KNOWN = "/repo/.ssh_known_hosts"
 
-    def test_the_bastion_directly_on_its_port_with_the_key_of_this_run(self):
-        c = gcp.connection(CONFIG["ssh"], {"bastion": True}, "10.20.0.54", "34.1.2.3")
+    def connect(self, bastion, ip):
+        return gcp.connection(CONFIG["ssh"], {"bastion": bastion}, ip, "34.1.2.3", self.KNOWN, "citybikes-bastion")
+
+    def test_the_bastion_directly_on_its_port_its_host_key_checked_by_name(self):
+        c = self.connect(True, "10.20.0.201")
         self.assertEqual((c["ansible_host"], c["ansible_port"]), ("34.1.2.3", 505))
-        self.assertNotIn("ansible_ssh_private_key_file", c) 
-        self.assertIn(self.KEY, c["ansible_ssh_common_args"])
-        self.assertIn("-o IdentitiesOnly=yes", c["ansible_ssh_common_args"])
-        self.assertNotIn("ProxyCommand", c["ansible_ssh_common_args"])
-
-    def test_the_others_through_the_bastion_with_the_same_key(self):
-        c = gcp.connection(CONFIG["ssh"], {"bastion": False}, "10.20.0.50", "34.1.2.3")
-        self.assertEqual(c["ansible_host"], "10.20.0.50")
-        self.assertNotIn("ansible_port", c)  
         self.assertNotIn("ansible_ssh_private_key_file", c)
         args = c["ansible_ssh_common_args"]
-        self.assertEqual(args.count(self.KEY), 2) 
+        self.assertIn(self.KEY, args)
+        self.assertIn("-o IdentitiesOnly=yes", args)
+        self.assertIn("-o StrictHostKeyChecking=yes -o UserKnownHostsFile=/repo/.ssh_known_hosts -o HostKeyAlias=citybikes-bastion", args)
+        self.assertNotIn("ProxyCommand", args)
+
+    def test_the_others_through_the_checked_bastion_their_own_keys_not_checked(self):
+        c = self.connect(False, "10.20.0.50")
+        self.assertEqual(c["ansible_host"], "10.20.0.50")
+        self.assertNotIn("ansible_port", c)
+        self.assertNotIn("ansible_ssh_private_key_file", c)
+        args = c["ansible_ssh_common_args"]
+        self.assertEqual(args.count(self.KEY), 2)
         self.assertIn('ProxyCommand="ssh -W %h:%p -q -p 505', args)
         self.assertIn("citybikes@34.1.2.3", args)
-        self.assertNotIn("ForwardAgent", args) 
+        self.assertNotIn("ForwardAgent", args)
+        self.assertIn("-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null", args)   # the VM
+        self.assertIn("HostKeyAlias=citybikes-bastion", args.split("ProxyCommand=")[1])      # the jump
+        self.assertNotIn("accept-new", args)
 
 
 class PluginTests(unittest.TestCase):
@@ -178,7 +188,7 @@ class PluginTests(unittest.TestCase):
             "citybikes-ui": listed("ui", "10.20.0.53"),
             "citybikes-bastion": listed("bastion", "10.20.0.201", "34.1.2.3"),
         })
-        plugin._describe_vms(CONFIG)
+        plugin._describe_vms(CONFIG, "/repo/.ssh_known_hosts")
         inv = plugin.inventory
         self.assertEqual(inv.groups, {"app": ["citybikes-db", "citybikes-ui"], "frontend": ["citybikes-ui"], "bastion": ["citybikes-bastion"]})
         db = inv.hosts["citybikes-db"].vars
@@ -195,13 +205,13 @@ class PluginTests(unittest.TestCase):
             "citybikes-bastion": listed("bastion", "10.20.0.201", "34.1.2.3"),
         })
         with mock.patch.object(gcp.display, "warning") as warning:
-            plugin._describe_vms(CONFIG)
+            plugin._describe_vms(CONFIG, "/repo/.ssh_known_hosts")
         self.assertNotIn("citybikes_vm", plugin.inventory.hosts["citybikes-fetcher"].vars)
         self.assertIn("vm=fetcher", warning.call_args[0][0])
 
     def test_no_bastion_in_gcp_no_connection(self):
         plugin = self.plugin({"citybikes-db": listed("db", "10.20.0.50")})
-        plugin._describe_vms(CONFIG)
+        plugin._describe_vms(CONFIG, "/repo/.ssh_known_hosts")
         self.assertNotIn("ansible_host", plugin.inventory.hosts["citybikes-db"].vars)
         self.assertIn("citybikes_vm", plugin.inventory.hosts["citybikes-db"].vars)
 

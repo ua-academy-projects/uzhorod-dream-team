@@ -25,3 +25,8 @@ output "dashboard_url" {
   description = "The CityBikes overview dashboard"
   value       = module.monitoring.dashboard_url
 }
+
+output "cluster_api" {
+  description = "The private address of the k3s API (the internal load balancer, port 6443)"
+  value       = module.cluster.api_address
+}

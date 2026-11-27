@@ -9,6 +9,10 @@ variable "config" {
         secrets = optional(list(string), [])
       }))
     })
+    k3s = optional(object({
+      cloud = optional(string)
+      nodes = map(object({}))
+    }))
     database = object({
       type = string
       vm   = string

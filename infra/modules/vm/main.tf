@@ -4,9 +4,14 @@ locals {
 
   postgres_vm = var.config.database.type == "vm" ? var.config.database.vm : ""
 
-  bastion_clouds  = keys(var.networks)
-  tailscale       = length(local.bastion_clouds) > 1
+  bastion_clouds = keys(var.networks)
+  tailscale      = length(local.bastion_clouds) > 1
+
   bastion_secrets = concat(["ssh-host-key"], local.tailscale ? ["tailscale-auth-key"] : [])
+
+
+  k3s_nodes = try(var.config.k3s.nodes, {})
+  k3s_cloud = length(local.k3s_nodes) > 0 ? coalesce(var.config.k3s.cloud, var.config.default_cloud) : null
 
   peers = {
     for cloud in local.bastion_clouds : cloud => [for other in local.bastion_clouds : local.clouds[other].network.subnet_cidr if other != cloud]
@@ -17,27 +22,45 @@ locals {
       for name, vm in var.config.vms.instances : "${coalesce(vm.cloud, var.config.default_cloud)}/${name}" => {
         name        = name
         cloud       = coalesce(vm.cloud, var.config.default_cloud)
-        host        = vm.host
+        ip_index    = vm.ip_index
         bastion     = false
         size        = vm.size
         disk_type   = vm.disk_type
         disk_gb     = vm.disk_gb
         os          = vm.os
         permissions = vm.permissions
-        secrets     = distinct(concat(vm.secrets, name == local.postgres_vm ? ["db-password"] : []))
+        k3s         = null
+
+        secrets = distinct(concat(vm.secrets, name == local.postgres_vm ? ["db-password"] : []))
+      }
+    },
+    {
+      for name, node in local.k3s_nodes : "${local.k3s_cloud}/${name}" => {
+        name        = name
+        cloud       = local.k3s_cloud
+        ip_index    = node.ip_index
+        bastion     = false
+        size        = node.size
+        disk_type   = node.disk_type
+        disk_gb     = node.disk_gb
+        os          = node.os
+        permissions = tolist([])
+        k3s         = node.role
+        secrets     = ["k3s-token"]
       }
     },
     {
       for cloud in local.bastion_clouds : "${cloud}/bastion" => {
         name        = "bastion"
         cloud       = cloud
-        host        = var.config.vms.bastion.host
+        ip_index    = var.config.vms.bastion.ip_index
         bastion     = true
         size        = var.config.vms.bastion.size
         disk_type   = var.config.vms.bastion.disk_type
         disk_gb     = var.config.vms.bastion.disk_gb
         os          = var.config.vms.bastion.os
         permissions = tolist([])
+        k3s         = null
         secrets     = local.bastion_secrets
       }
     },
@@ -47,7 +70,7 @@ locals {
     for key, vm in local.placed : key => {
       name      = vm.name
       cloud     = vm.cloud
-      host      = vm.host
+      ip_index  = vm.ip_index
       bastion   = vm.bastion
       tailscale = vm.bastion && local.tailscale
       size      = local.clouds[vm.cloud].vms.sizes[coalesce(vm.size, local.defaults.size)]
@@ -56,6 +79,7 @@ locals {
       image     = local.clouds[vm.cloud].vms.os[coalesce(vm.os, local.defaults.os)]
       roles     = distinct([for permission in concat(local.defaults.permissions, vm.permissions) : local.clouds[vm.cloud].iam.permissions[permission]])
       secrets   = vm.secrets
+      k3s       = vm.k3s
     }
   }
 }
@@ -72,9 +96,10 @@ module "gcp" {
   subnet_cidr = local.clouds.gcp.network.subnet_cidr
   network_id  = var.networks.gcp.network_id
   subnet_id   = var.networks.gcp.subnet_id
-  firewall    = var.networks.gcp.firewall[each.value.bastion ? "bastion" : "vm"]
-  secret_ids  = { for secret in each.value.secrets : secret => var.secrets.gcp[secret] }
-  peer_cidrs  = local.peers.gcp
+
+  firewall   = concat(var.networks.gcp.firewall[each.value.bastion ? "bastion" : "vm"], each.value.k3s != null ? ["k3s"] : [])
+  secret_ids = { for secret in each.value.secrets : secret => var.secrets.gcp[secret] }
+  peer_cidrs = local.peers.gcp
 }
 
 module "aws" {

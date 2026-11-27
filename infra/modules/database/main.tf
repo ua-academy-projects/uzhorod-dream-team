@@ -3,7 +3,7 @@ locals {
   tables  = var.config.clouds[local.cloud]
   managed = var.config.database.type == "managed"
 
-  postgres_vm = var.config.vms.instances[var.config.database.vm]
+  postgres_vm = var.config.database.vm == "" ? null : var.config.vms.instances[var.config.database.vm]
 }
 
 module "gcp" {

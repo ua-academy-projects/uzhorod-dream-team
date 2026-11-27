@@ -29,3 +29,10 @@ module "monitoring" {
   source = "../../modules/monitoring"
   config = jsondecode(file("${path.module}/../../config.json"))
 }
+
+module "cluster" {
+  source    = "../../modules/cluster"
+  config    = jsondecode(file("${path.module}/../../config.json"))
+  networks  = module.network.by_cloud
+  instances = module.vm.instances
+}

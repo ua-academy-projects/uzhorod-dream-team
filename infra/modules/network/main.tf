@@ -1,6 +1,10 @@
+
+
 locals {
-  clouds = distinct(concat([var.config.default_cloud], [for vm in values(var.config.vms.instances) : coalesce(vm.cloud, var.config.default_cloud)]))
-  aws    = var.config.clouds.aws
+  k3s_clouds = length(try(var.config.k3s.nodes, {})) > 0 ? [coalesce(var.config.k3s.cloud, var.config.default_cloud)] : []
+  clouds     = distinct(concat([var.config.default_cloud], [for vm in values(var.config.vms.instances) : coalesce(vm.cloud, var.config.default_cloud)], local.k3s_clouds))
+  aws        = var.config.clouds.aws
+
   peers = { for cloud in local.clouds : cloud => [for other in local.clouds : var.config.clouds[other].network.subnet_cidr if other != cloud] }
 }
 

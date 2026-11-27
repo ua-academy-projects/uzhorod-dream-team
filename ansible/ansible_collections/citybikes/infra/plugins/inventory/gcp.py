@@ -14,6 +14,9 @@ description:
     the connection variables. The keys come from your ssh-agent (only the public key files are named), the
     bastion directly on ssh.bastion_port (its public address is ephemeral, so it is read anew at every run), every other
     VM through the bastion (ssh -W, the bastion holds no key).
+  - Host keys. The bastion's is checked strictly, by its name C(<prefix>-bastion) in the .ssh_known_hosts of the
+    repository (the role ssh_config writes it), whatever its address. The VMs' are not checked; they are reached
+    only through the checked bastion, over the cloud's private network, and change with every new VM.
   - For every host and for localhost it sets C(citybikes_config_file), the path of config.json. The role
     config_validate loads it with include_vars. 
   - C(citybikes_vm) has the switches applied (only the services that run, postgres on database.vm while
@@ -139,13 +142,16 @@ def groups_of(config, name, vm):
     return groups
 
 
-def connection(ssh, vm, private_ip, bastion_ip):
+def connection(ssh, vm, private_ip, bastion_ip, known_hosts, bastion_alias):
     """How Ansible reaches the VM over SSH, with the key of this run (role ssh_access): its private half is only
     in YOUR ssh-agent, its public half in ssh.access_public_key_file (IdentitiesOnly: the agent's matching key is
     the only one tried). The bastion directly, on ssh.bastion_port. The others through it: "ssh -W" is what
-    ProxyJump runs, written out so the jump gets its own options; the bastion only passes the bytes on."""
+    ProxyJump runs, written out so the jump gets its own options; the bastion only passes the bytes on.
+    The bastion's host key is checked strictly under bastion_alias in known_hosts; the VMs' are not checked."""
     key = os.path.expanduser(ssh["access_public_key_file"])
-    args = ["-o StrictHostKeyChecking=accept-new", "-o IdentitiesOnly=yes", "-o IdentityFile={}".format(key)]
+    bastion_check = "-o StrictHostKeyChecking=yes -o UserKnownHostsFile={} -o HostKeyAlias={}".format(known_hosts, bastion_alias)
+    vm_check = "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR"
+    args = [bastion_check if vm["bastion"] else vm_check, "-o IdentitiesOnly=yes", "-o IdentityFile={}".format(key)]
     settings = {
         "ansible_user": ssh["user"],
         "ansible_ssh_retries": 5, 
@@ -155,8 +161,8 @@ def connection(ssh, vm, private_ip, bastion_ip):
     if vm["bastion"]:
         settings.update(ansible_host=bastion_ip, ansible_port=ssh["bastion_port"])
     else:
-        jump = "ssh -W %h:%p -q -p {} -o StrictHostKeyChecking=accept-new -o IdentitiesOnly=yes -o IdentityFile={} {}@{}".format(
-            ssh["bastion_port"], key, ssh["user"], bastion_ip)
+        jump = "ssh -W %h:%p -q -p {} {} -o IdentitiesOnly=yes -o IdentityFile={} {}@{}".format(
+            ssh["bastion_port"], bastion_check, key, ssh["user"], bastion_ip)
         settings["ansible_host"] = private_ip
         args.append('-o ProxyCommand="{}"'.format(jump))
     settings["ansible_ssh_common_args"] = " ".join(args)
@@ -190,7 +196,7 @@ class InventoryModule(BaseInventoryPlugin):
         self.inventory.set_variable("all", "citybikes_vms_expected", expected_vms(config))
 
 
-        self._describe_vms(config)
+        self._describe_vms(config, os.path.join(os.path.dirname(os.path.dirname(config_file)), ".ssh_known_hosts"))
 
     def _list_vms(self, project, credentials_file):
         """google.cloud.gcp_compute adds the hosts, from its settings in a temporary file (as plugin "auto" calls it)."""
@@ -202,7 +208,7 @@ class InventoryModule(BaseInventoryPlugin):
             settings.flush()
             gcp_compute.parse(self.inventory, self.loader, settings.name, cache=False)
 
-    def _describe_vms(self, config):
+    def _describe_vms(self, config, known_hosts):
         """Groups, settings and connection of every VM that config.json puts in GCP and that exists there."""
         ours = [name for name in config["vms"]["instances"] if vm_settings(config, name)["cloud"] == CLOUD]
         if CLOUD in clouds_in_use(config):
@@ -226,5 +232,6 @@ class InventoryModule(BaseInventoryPlugin):
             self.inventory.set_variable(host, "citybikes_vm", vms[name])
             if bastion_ip:
                 private_ip = self.inventory.get_host(host).get_vars()["private_ip"]
-                for key, value in connection(config["ssh"], vms[name], private_ip, bastion_ip).items():
+                settings = connection(config["ssh"], vms[name], private_ip, bastion_ip, known_hosts, config["prefix"] + "-bastion")
+                for key, value in settings.items():
                     self.inventory.set_variable(host, key, value)

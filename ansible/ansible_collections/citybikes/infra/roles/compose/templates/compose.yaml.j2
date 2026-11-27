@@ -1,5 +1,3 @@
-# Managed by Ansible (role citybikes.infra.compose) from infra/config.json: do not edit it here.
-# ${...} = a secret: docker compose fills it in from .env (written by the same role)
 name: citybikes
 
 services:
@@ -8,13 +6,13 @@ services:
 {%   set backends = compose_uses[name] | default([]) | map('extract', compose_backend_env) | list %}
   {{ name }}:
     container_name: {{ name }}
-    image: citybikes/{{ name }}
-    build: ./services/{{ name }}
+    image: {{ compose_registry }}/{{ name }}:{{ config_json.images[name] }}
+    pull_policy: missing
     {{ service | combine({'environment': service.environment | combine(backends)})
                | to_nice_yaml(indent=2, sort_keys=false) | indent(4) }}
 {% endfor %}
 {% if compose_volumes %}
-# named: the same volumes as the containers had before, so the data stays
+
 volumes:
 {%   for volume in compose_volumes %}
   {{ volume }}:

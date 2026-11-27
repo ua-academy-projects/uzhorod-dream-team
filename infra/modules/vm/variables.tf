@@ -20,14 +20,14 @@ variable "config" {
         permissions   = list(string)
       })
       bastion = object({
-        host      = number
+        ip_index  = number
         size      = optional(string)
         disk_type = optional(string)
         disk_gb   = optional(number)
         os        = optional(string)
       })
       instances = map(object({
-        host          = number
+        ip_index      = number
         cloud         = optional(string)
         size          = optional(string)
         disk_type     = optional(string)
@@ -38,6 +38,19 @@ variable "config" {
         secrets       = optional(list(string), [])
       }))
     })
+    # The k3s cluster: its nodes are VMs too, built here like the config's VMs (modules/cluster: the rest of it)
+    k3s = optional(object({
+      cloud            = optional(string)
+      api_nlb_ip_index = number
+      nodes = map(object({
+        role      = string 
+        ip_index  = number
+        size      = optional(string)
+        disk_type = optional(string)
+        disk_gb   = optional(number)
+        os        = optional(string)
+      }))
+    }))
     database = object({
       type = string
       vm   = string
@@ -52,18 +65,38 @@ variable "config" {
   }
 
   validation {
-    condition     = !contains([for vm in values(var.config.vms.instances) : vm.host], var.config.vms.bastion.host)
-    error_message = "config.json: vms.bastion.host is the host of a VM of vms.instances: give the bastion its own."
+    # the VMs' ip_index (the k3s nodes' too), the bastion's and the k3s API's: each its own address in the subnet
+    condition = length(distinct(concat(
+      [for vm in values(var.config.vms.instances) : vm.ip_index],
+      [for node in values(try(var.config.k3s.nodes, {})) : node.ip_index],
+      [var.config.vms.bastion.ip_index],
+      var.config.k3s == null ? [] : [var.config.k3s.api_nlb_ip_index],
+    ))) == length(var.config.vms.instances) + length(try(var.config.k3s.nodes, {})) + 1 + (var.config.k3s == null ? 0 : 1)
+    error_message = "config.json: every ip_index must be its own (vms.instances, k3s.nodes, vms.bastion, k3s.api_nlb_ip_index)."
   }
 
   validation {
-    condition     = length(distinct([for vm in values(var.config.vms.instances) : vm.host])) == length(var.config.vms.instances)
-    error_message = "config.json: every VM of vms.instances needs its own host number."
+    condition     = length(setintersection(keys(var.config.vms.instances), concat(keys(try(var.config.k3s.nodes, {})), ["bastion"]))) == 0 && !contains(keys(try(var.config.k3s.nodes, {})), "bastion")
+    error_message = "config.json: a k3s node and a VM of vms.instances need different names (and none is \"bastion\")."
   }
 
   validation {
-    condition     = contains(keys(var.config.vms.instances), var.config.database.vm)
-    error_message = "config.json: database.vm must be one of vms.instances."
+    # "" while no VM runs PostgreSQL (e.g. the application is not on the VMs, as while they are k3s nodes)
+    condition     = var.config.database.type != "vm" || var.config.database.vm == "" || contains(keys(var.config.vms.instances), var.config.database.vm)
+    error_message = "config.json: database.vm must be one of vms.instances (or \"\" while no VM runs PostgreSQL)."
+  }
+
+  validation {
+    condition     = alltrue([for node in values(try(var.config.k3s.nodes, {})) : contains(["server", "agent"], node.role)])
+    error_message = "config.json: a k3s node's role is \"server\" (control plane) or \"agent\" (worker)."
+  }
+
+  validation {
+    condition = alltrue([
+      for node in values(try(var.config.k3s.nodes, {})) :
+      can(var.config.clouds[coalesce(var.config.k3s.cloud, var.config.default_cloud)].vms.sizes[coalesce(node.size, var.config.vms.defaults.size)])
+    ])
+    error_message = "config.json: a size of k3s.nodes is not in clouds.<the k3s cloud>.vms.sizes."
   }
 
   validation {
@@ -86,7 +119,8 @@ variable "config" {
 
   validation {
     condition = alltrue([
-      for cloud in distinct(concat([var.config.default_cloud], [for vm in values(var.config.vms.instances) : coalesce(vm.cloud, var.config.default_cloud)])) :
+      for cloud in distinct(concat([var.config.default_cloud], [for vm in values(var.config.vms.instances) : coalesce(vm.cloud, var.config.default_cloud)],
+      length(try(var.config.k3s.nodes, {})) > 0 ? [coalesce(var.config.k3s.cloud, var.config.default_cloud)] : [])) :
       can(var.config.clouds[cloud].vms.sizes[coalesce(var.config.vms.bastion.size, var.config.vms.defaults.size)])
     ])
     error_message = "config.json: vms.bastion.size is not in clouds.<cloud>.vms.sizes of a cloud in use (every cloud in use gets a bastion)."

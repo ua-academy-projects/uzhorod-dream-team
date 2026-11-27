@@ -14,7 +14,7 @@ variable "name" {
 variable "vm" {
   description = "This VM in AWS's names (modules/vm): instance type, disk, AMI (owner + name pattern), managed policies"
   type = object({
-    host      = number
+    ip_index      = number
     bastion   = bool
     tailscale = bool
     size      = string

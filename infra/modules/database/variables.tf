@@ -1,5 +1,5 @@
 variable "config" {
-  description = "infra/config.json as a whole; this module uses prefix, default_cloud, region, zone, clouds.<cloud> (location, network, database), vms.instances (host, cloud), database and app.db_name"
+  description = "infra/config.json as a whole; this module uses prefix, default_cloud, region, zone, clouds.<cloud> (location, network, database), vms.instances (ip_index, cloud), database and app.db_name"
   type = object({
     prefix        = string
     default_cloud = string
@@ -8,8 +8,8 @@ variable "config" {
     clouds        = any
     vms = object({
       instances = map(object({
-        host  = number
-        cloud = optional(string)
+        ip_index = number
+        cloud    = optional(string)
       }))
     })
     database = object({

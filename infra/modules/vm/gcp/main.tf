@@ -2,7 +2,7 @@ locals {
   name   = "${var.config.prefix}-${var.name}"
   labels = { app = var.config.prefix, vm = var.name, managed-by = "terraform" }
 
-  internal_ip = cidrhost(var.subnet_cidr, var.vm.host)
+  internal_ip = cidrhost(var.subnet_cidr, var.vm.ip_index)
 
   bastion_user_data = templatefile("${path.module}/bastion.cloud-init.yaml.tftpl", {
     prefix           = var.config.prefix

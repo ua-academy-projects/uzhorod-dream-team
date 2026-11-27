@@ -6,8 +6,8 @@
   delegate_to: localhost
   run_once: true
   check_mode: false
-  register: database_cloudsql
-  when: database_type == 'cloudsql'
+  register: database_cloudsql_found
+  when: database_cloudsql | bool
 
 - name: The database the application uses, for every host (the role compose reads these two)
   ansible.builtin.set_fact:
@@ -19,6 +19,9 @@
     that: citybikes_db_host | length > 0
     fail_msg: >-
       {{ 'The Cloud SQL instance ' ~ database_cloudsql_instance ~ ' does not exist (yet) or has no private IP'
-         if database_type == 'cloudsql' else 'No VM runs the service postgres' }}
+           if database_cloudsql | bool
+         else 'The managed database in ' ~ database_managed_cloud ~ ' (RDS) is not supported by Ansible yet'
+           if database_type == 'managed'
+         else 'No VM runs the service postgres' }}
     quiet: true
   run_once: true

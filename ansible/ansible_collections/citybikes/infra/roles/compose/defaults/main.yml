@@ -1,3 +1,5 @@
+---
+
 compose_dir: /opt/citybikes
 
 compose_hosts: "{{ groups['app'] | map('extract', hostvars) | list }}"
@@ -89,7 +91,7 @@ compose_catalog:
       POSTGRES_DB: "{{ config_json.app.db_name }}"
       POSTGRES_USER: "{{ config_json.app.db_user }}"
       POSTGRES_PASSWORD: "${DB_PASSWORD}"
-      ALLOWED_CIDR: "{{ config_json.network.subnet_cidr }}" 
+      ALLOWED_CIDR: "{{ config_json.clouds[citybikes_vm.cloud].network.subnet_cidr }}"
 
 compose_service_defaults:
   restart: unless-stopped                     
@@ -97,7 +99,7 @@ compose_service_defaults:
   logging: "{{ compose_logging }}"
 
 compose_logging: >-
-  {{ {'driver': 'gcplogs', 'options': {'gcp-log-cmd': 'false'}} if citybikes_vm.cloud_logging
+  {{ {'driver': 'gcplogs', 'options': {'gcp-log-cmd': 'false'}} if citybikes_vm.cloud_logging and citybikes_vm.cloud == 'gcp'
      else {'driver': 'json-file', 'options': {'max-size': '10m', 'max-file': '3'}} }}
 
 compose_volumes: >-
@@ -105,12 +107,18 @@ compose_volumes: >-
      | reject('match', '/') | map('split', ':') | map('first') | unique }}
 
 compose_services: "{{ citybikes_vm.services }}"
-compose_repo: "{{ citybikes_config_file | dirname | dirname }}"
-compose_sync_skip: [".venv/", "venv/", "node_modules/", "dist/", "__pycache__/", "test_*.py"]
-compose_sync_filters: >-
-  {{ compose_sync_skip | map('regex_replace', '^', '--exclude=') | list
-     + compose_services | map('regex_replace', '^', '--include=/') | map('regex_replace', '$', '/') | list
-     + ['--exclude=/*', '--delete-excluded'] }}
+
+compose_cloud: "{{ citybikes_vm.cloud }}"
+compose_region: "{{ config_json.clouds[compose_cloud].location.regions[config_json.region] }}"
+compose_registry_host_of:
+  gcp: "{{ compose_region }}-docker.pkg.dev"
+  aws: "{{ aws_account_id | default('') }}.dkr.ecr.{{ compose_region }}.amazonaws.com"
+compose_registry_host: "{{ compose_registry_host_of[compose_cloud] }}"
+compose_registry_of:
+  gcp: "{{ compose_registry_host }}/{{ gcp_project | default('') }}/{{ config_json.prefix }}"
+  aws: "{{ compose_registry_host }}/{{ config_json.prefix }}"
+compose_registry: "{{ compose_registry_of[compose_cloud] }}"
+compose_images_missing: "{{ compose_services | reject('in', config_json.images | default({})) | list }}"
 
 compose_secret_of:
   DB_PASSWORD: db-password

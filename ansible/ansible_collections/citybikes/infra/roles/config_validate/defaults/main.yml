@@ -10,6 +10,10 @@ config_validate_instances: "{{ config_json.vms.instances }}"
 config_validate_services: "{{ config_validate_instances.values() | map(attribute='services', default=[]) | flatten }}"
 config_validate_tls_vm: "{{ config_validate_instances[config_json.tls.vm] | default({}) }}"
 
+config_validate_images_needed: >-
+  {{ (config_validate_services + (['postgres'] if config_json.database.type == 'vm' else [])) | unique }}
+config_validate_images_missing: "{{ config_validate_images_needed | reject('in', config_json.images | default({})) | list }}"
+
 config_validate_checks:
   - msg: 'vms.instances has no VM "bastion": Terraform builds the bastion in every cloud in use, from vms.bastion'
     ok: "{{ 'bastion' not in config_validate_instances }}"
@@ -27,3 +31,5 @@ config_validate_checks:
     ok: "{{ config_json.tls.domain == '' or ('ui' in config_validate_tls_vm.services | default([]) and 'cloudflare-api-token' in config_validate_tls_vm.secrets | default([])) }}"
   - msg: 'database.vm must be a VM of vms.instances'
     ok: "{{ config_json.database.vm in config_validate_instances }}"
+  - msg: 'images needs a tag for every service that runs ({{ config_validate_images_missing | join(", ") }} missing)'
+    ok: "{{ config_validate_images_missing | length == 0 }}"
